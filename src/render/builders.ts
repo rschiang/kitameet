@@ -70,7 +70,9 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   // 樓板則以半透明呈現，仍能看出層層相疊的關係。
   const shell = feature.layer === "station-box" && feature.kind !== "slab";
   const slab = feature.kind === "slab";
-  const opacity = status === "removed" ? 0.25 : shell ? 0.4 : slab ? 0.15 : 1;
+  // 分層大廳同樣半透明，否則會遮住同一構造物下層的月台與股道。
+  const room = feature.kind === "station" && !shell;
+  const opacity = status === "removed" ? 0.25 : shell ? 0.4 : slab ? 0.15 : room ? 0.3 : 1;
   const material = createPaperMaterial({
     color: featureColor(feature.kind, feature.layer, status === "existing" ? undefined : status),
     opacity,
