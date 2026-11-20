@@ -104,6 +104,13 @@ export const PLATFORM_WIDTH = 12.0;
 /** 股道中心線與月台中心線的距離（公尺）。 */
 export const TRACK_OFFSET = 8.0;
 
+/** 股道量體寬度與厚度（公尺）。 */
+export const TRACK_BAND_WIDTH = 3.0;
+export const TRACK_BAND_THICKNESS = 0.3;
+
+/** 通道與樓板厚度（公尺）。 */
+export const SLAB_THICKNESS = 0.4;
+
 /** 各層軌道面高程（＝月台面減去 {@link PLATFORM_RISE}）。 */
 export function railLevel(level: LevelId): number {
   return LEVELS[level].floor - PLATFORM_RISE;

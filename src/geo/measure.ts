@@ -91,3 +91,19 @@ export function advance(origin: Local, bearing: number, distance: number): Local
   const rad = (bearing * Math.PI) / 180;
   return [origin[0] + Math.cos(rad) * distance, origin[1] + Math.sin(rad) * distance];
 }
+
+/**
+ * 兩組點之間距離最短的一對點，供產生連通道。
+ * 兩組皆須至少有一點。
+ */
+export function nearestPair(a: Local[], b: Local[]): { a: Local; b: Local; distance: number } {
+  if (a.length === 0 || b.length === 0) throw new Error("nearestPair 需要非空的兩組點");
+  let best = { a: a[0], b: b[0], distance: Infinity };
+  for (const p of a) {
+    for (const q of b) {
+      const distance = Math.hypot(p[0] - q[0], p[1] - q[1]);
+      if (distance < best.distance) best = { a: p, b: q, distance };
+    }
+  }
+  return best;
+}

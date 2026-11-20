@@ -62,10 +62,10 @@ describe("現況場景", () => {
     }
   });
 
-  it("站體產生地下量體與 B1–B3 樓板", () => {
-    expect(baselineById("station-box/underground")?.base).toBeLessThan(-30);
-    for (const level of ["B1", "B2", "B3"]) {
-      expect(baselineById(`station-slab/${level}`)?.level).toBe(level);
+  it("站體產生地下量體與 B1–B4 樓板", () => {
+    expect(baselineById("station/box")?.base).toBeLessThan(-30);
+    for (const level of ["B1", "B2", "B3", "B4"]) {
+      expect(baselineById(`station/slab/${level}`)?.level).toBe(level);
     }
   });
 });

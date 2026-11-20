@@ -2,7 +2,6 @@
  * 合併 OSM 產出與文獻覆寫，產生渲染用的 {@link Feature} 清單。
  * 幾何一律為局部公尺座標，不在此處做任何經緯度換算。
  */
-import type { Local } from "../geo/project.ts";
 import undergroundJson from "./osm/underground.json";
 import surfaceJson from "./osm/surface.json";
 import type { OsmDataset, OsmFeature } from "./osm-types.ts";
@@ -11,13 +10,16 @@ import {
   DEFAULT_BUILDING_LEVELS,
   LANDMARK_IDS,
   OVERRIDES,
-  STATION_OUTLINE_ID,
   levelFromOsm,
 } from "./overrides.ts";
-import { STRUCTURES, levelOf, railLevelOf, type StructureId } from "./levels.ts";
+import { levelOf, railLevelOf, type StructureId } from "./levels.ts";
+import { buildStationComplex } from "./structures/station-complex.ts";
 import {
   LEVELS,
   PLATFORM_RISE,
+  SLAB_THICKNESS,
+  TRACK_BAND_THICKNESS,
+  TRACK_BAND_WIDTH,
   type Confidence,
   type Feature,
   type FeatureKind,
@@ -32,12 +34,6 @@ export const DATA_PROVENANCE = {
   overpassTimestamp: underground.overpassTimestamp,
   generatedAt: underground.generatedAt,
 } as const;
-
-/** 股道量體寬度與厚度（公尺）。 */
-export const TRACK_BAND_WIDTH = 3.0;
-export const TRACK_BAND_THICKNESS = 0.3;
-/** 通道與樓板厚度（公尺）。 */
-export const SLAB_THICKNESS = 0.4;
 
 const LAYER_BY_KIND: Record<string, LayerId> = {
   platform: "platform",
@@ -138,49 +134,9 @@ function convert(osm: OsmFeature): Feature | null {
   return feature;
 }
 
-const STATION: StructureId = "tra-hsr-station";
-
-/** 站體各層樓板：平面取 OSM 站體輪廓，深度取站體自己的樓層表。 */
-function stationSlabs(outline: Local[]): Feature[] {
-  const levels: LevelId[] = ["B1", "B2", "B3", "B4"];
-  return levels.map((level) => ({
-    id: `station-slab/${level}`,
-    kind: "slab" as const,
-    name: `臺北車站 ${level} 樓板`,
-    level,
-    structure: STATION,
-    layer: "station-box" as const,
-    geometry: { polygon: outline },
-    base: levelOf(STATION, level).floor - SLAB_THICKNESS,
-    height: SLAB_THICKNESS,
-    confidence: "estimated" as const,
-    sourceNote: "樓板高程依地上 6 層地下 4 層、總高 48 公尺推估，平面取 OSM 站體輪廓。",
-    status: "existing" as const,
-  }));
-}
-
-/** 站體地下量體：自地面至結構底，平面取 OSM 站體輪廓。 */
-function stationBox(outline: Local[]): Feature {
-  const bottom = STRUCTURES[STATION].bottom;
-  return {
-    id: "station-box/underground",
-    kind: "station-box",
-    name: "臺北車站地下量體",
-    level: "B4",
-    structure: STATION,
-    layer: "station-box",
-    geometry: { polygon: outline },
-    base: bottom,
-    height: -bottom - 0.5,
-    confidence: "estimated",
-    sourceNote: `地下 4 層的開挖範圍以 OSM 站體輪廓推估，結構底取 ${bottom} 公尺；實際地下連續壁位置未知。`,
-    status: "existing",
-  };
-}
-
 let cached: Feature[] | null = null;
 
-/** 現況場景的完整量體清單。 */
+/** 現況場景的完整量體清單：OSM ＋ 覆寫 ＋ 分層構造。 */
 export function buildBaseline(): Feature[] {
   if (cached) return cached;
 
@@ -192,12 +148,7 @@ export function buildBaseline(): Feature[] {
     if (feature) byId.set(osm.id, feature);
   }
 
-  const station = byId.get(STATION_OUTLINE_ID);
-  const features = [...byId.values()];
-  if (station?.geometry.polygon) {
-    features.push(stationBox(station.geometry.polygon), ...stationSlabs(station.geometry.polygon));
-  }
-
+  const features = [...byId.values(), ...buildStationComplex()];
   cached = features;
   return features;
 }
