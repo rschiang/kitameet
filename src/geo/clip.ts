@@ -39,51 +39,50 @@ function crossing(line: Local[], a: Local, b: Local): Local {
 }
 
 /**
- * 以折線為界切割多邊形環，回傳左右兩側的環（各可能多塊）。
- * 每塊以進出交點封閉；環為開放式（首尾不重複），與 OSM 輪廓同一慣例。
+ * 以折線為界切割多邊形環：左側（侵入側）每一段各自封閉成一塊，
+ * 右側則為扣掉這些侵入段後的單一剩餘環（侵入處以進出交點之間的弦封閉）。
+ * 環為開放式（首尾不重複），與 OSM 輪廓同一慣例。
+ *
+ * 前提是界線只由同一側切入、不把多邊形整個橫貫成互不相連的數塊；
+ * 本專案的界線為開挖包絡邊緣，與量體平行走過，符合此前提。
  */
 export function splitPolygonByPolyline(
   ring: Local[],
   line: Local[],
 ): { left: Local[][]; right: Local[][] } {
   const n = ring.length;
-  if (n < 3 || line.length < 2) return { left: [], right: [ring.map((p) => [...p] as Local)] };
+  const copy = (pts: Local[]): Local[] => pts.map((p) => [...p] as Local);
+  if (n < 3 || line.length < 2) return { left: [], right: [copy(ring)] };
 
   const left = ring.map((p) => sideOfPolyline(line, p) > 0);
   // 全落在同側時不需落刀
-  if (left.every((s) => s)) return { left: [ring.map((p) => [...p] as Local)], right: [] };
-  if (left.every((s) => !s)) return { left: [], right: [ring.map((p) => [...p] as Local)] };
+  if (left.every((s) => s)) return { left: [copy(ring)], right: [] };
+  if (left.every((s) => !s)) return { left: [], right: [copy(ring)] };
 
-  // 自「前一點在另一側」的頂點起走，使第一塊恰由交點起算
-  let start = 0;
-  for (let i = 0; i < n; i++) {
-    if (left[i] !== left[(i + n - 1) % n]) {
-      start = i;
-      break;
-    }
-  }
-
-  const firstCut = crossing(line, ring[(start + n - 1) % n], ring[start]);
-  const pieces: { left: boolean; ring: Local[] }[] = [];
-  let piece: Local[] = [firstCut];
-  let pieceLeft = left[start];
+  // 自右側頂點起走，剩餘環才會是一條連續的走訪結果
+  const start = left.indexOf(false);
+  const right: Local[] = [];
+  const pieces: Local[][] = [];
+  let piece: Local[] = [];
   for (let i = 0; i < n; i++) {
     const a = (start + i) % n;
     const b = (start + i + 1) % n;
-    piece.push(ring[a]);
+    if (left[a]) piece.push(ring[a]);
+    else right.push(ring[a]);
     if (left[a] === left[b]) continue;
-    // 繞回起點的那一段共用同一個交點，避免兩次二分搜尋的微小落差
-    const cut = i === n - 1 ? firstCut : crossing(line, ring[a], ring[b]);
-    piece.push(cut);
-    pieces.push({ left: pieceLeft, ring: piece });
-    piece = [cut];
-    pieceLeft = left[b];
+
+    const cut = crossing(line, ring[a], ring[b]);
+    right.push(cut);
+    if (left[a]) {
+      piece.push(cut);
+      pieces.push(piece);
+      piece = [];
+    } else {
+      piece = [cut];
+    }
   }
 
-  return {
-    left: pieces.filter((p) => p.left).map((p) => p.ring),
-    right: pieces.filter((p) => !p.left).map((p) => p.ring),
-  };
+  return { left: pieces, right: [right] };
 }
 
 /** 以折線為界切割折線，回傳左右兩側的折線段（各可能多段）。 */
