@@ -413,9 +413,9 @@ function buildPostOffice(): Feature[] {
     height: POST_PARAPET_TOP - POST_FOURTH_TOP,
   });
 
-  // 正面柱廊：五開間的圓拱，柱身立於立面線、拱圈以階梯逼近
+  // 正面柱廊：五開間的圓拱，柱身幾乎齊平於立面、柱後為退縮的一層外牆
   const porchWidth = POST_BAYS * POST_BAY_SPACING;
-  const pierLateral = -0.4;
+  const pierLateral = -1.0;
   for (let i = 0; i <= POST_BAYS; i++) {
     add({
       id: `porch/pier/${i}`,
