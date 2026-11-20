@@ -79,17 +79,22 @@ describe("分層地下構造", () => {
     expect(baselineById("way/1226069619")).toBeUndefined();
   });
 
-  it("A1 車站結構底為 −27.1 公尺，B3 有 1 座月台與 2 條股道", () => {
+  it("A1 車站結構底為 −27.1 公尺，月台與股道改用 OSM 圖徵呈現於 B3", () => {
     expect(baselineById("a1/box")?.base).toBe(-27.1);
-    const a1 = features.filter((f) => f.structure === "airport-mrt-a1" && f.id.startsWith("a1/"));
-    const platforms = a1.filter((f) => f.kind === "platform");
-    const tracks = a1.filter((f) => f.kind === "track-metro");
-    expect(platforms).toHaveLength(1);
-    expect(tracks).toHaveLength(2);
-    for (const f of [...platforms, ...tracks]) {
-      expect(f.level, f.id).toBe("B3");
-      expect(f.base, f.id).toBeCloseTo(railLevelOf("airport-mrt-a1", "B3"), 6);
+    // 合成的月台與股道已刪除，改以 OSM 原圖徵呈現
+    expect(baselineById("a1/platform")).toBeUndefined();
+    for (const id of ["way/871105041", "way/871105042"]) {
+      const platform = baselineById(id);
+      expect(platform, id).toBeDefined();
+      expect(platform!.level, id).toBe("B3");
+      expect(platform!.structure, id).toBe("airport-mrt-a1");
+      expect(platform!.base, id).toBeCloseTo(railLevelOf("airport-mrt-a1", "B3"), 6);
     }
+    const tracks = features.filter(
+      (f) => f.structure === "airport-mrt-a1" && f.kind === "track-metro",
+    );
+    expect(tracks.length).toBeGreaterThanOrEqual(4);
+    for (const f of tracks) expect(f.level, f.id).toBe("B3");
   });
 });
 

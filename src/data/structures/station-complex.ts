@@ -7,17 +7,13 @@
  * 深度一律取 `levels.ts` 中該構造物自己的樓層表。
  */
 import { advance, nearestPair, polygonAxis, type PolygonAxis } from "../../geo/measure.ts";
-import { corridorPolygon, offsetPolyline } from "../../geo/offset.ts";
+import { corridorPolygon } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
 import undergroundJson from "../osm/underground.json";
 import type { OsmDataset } from "../osm-types.ts";
-import { STRUCTURES, levelOf, railLevelOf, type StructureId } from "../levels.ts";
+import { STRUCTURES, levelOf, type StructureId } from "../levels.ts";
 import {
-  PLATFORM_RISE,
   SLAB_THICKNESS,
-  TRACK_BAND_THICKNESS,
-  TRACK_BAND_WIDTH,
-  TRACK_OFFSET,
   type Feature,
   type FeatureKind,
   type LayerId,
@@ -70,10 +66,6 @@ const JUNCTION_SIZE = 60;
 /** 垂直動線核心邊長（公尺）與其沿臂的位置。 */
 const CORE_SIZE = 6;
 const CORE_OFFSET = 60;
-
-// ── 機場捷運 A1 ────────────────────────────────────────
-const A1_PLATFORM_LENGTH = 180;
-const A1_PLATFORM_WIDTH = 20;
 
 /** 地下街連通道寬度（公尺）；兩端已相鄰時不畫。 */
 const LINK_WIDTH = 10.0;
@@ -376,7 +368,6 @@ const A1: StructureId = "airport-mrt-a1";
 
 function a1Features(): Feature[] {
   const polygon = outline(A1_OUTLINE);
-  const axis = polygonAxis(polygon);
   const bottom = STRUCTURES[A1].bottom;
   const features: Feature[] = [
     volume({
@@ -398,47 +389,6 @@ function a1Features(): Feature[] {
       slab(`a1/slab/${level}`, `機場捷運台北車站 ${level} 樓板`, "metro", A1, level, polygon),
     );
   }
-
-  const centre: Local[] = [
-    advance(axis.center, axis.bearing, -A1_PLATFORM_LENGTH / 2),
-    advance(axis.center, axis.bearing, A1_PLATFORM_LENGTH / 2),
-  ];
-  const railBase = railLevelOf(A1, "B3");
-  features.push(
-    volume({
-      id: "a1/platform",
-      name: "機場捷運台北車站月台（B3）",
-      kind: "platform",
-      layer: "platform",
-      structure: A1,
-      level: "B3",
-      polygon: corridorPolygon(centre, A1_PLATFORM_WIDTH),
-      base: railBase,
-      height: PLATFORM_RISE,
-    }),
-  );
-
-  for (const [side, sign] of [
-    ["north", 1],
-    ["south", -1],
-  ] as const) {
-    features.push({
-      id: `a1/track/${side}`,
-      kind: "track-metro",
-      name: `機場捷運股道（${side === "north" ? "北" : "南"}側）`,
-      level: "B3",
-      structure: A1,
-      layer: "metro",
-      geometry: { polyline: offsetPolyline(centre, sign * TRACK_OFFSET) },
-      base: railBase,
-      height: TRACK_BAND_THICKNESS,
-      width: TRACK_BAND_WIDTH,
-      confidence: "estimated",
-      sourceNote: sourceNote(A1),
-      status: "existing",
-    });
-  }
-
   return features;
 }
 
