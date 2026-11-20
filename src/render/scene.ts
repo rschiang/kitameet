@@ -253,12 +253,26 @@ export class Viewer {
     };
   }
 
+  /**
+   * 套用相機狀態。空拍模式一律將視點拉回目標正上方，
+   * 避免網址帶入非俯視的視點後立刻觸發切回 3D 的判斷。
+   */
   applyCameraState(state: CameraState): void {
     const camera = this.camera;
-    camera.position.set(...state.position);
+    const [tx, ty, tz] = state.target;
+    if (this.mode === "aerial") {
+      const distance = Math.hypot(
+        state.position[0] - tx,
+        state.position[1] - ty,
+        state.position[2] - tz,
+      );
+      camera.position.set(tx, ty + (distance || 600), tz);
+    } else {
+      camera.position.set(...state.position);
+    }
     camera.zoom = state.zoom > 0 ? state.zoom : 1;
     camera.updateProjectionMatrix();
-    this.controls.target.set(...state.target);
+    this.controls.target.set(tx, ty, tz);
     this.controls.update();
     this.needsRender = true;
   }
