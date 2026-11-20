@@ -116,9 +116,9 @@ function volume(spec: VolumeSpec): Feature {
 function slab(
   id: string,
   name: string,
+  layer: LayerId,
   structure: StructureId,
   level: LevelId,
-  layer: LayerId,
   polygon: Local[],
 ): Feature {
   return volume({
@@ -191,7 +191,7 @@ function stationFeatures(): Feature[] {
 
   for (const level of ["B1", "B2", "B3", "B4"] as const) {
     features.push(
-      slab(`station/slab/${level}`, `臺北車站 ${level} 樓板`, STATION, level, "station-box", polygon),
+      slab(`station/slab/${level}`, `臺北車站 ${level} 樓板`, "station-box", STATION, level, polygon),
     );
   }
 
@@ -278,7 +278,7 @@ function metroFeatures(arms: MetroArms): Feature[] {
 
   for (const level of ["B1", "B2", "B3"] as const) {
     features.push(
-      slab(`metro/bannan/slab/${level}`, `捷運板南線站體 ${level} 樓板`, METRO, level, "metro", arms.bannanBand),
+      slab(`metro/bannan/slab/${level}`, `捷運板南線站體 ${level} 樓板`, "metro", METRO, level, arms.bannanBand),
     );
   }
   features.push(
@@ -295,7 +295,7 @@ function metroFeatures(arms: MetroArms): Feature[] {
 
   for (const level of ["B1", "B3", "B4"] as const) {
     features.push(
-      slab(`metro/tamsui/slab/${level}`, `捷運淡水信義線站體 ${level} 樓板`, METRO, level, "metro", arms.tamsuiBand),
+      slab(`metro/tamsui/slab/${level}`, `捷運淡水信義線站體 ${level} 樓板`, "metro", METRO, level, arms.tamsuiBand),
     );
   }
   features.push(
@@ -395,7 +395,7 @@ function a1Features(): Feature[] {
 
   for (const level of ["B1", "B2", "B3", "B4"] as const) {
     features.push(
-      slab(`a1/slab/${level}`, `機場捷運台北車站 ${level} 樓板`, A1, level, "metro", polygon),
+      slab(`a1/slab/${level}`, `機場捷運台北車站 ${level} 樓板`, "metro", A1, level, polygon),
     );
   }
 
