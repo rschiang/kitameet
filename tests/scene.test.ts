@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildBaseline, baselineById } from "../src/data/scene.ts";
-import { LEVELS, PLATFORM_RISE } from "../src/data/schema.ts";
+import { levelOf } from "../src/data/levels.ts";
+import { PLATFORM_RISE } from "../src/data/schema.ts";
 
 const features = buildBaseline();
 
@@ -25,8 +26,9 @@ describe("現況場景", () => {
       expect(f!.layer).toBe("platform");
       expect(longestSpan(f!.geometry.polygon!)).toBeGreaterThan(325);
       expect(longestSpan(f!.geometry.polygon!)).toBeLessThan(336);
-      // 月台面與 B2 樓板齊平
-      expect(f!.base! + f!.height!).toBeCloseTo(LEVELS.B2.floor, 6);
+      // 月台面與站體自己的 B2 樓板齊平
+      expect(f!.structure, id).toBe("tra-hsr-station");
+      expect(f!.base! + f!.height!).toBeCloseTo(levelOf("tra-hsr-station", "B2").floor, 6);
       expect(f!.height).toBeCloseTo(PLATFORM_RISE, 6);
     }
   });

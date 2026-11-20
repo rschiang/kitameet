@@ -239,26 +239,18 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   }),
 
   // ── 臺鐵、高鐵月台 ────────────────────────────────────
-  "way/584167409": {
+  ...assign(["way/584167409", "way/584167411"], {
     level: "B2",
+    structure: "tra-hsr-station",
     confidence: "sourced",
     sourceNote: `${WIKI}：地下二樓為月台層，南側第 1、2 月台為標準軌（高鐵）。`,
-  },
-  "way/584167411": {
+  }),
+  ...assign(["way/584167413", "way/584167415"], {
     level: "B2",
-    confidence: "sourced",
-    sourceNote: `${WIKI}：地下二樓為月台層，南側第 1、2 月台為標準軌（高鐵）。`,
-  },
-  "way/584167413": {
-    level: "B2",
+    structure: "tra-hsr-station",
     confidence: "sourced",
     sourceNote: `${WIKI}：地下二樓為月台層，北側第 3、4 月台為窄軌（臺鐵）。`,
-  },
-  "way/584167415": {
-    level: "B2",
-    confidence: "sourced",
-    sourceNote: `${WIKI}：地下二樓為月台層，北側第 3、4 月台為窄軌（臺鐵）。`,
-  },
+  }),
 };
 
 /**
