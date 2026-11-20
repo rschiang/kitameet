@@ -1,8 +1,9 @@
 import "./style.css";
-import { DATA_PROVENANCE, buildBaseline } from "./data/scene.ts";
+import { DATA_PROVENANCE } from "./data/scene.ts";
 import type { LayerId, LevelId } from "./data/schema.ts";
 import { Viewer } from "./render/scene.ts";
 import { applyVisibility } from "./app/layers.ts";
+import { featuresFor } from "./app/scenario.ts";
 import {
   createLayerPanel,
   createLegendPanel,
@@ -27,7 +28,7 @@ function syncVisibility(): void {
 }
 
 function rebuildScene(): void {
-  viewer.setFeatures(buildBaseline());
+  viewer.setFeatures(featuresFor(state.scenario));
   syncVisibility();
 }
 
@@ -102,8 +103,8 @@ document.body.append(
 viewer.onAerialRotate = () => setMode("3d");
 viewer.onCameraChange = scheduleHashUpdate;
 
-rebuildScene();
 if (state.mode !== viewer.viewMode) viewer.setViewMode(state.mode);
+rebuildScene();
 viewer.applyCameraState(state.camera);
 viewer.setSection(state.section.enabled, state.section.bearing, state.section.offset);
 syncPanels();

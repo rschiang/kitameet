@@ -112,3 +112,57 @@ export function alignmentEnd(a: Alignment): { point: Local; bearing: number } {
     bearing: (Math.atan2(point[1] - prev[1], point[0] - prev[0]) * 180) / Math.PI,
   };
 }
+
+/**
+ * 反向曲線（S 形）：兩段同半徑、轉向相反的圓曲線各配一組緩和曲線，
+ * 把線形橫移 `lateralShift` 公尺後回到原方位；`lateralShift` 正值為往左。
+ *
+ * 橫移量大於「圓心角為零時」的最小值時，以二分法求圓心角；
+ * 小於該值時改為縮短緩和曲線長度，避免小橫移被緩和曲線本身撐開。
+ */
+export function reverseCurveElements(radius: number, lateralShift: number): AlignmentElement[] {
+  const side = lateralShift >= 0 ? 1 : -1;
+  const r = Math.abs(radius);
+  const fullTransition = transitionLength(r);
+  const target = Math.abs(lateralShift);
+
+  const build = (angle: number, length: number): AlignmentElement[] =>
+    length > 0
+      ? [
+          { kind: "transition", radius: side * r, length },
+          { kind: "arc", radius: side * r, angle },
+          { kind: "transition", radius: side * r, length },
+          { kind: "transition", radius: -side * r, length },
+          { kind: "arc", radius: -side * r, angle },
+          { kind: "transition", radius: -side * r, length },
+        ]
+      : [
+          { kind: "arc", radius: side * r, angle },
+          { kind: "arc", radius: -side * r, angle },
+        ];
+
+  const lateralAt = (angle: number, length: number): number => {
+    const pts = sampleAlignment({ start: [0, 0], bearing: 0, elements: build(angle, length) }, 4);
+    return Math.abs(pts[pts.length - 1][1]);
+  };
+
+  const bisect = (measure: (value: number) => number, lo: number, hi: number): number => {
+    for (let i = 0; i < 48; i++) {
+      const mid = (lo + hi) / 2;
+      if (measure(mid) < target) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+
+  const minLateral = lateralAt(0, fullTransition);
+  if (target < minLateral) {
+    const length = bisect((value) => lateralAt(0, value), 0, fullTransition);
+    return build(0, length);
+  }
+
+  const maxAngle = 85;
+  if (lateralAt(maxAngle, fullTransition) < target) return build(maxAngle, fullTransition);
+  const angle = bisect((value) => lateralAt(value, fullTransition), 0, maxAngle);
+  return build(angle, fullTransition);
+}
