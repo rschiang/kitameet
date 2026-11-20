@@ -5,6 +5,7 @@ import {
   HemisphereLight,
   MeshStandardMaterial,
   type Scene,
+  type Side,
 } from "three";
 import { BACKGROUND } from "./palette.ts";
 
@@ -18,6 +19,8 @@ export interface PaperMaterialOptions {
   opacity?: number;
   /** 邊緣提亮強度，預設 0.18。 */
   rim?: number;
+  /** 只畫背面可做出「掀蓋紙盒」的效果，讓外殼不遮住內部。 */
+  side?: Side;
 }
 
 const RIM_COLOR = new Color("#ffffff");
@@ -26,13 +29,14 @@ export function createPaperMaterial({
   color,
   opacity = 1,
   rim = 0.18,
+  side = DoubleSide,
 }: PaperMaterialOptions): MeshStandardMaterial {
   const material = new MeshStandardMaterial({
     color: new Color(color),
     roughness: 0.95,
     metalness: 0,
     flatShading: false,
-    side: DoubleSide, // 剖切後可見內部斷面
+    side, // 預設 DoubleSide，剖切後可見內部斷面
     transparent: opacity < 1,
     opacity,
     depthWrite: opacity >= 1,
