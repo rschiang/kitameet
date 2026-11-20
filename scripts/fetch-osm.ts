@@ -79,13 +79,9 @@ export function classify(tags: Record<string, string>, level: number | undefined
   if ((tags.building !== undefined || tags.shop === "mall") && level !== undefined && level < 0) {
     return "underground-mall";
   }
-  if (
-    tags.building === "train_station" ||
-    tags.public_transport === "station" ||
-    tags.railway === "station"
-  ) {
-    return "station";
-  }
+  // building=train_station、public_transport=station 也出現在一般建物上
+  // （華山車站舊站房、臺北轉運站），車站量體一律由 overrides.ts 指定
+  if (tags.railway === "station") return "station";
   if (tags.building !== undefined) return "building";
   // 高架與地面的區分在資料層依 bridge／layer 標籤判定，此處不看路名
   if (tags.highway !== undefined) return "road";

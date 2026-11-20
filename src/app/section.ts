@@ -6,24 +6,32 @@ import type { SectionState } from "./state.ts";
 
 export const SECTION_OFFSET_RANGE = 800;
 
-export interface SectionPanel {
+export interface SectionContent {
   element: HTMLElement;
   sync(state: SectionState): void;
 }
 
-export function createSectionPanel(
+export function createSectionContent(
   state: SectionState,
   onChange: (next: SectionState) => void,
-): SectionPanel {
-  const element = document.createElement("section");
-  element.className = "panel";
-  element.id = "section";
+): SectionContent {
+  const element = document.createElement("div");
+  element.className = "rows";
 
   const toggle = document.createElement("label");
+  toggle.className = "switch";
   const toggleInput = document.createElement("input");
   toggleInput.type = "checkbox";
   toggleInput.checked = state.enabled;
-  toggle.append(toggleInput, document.createTextNode("剖面"));
+  const track = document.createElement("span");
+  track.className = "track";
+  const toggleText = document.createElement("span");
+  toggleText.className = "switch-text";
+  const toggleLabel = document.createElement("span");
+  toggleLabel.className = "switch-label";
+  toggleLabel.textContent = "啟用剖切面";
+  toggleText.append(toggleLabel);
+  toggle.append(toggleInput, track, toggleText);
 
   const bearing = document.createElement("input");
   bearing.type = "range";
@@ -47,13 +55,19 @@ export function createSectionPanel(
   const offsetValue = document.createElement("span");
   offsetValue.className = "value";
 
+  const bearingRow = document.createElement("div");
+  bearingRow.className = "slider-row";
   const bearingLabel = document.createElement("span");
   bearingLabel.textContent = "方位";
+  bearingRow.append(bearingLabel, bearing, bearingValue);
+
+  const offsetRow = document.createElement("div");
+  offsetRow.className = "slider-row";
   const offsetLabel = document.createElement("span");
   offsetLabel.textContent = "位置";
-  toggle.style.gridColumn = "1 / -1";
+  offsetRow.append(offsetLabel, offset, offsetValue);
 
-  element.append(toggle, bearingLabel, bearing, bearingValue, offsetLabel, offset, offsetValue);
+  element.append(toggle, bearingRow, offsetRow);
 
   const emit = () => {
     onChange({
@@ -67,7 +81,7 @@ export function createSectionPanel(
   bearing.addEventListener("input", emit);
   offset.addEventListener("input", emit);
 
-  const panel: SectionPanel = {
+  const content: SectionContent = {
     element,
     sync(next) {
       toggleInput.checked = next.enabled;
@@ -77,8 +91,12 @@ export function createSectionPanel(
       offsetValue.textContent = `${Math.round(next.offset)} m`;
       bearing.disabled = !next.enabled;
       offset.disabled = !next.enabled;
+      for (const row of [bearingRow, offsetRow]) {
+        if (next.enabled) delete row.dataset.disabled;
+        else row.dataset.disabled = "true";
+      }
     },
   };
-  panel.sync(state);
-  return panel;
+  content.sync(state);
+  return content;
 }

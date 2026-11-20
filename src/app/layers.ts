@@ -1,24 +1,11 @@
-import type { Mesh } from "three";
 import type { FeatureUserData } from "../render/builders.ts";
-import { AERIAL_HIDDEN_LAYERS, type ViewMode } from "./viewMode.ts";
+import { GROUP_OF_LAYER } from "./layerGroups.ts";
 import type { AppState } from "./state.ts";
 
 /**
- * 依圖層、樓層開關與視圖模式決定單一量體是否顯示。
- * 空拍模式一律隱藏地面以上的圖層。
+ * 依圖層群組開關決定單一量體是否顯示。
+ * 空拍模式隱藏地面圖層不在此判斷，改由 {@link Viewer} 以淡出處理。
  */
-export function isVisible(data: FeatureUserData, state: AppState, mode: ViewMode): boolean {
-  if (mode === "aerial" && AERIAL_HIDDEN_LAYERS[data.layer]) return false;
-  return state.layers[data.layer] !== false && state.levels[data.level] !== false;
-}
-
-/** 套用目前的開關狀態到所有量體。 */
-export function applyVisibility(
-  meshes: Iterable<Mesh>,
-  state: AppState,
-  mode: ViewMode,
-): void {
-  for (const mesh of meshes) {
-    mesh.visible = isVisible(mesh.userData as FeatureUserData, state, mode);
-  }
+export function isVisible(data: FeatureUserData, state: AppState): boolean {
+  return state.layers[GROUP_OF_LAYER[data.layer]] !== false;
 }

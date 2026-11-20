@@ -92,6 +92,18 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
     sourceNote: TWINS_NOTE,
   },
 
+  // ── 誤判為車站的建物 ──────────────────────────────────
+  "way/448227619": {
+    kind: "building",
+    sourceNote:
+      "OSM 標 building=train_station，實為華山車站舊站房建物，非本模型的車站量體；高度依 building:levels=2 推估。",
+  },
+  "way/605982576": {
+    kind: "building",
+    sourceNote:
+      "OSM 標 public_transport=station、building=transportation，實為京站綜合大樓內的客運轉運站量體，非軌道車站；高度無標籤，以預設樓層數推估。",
+  },
+
   // ── 站體 ──────────────────────────────────────────────
   [STATION_OUTLINE_ID]: {
     name: "臺北車站",

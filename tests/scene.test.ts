@@ -140,4 +140,19 @@ describe("現況場景", () => {
     expect(ramp?.base).toBeCloseTo(0.1, 6);
     expect(ramp?.baseEnd).toBeCloseTo(8.0 - 1.0, 6);
   });
+
+  it("華山車站舊站房與臺北轉運站列為一般建物，不是車站量體", () => {
+    const huashan = baselineById("way/448227619");
+    expect(huashan?.kind).toBe("building");
+    expect(huashan?.layer).toBe("building");
+    // 臺北轉運站落在公告圖範圍內，輪廓改採公告圖建物面並承接此處推估的高度
+    expect(baselineById("way/605982576")).toBeUndefined();
+    const inherited = features.filter((f) => f.sourceNote?.includes("way/605982576"));
+    expect(inherited.length).toBeGreaterThan(0);
+    for (const face of inherited) expect(face.layer, face.id).toBe("building");
+
+    const boxes = features.filter((f) => f.layer === "station-box").map((f) => f.id);
+    expect(boxes).not.toContain("way/448227619");
+    expect(boxes).not.toContain("way/605982576");
+  });
 });

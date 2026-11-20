@@ -13,6 +13,9 @@ export const AERIAL_HIDDEN_LAYERS: Partial<Record<LayerId, true>> = {
 /** 空拍模式的高程壓縮比例：量體壓成薄板，僅保留相對厚度。 */
 export const AERIAL_SQUASH = 0.04;
 
+/** 視圖模式切換的轉場長度（毫秒）：量體漸變與相機轉向共用。 */
+export const VIEW_TRANSITION_MS = 420;
+
 /** 空拍模式各層薄板的高程（公尺），由深到淺等距排列。 */
 export const AERIAL_PLATE_Y: Record<LevelId, number> = {
   elevated: 4,

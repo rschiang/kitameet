@@ -1,19 +1,22 @@
 import "./style.css";
 import { DATA_PROVENANCE } from "./data/scene.ts";
-import type { LayerId, LevelId } from "./data/schema.ts";
 import { Viewer } from "./render/scene.ts";
-import { applyVisibility } from "./app/layers.ts";
+import { isVisible } from "./app/layers.ts";
+import type { LayerGroupId } from "./app/layerGroups.ts";
 import { featuresFor } from "./app/scenario.ts";
 import {
-  createLayerPanel,
-  createLegendPanel,
+  createBrandCard,
+  createInfoContent,
+  createLayerContent,
+  createLegendContent,
   createScenarioPanel,
-  createTitlePanel,
   createViewPanel,
 } from "./app/panels.ts";
-import { createSectionPanel } from "./app/section.ts";
+import { createSectionContent } from "./app/section.ts";
+import { createToolbar } from "./app/toolbar.ts";
+import { icon } from "./app/icons.ts";
 import { decodeState, writeHash } from "./app/permalink.ts";
-import type { AppState, ScenarioId, SectionState } from "./app/state.ts";
+import { defaultState, type AppState, type ScenarioId, type SectionState } from "./app/state.ts";
 import type { ViewMode } from "./app/viewMode.ts";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#viewport");
@@ -22,9 +25,10 @@ if (!canvas) throw new Error("找不到 #viewport canvas");
 const state: AppState = decodeState(location.hash);
 const viewer = new Viewer(canvas);
 
+const DEFAULT_LAYERS = defaultState().layers;
+
 function syncVisibility(): void {
-  applyVisibility(viewer.meshes.values(), state, viewer.viewMode);
-  viewer.requestRender();
+  viewer.setLayerFilter((data) => isVisible(data, state));
 }
 
 function rebuildScene(): void {
@@ -32,11 +36,19 @@ function rebuildScene(): void {
   syncVisibility();
 }
 
+function layersChanged(): boolean {
+  return (Object.keys(DEFAULT_LAYERS) as LayerGroupId[]).some(
+    (id) => state.layers[id] !== DEFAULT_LAYERS[id],
+  );
+}
+
 function syncPanels(): void {
-  layerPanel.sync(state);
+  layerContent.sync(state);
   viewPanel.sync(state.mode);
   scenarioPanel.sync(state.scenario);
-  sectionPanel.sync(state.section);
+  sectionContent.sync(state.section);
+  layersPopover.setMarked(layersChanged());
+  sectionPopover.setMarked(state.section.enabled);
 }
 
 let hashFrame = 0;
@@ -53,7 +65,6 @@ function setMode(mode: ViewMode): void {
   if (state.mode === mode) return;
   state.mode = mode;
   viewer.setViewMode(mode);
-  syncVisibility();
   syncPanels();
   scheduleHashUpdate();
 }
@@ -66,39 +77,51 @@ function setScenario(scenario: ScenarioId): void {
   scheduleHashUpdate();
 }
 
-function setLayer(layer: LayerId, visible: boolean): void {
-  state.layers[layer] = visible;
+function setLayerGroup(group: LayerGroupId, visible: boolean): void {
+  state.layers[group] = visible;
   syncVisibility();
+  syncPanels();
   scheduleHashUpdate();
 }
 
-function setLevel(level: LevelId, visible: boolean): void {
-  state.levels[level] = visible;
+function resetLayerGroups(): void {
+  state.layers = defaultState().layers;
   syncVisibility();
+  syncPanels();
   scheduleHashUpdate();
 }
 
 function setSection(next: SectionState): void {
   state.section = next;
   viewer.setSection(next.enabled, next.bearing, next.offset);
-  sectionPanel.sync(next);
+  sectionContent.sync(next);
+  sectionPopover.setMarked(next.enabled);
   scheduleHashUpdate();
 }
 
-const layerPanel = createLayerPanel(setLayer, setLevel);
 const viewPanel = createViewPanel(setMode);
 const scenarioPanel = createScenarioPanel(setScenario);
-const sectionPanel = createSectionPanel(state.section, setSection);
 const provenance = `圖資擷取於 ${DATA_PROVENANCE.overpassTimestamp?.slice(0, 10) ?? "未知日期"}，樓層高程為推估值。`;
 
-document.body.append(
-  createTitlePanel(provenance),
-  layerPanel.element,
-  viewPanel.element,
-  scenarioPanel.element,
-  sectionPanel.element,
-  createLegendPanel(),
-);
+const toolbar = createToolbar();
+const layerContent = createLayerContent(setLayerGroup, resetLayerGroups);
+const layersPopover = toolbar.add({
+  id: "layers",
+  label: "圖層",
+  icon: icon("layers"),
+  content: layerContent.element,
+});
+const sectionContent = createSectionContent(state.section, setSection);
+const sectionPopover = toolbar.add({
+  id: "section",
+  label: "剖面",
+  icon: icon("slice"),
+  content: sectionContent.element,
+});
+toolbar.add({ id: "legend", label: "圖例", icon: icon("legend"), content: createLegendContent() });
+toolbar.add({ id: "info", label: "資訊", icon: icon("info"), content: createInfoContent(provenance) });
+
+document.body.append(createBrandCard(), scenarioPanel.element, toolbar.element, viewPanel.element);
 
 viewer.onAerialRotate = () => setMode("3d");
 viewer.onCameraChange = scheduleHashUpdate;
@@ -106,6 +129,7 @@ viewer.onCameraChange = scheduleHashUpdate;
 if (state.mode !== viewer.viewMode) viewer.setViewMode(state.mode);
 rebuildScene();
 viewer.applyCameraState(state.camera);
+viewer.settle();
 viewer.setSection(state.section.enabled, state.section.bearing, state.section.offset);
 syncPanels();
 writeHash(state);
@@ -116,6 +140,7 @@ window.addEventListener("hashchange", () => {
   if (state.mode !== viewer.viewMode) viewer.setViewMode(state.mode);
   rebuildScene();
   viewer.applyCameraState(state.camera);
+  viewer.settle();
   viewer.setSection(state.section.enabled, state.section.bearing, state.section.offset);
   syncPanels();
 });

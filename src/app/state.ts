@@ -1,5 +1,5 @@
-import { LAYER_LABELS, LEVELS, type LayerId, type LevelId } from "../data/schema.ts";
 import { DEFAULT_CAMERA, type CameraState } from "../render/scene.ts";
+import { LAYER_GROUP_IDS, type LayerGroupId } from "./layerGroups.ts";
 import type { ViewMode } from "./viewMode.ts";
 
 export type ScenarioId = "status-quo" | "proposal-b";
@@ -15,26 +15,19 @@ export interface SectionState {
 export interface AppState {
   mode: ViewMode;
   scenario: ScenarioId;
-  layers: Record<LayerId, boolean>;
-  levels: Record<LevelId, boolean>;
+  layers: Record<LayerGroupId, boolean>;
   section: SectionState;
   camera: CameraState;
 }
 
-export const LAYER_IDS = Object.keys(LAYER_LABELS) as LayerId[];
-export const LEVEL_IDS = Object.keys(LEVELS) as LevelId[];
-
-/** 預設顯示全部樓層與圖層，3D 視圖、現況、不剖切；限建線會蓋住整個畫面，預設關閉。 */
+/** 預設顯示全部圖層群組，3D 視圖、現況、不剖切；限建線會蓋住整個畫面，預設關閉。 */
 export function defaultState(): AppState {
-  const layers = {} as Record<LayerId, boolean>;
-  for (const id of LAYER_IDS) layers[id] = id !== "restriction";
-  const levels = {} as Record<LevelId, boolean>;
-  for (const id of LEVEL_IDS) levels[id] = true;
+  const layers = {} as Record<LayerGroupId, boolean>;
+  for (const id of LAYER_GROUP_IDS) layers[id] = id !== "restriction";
   return {
     mode: "3d",
     scenario: "status-quo",
     layers,
-    levels,
     section: { enabled: false, bearing: 100, offset: 0 },
     camera: { ...DEFAULT_CAMERA },
   };

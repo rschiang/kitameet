@@ -19,7 +19,14 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Feature } from "../data/schema.ts";
-import { AERIAL_PLATE_Y, AERIAL_SQUASH, LEVEL_ORDER, type ViewMode } from "../app/viewMode.ts";
+import {
+  AERIAL_HIDDEN_LAYERS,
+  AERIAL_PLATE_Y,
+  AERIAL_SQUASH,
+  LEVEL_ORDER,
+  VIEW_TRANSITION_MS,
+  type ViewMode,
+} from "../app/viewMode.ts";
 import { buildFeatureMesh, disposeMesh, type FeatureUserData } from "./builders.ts";
 import { BACKGROUND_COLOR, setupLighting } from "./materials.ts";
 import { GROUND } from "./palette.ts";
@@ -39,6 +46,33 @@ export const DEFAULT_CAMERA: CameraState = {
 /** 空拍模式切回 3D 的極角門檻（度）。 */
 const POLAR_EXIT_THRESHOLD = 2;
 
+/** 正投影視錐的半高（公尺），同時用於與透視距離互換。 */
+const ORTHO_HALF_HEIGHT = 620;
+const PERSPECTIVE_FOV = 50;
+const TAN_HALF_FOV = Math.tan((PERSPECTIVE_FOV * Math.PI) / 360);
+
+/** 空拍模式正投影相機與目標的固定距離；正投影下只影響裁切，不影響比例。 */
+const AERIAL_CAMERA_DISTANCE = 1200;
+
+/** 回到 3D 時的最小極角，避免正俯視造成 OrbitControls 的方位角失效。 */
+const MIN_PERSPECTIVE_POLAR = 0.05;
+
+/** 預設視點的方向，供從未進過 3D 模式的狀態回退使用。 */
+const DEFAULT_DIRECTION = (() => {
+  const [px, py, pz] = DEFAULT_CAMERA.position;
+  const [tx, ty, tz] = DEFAULT_CAMERA.target;
+  const dx = px - tx;
+  const dy = py - ty;
+  const dz = pz - tz;
+  const length = Math.hypot(dx, dy, dz);
+  return { azimuth: Math.atan2(dx, dz), polar: Math.acos(dy / length) };
+})();
+
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+/** easeInOutQuad：轉場兩端慢、中段快。 */
+const ease = (u: number) => (u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2);
+
 export class Viewer {
   readonly scene = new Scene();
   readonly meshes = new Map<string, Mesh>();
@@ -55,6 +89,18 @@ export class Viewer {
   private mode: ViewMode = "3d";
   private clipping = false;
   private needsRender = true;
+  private layerFilter: (data: FeatureUserData) => boolean = () => true;
+
+  /** 視圖轉場進度：0 為 3D 真實高程，1 為空拍分層薄板。 */
+  private morph = 0;
+  private morphFrom = 0;
+  private morphTo = 0;
+  private morphStart = 0;
+  /** 切往空拍時，將正投影相機由使用者當下的方向轉為正俯視。 */
+  private cameraTween?: { azimuth: number; polar: number; start: number };
+  /** 切往空拍前的視線方向，供切回 3D 時還原。 */
+  private restoreDirection?: { azimuth: number; polar: number };
+
   /** 空拍模式被拖曳旋轉時呼叫，由 app 層決定如何切回 3D。 */
   onAerialRotate?: () => void;
   onCameraChange?: () => void;
@@ -73,7 +119,7 @@ export class Viewer {
     this.scene.add(this.featureGroup);
     setupLighting(this.scene);
 
-    this.perspective = new PerspectiveCamera(50, 1, 1, 6000);
+    this.perspective = new PerspectiveCamera(PERSPECTIVE_FOV, 1, 1, 6000);
     this.orthographic = new OrthographicCamera(-500, 500, 500, -500, -2000, 4000);
 
     // 地面以半透明紙面呈現，讓地下結構在 3D 視圖中可見
@@ -112,6 +158,8 @@ export class Viewer {
       });
     }
     this.orthographicControls.addEventListener("change", () => {
+      // 轉場自己會把相機由傾角轉正，別把它當成使用者拖曳
+      if (this.cameraTween) return;
       if (this.mode !== "aerial") return;
       const offset = this.orthographic.position.clone().sub(this.orthographicControls.target);
       const polar = (Math.atan2(Math.hypot(offset.x, offset.z), offset.y) * 180) / Math.PI;
@@ -150,75 +198,113 @@ export class Viewer {
       this.meshes.set(feature.id, mesh);
       this.featureGroup.add(mesh);
     }
-    this.applyViewMode();
+    this.applyMorph();
     this.applyClipping();
+    this.needsRender = true;
+  }
+
+  /** 設定圖層可見性判斷；與視圖模式無關，空拍隱藏的圖層由轉場淡出處理。 */
+  setLayerFilter(predicate: (data: FeatureUserData) => boolean): void {
+    this.layerFilter = predicate;
+    this.applyMorph();
     this.needsRender = true;
   }
 
   setViewMode(mode: ViewMode): void {
     if (this.mode === mode) return;
-    const state = this.cameraState();
+    const camera = this.camera;
+    const target = this.controls.target.clone();
+    const offset = camera.position.clone().sub(target);
+    const distance = Math.max(offset.length(), 1);
+    const dir = offset.divideScalar(distance);
+    const azimuth = Math.atan2(dir.x, dir.z);
+    const polar = Math.acos(clamp(dir.y, -1, 1));
+
     this.mode = mode;
     this.perspectiveControls.enabled = mode === "3d";
     this.orthographicControls.enabled = mode === "aerial";
+
     if (mode === "aerial") {
-      const distance = Math.hypot(
-        state.position[0] - state.target[0],
-        state.position[1] - state.target[1],
-        state.position[2] - state.target[2],
-      );
-      this.applyCameraState({
-        position: [state.target[0], state.target[1] + distance, state.target[2]],
-        target: state.target,
-        zoom: state.zoom,
-      });
+      // 記下使用者當下的視線方向，切回 3D 時還原
+      this.restoreDirection = { azimuth, polar };
+      this.orthographic.zoom = clamp(ORTHO_HALF_HEIGHT / (distance * TAN_HALF_FOV), 0.05, 40);
+      this.orthographic.position.copy(target).addScaledVector(dir, AERIAL_CAMERA_DISTANCE);
+      this.cameraTween = { azimuth, polar, start: performance.now() };
     } else {
-      // 回到 3D 時給一個與目前目標一致的斜角視點
-      const distance = 900 / Math.max(this.orthographic.zoom, 0.05);
-      this.applyCameraState({
-        position: [
-          state.target[0] + distance * 0.55,
-          state.target[1] + distance * 0.5,
-          state.target[2] + distance * 0.67,
-        ],
-        target: state.target,
-        zoom: 1,
-      });
+      this.cameraTween = undefined;
+      // 使用者在空拍模式拖出傾角時沿用該角度，否則還原切換前的方向
+      const dragged = polar > MIN_PERSPECTIVE_POLAR;
+      const restore = this.restoreDirection ?? DEFAULT_DIRECTION;
+      const nextAzimuth = dragged ? azimuth : restore.azimuth;
+      const nextPolar = Math.max(dragged ? polar : restore.polar, MIN_PERSPECTIVE_POLAR);
+      const d = clamp(
+        ORTHO_HALF_HEIGHT / (Math.max(this.orthographic.zoom, 0.05) * TAN_HALF_FOV),
+        this.perspectiveControls.minDistance,
+        this.perspectiveControls.maxDistance,
+      );
+      const sin = Math.sin(nextPolar);
+      this.perspective.position.set(
+        target.x + sin * Math.sin(nextAzimuth) * d,
+        target.y + Math.cos(nextPolar) * d,
+        target.z + sin * Math.cos(nextAzimuth) * d,
+      );
+      this.perspective.zoom = 1;
     }
-    this.applyViewMode();
+
+    const controls = this.controls;
+    controls.target.copy(target);
+    this.camera.updateProjectionMatrix();
+    controls.update();
+    this.startMorph(mode === "aerial" ? 1 : 0);
     this.resize();
+  }
+
+  private startMorph(to: number): void {
+    this.morphFrom = this.morph;
+    this.morphTo = to;
+    this.morphStart = performance.now();
+    this.needsRender = true;
+  }
+
+  /** 立即收斂目前的轉場；由網址還原狀態時不該殘留動畫。 */
+  settle(): void {
+    this.morph = this.morphTo;
+    this.cameraTween = undefined;
+    this.applyMorph();
     this.needsRender = true;
   }
 
   /**
-   * 空拍模式把量體壓成薄板、依樓層分層排列，並轉為半透明，
-   * 使深層結構不被淺層完全遮蔽；3D 模式還原實際高程與不透明度。
+   * 依轉場進度 `morph` 擺放量體：0 為真實高程與不透明度，
+   * 1 為壓成薄板、依樓層分層排列的半透明空拍樣貌。
    */
-  private applyViewMode(): void {
-    const aerial = this.mode === "aerial";
-    this.ground.visible = !aerial;
+  private applyMorph(): void {
+    const t = this.morph;
+    const squash = 1 + (AERIAL_SQUASH - 1) * t;
+    const groundMaterial = this.ground.material as MeshStandardMaterial;
+    groundMaterial.opacity = 0.3 * (1 - t);
+    this.ground.visible = t < 1;
     for (const mesh of this.meshes.values()) {
       const data = mesh.userData as FeatureUserData;
+      const fade = AERIAL_HIDDEN_LAYERS[data.layer] ? 1 - t : 1;
+      mesh.visible = this.layerFilter(data) && fade > 0.001;
+      if (!mesh.visible) continue;
+      mesh.scale.y = squash;
+      mesh.position.y = data.base + (AERIAL_PLATE_Y[data.level] - data.base) * t - data.base * squash;
+      mesh.renderOrder = t > 0 ? LEVEL_ORDER[data.level] : 0;
+      mesh.castShadow = t < 0.5 && (data.layer === "building" || data.layer === "landmark");
       const material = mesh.material as MeshStandardMaterial;
       const baseOpacity = (material.userData.baseOpacity as number) ?? 1;
-      if (aerial) {
-        mesh.scale.y = AERIAL_SQUASH;
-        mesh.position.y = AERIAL_PLATE_Y[data.level] - data.base * AERIAL_SQUASH;
-        mesh.renderOrder = LEVEL_ORDER[data.level];
-        mesh.castShadow = false;
-        material.transparent = true;
-        material.opacity = Math.min(baseOpacity, data.status === "removed" ? 0.3 : 0.72);
-        material.depthWrite = false;
-      } else {
-        mesh.scale.y = 1;
-        mesh.position.y = 0;
-        mesh.renderOrder = 0;
-        mesh.castShadow = data.layer === "building" || data.layer === "landmark";
-        material.transparent = baseOpacity < 1;
-        material.opacity = baseOpacity;
-        material.depthWrite = baseOpacity >= 1;
+      const aerialOpacity = Math.min(baseOpacity, data.status === "removed" ? 0.3 : 0.72);
+      const opacity = (baseOpacity + (aerialOpacity - baseOpacity) * t) * fade;
+      material.opacity = opacity;
+      const transparent = opacity < 1;
+      if (material.transparent !== transparent) {
+        material.transparent = transparent;
+        material.depthWrite = !transparent;
+        // 僅在旗標改變時重編譯，避免每幀全場重建材質
+        material.needsUpdate = true;
       }
-      material.needsUpdate = true;
     }
   }
 
@@ -289,17 +375,43 @@ export class Viewer {
     this.perspective.aspect = width / height;
     this.perspective.updateProjectionMatrix();
 
-    const half = 620;
     const aspect = width / height;
-    this.orthographic.left = -half * aspect;
-    this.orthographic.right = half * aspect;
-    this.orthographic.top = half;
-    this.orthographic.bottom = -half;
+    this.orthographic.left = -ORTHO_HALF_HEIGHT * aspect;
+    this.orthographic.right = ORTHO_HALF_HEIGHT * aspect;
+    this.orthographic.top = ORTHO_HALF_HEIGHT;
+    this.orthographic.bottom = -ORTHO_HALF_HEIGHT;
     this.orthographic.updateProjectionMatrix();
     this.needsRender = true;
   }
 
+  /** 推進量體漸變與相機轉向；兩者共用 {@link VIEW_TRANSITION_MS}。 */
+  private updateTransitions(): void {
+    const now = performance.now();
+    if (this.morph !== this.morphTo) {
+      const u = Math.min(1, (now - this.morphStart) / VIEW_TRANSITION_MS);
+      this.morph = u >= 1 ? this.morphTo : this.morphFrom + (this.morphTo - this.morphFrom) * ease(u);
+      this.applyMorph();
+      this.needsRender = true;
+    }
+    const tween = this.cameraTween;
+    if (tween) {
+      const u = Math.min(1, (now - tween.start) / VIEW_TRANSITION_MS);
+      const polar = tween.polar * (1 - ease(u));
+      const sin = Math.sin(polar);
+      const target = this.orthographicControls.target;
+      this.orthographic.position.set(
+        target.x + sin * Math.sin(tween.azimuth) * AERIAL_CAMERA_DISTANCE,
+        target.y + Math.cos(polar) * AERIAL_CAMERA_DISTANCE,
+        target.z + sin * Math.cos(tween.azimuth) * AERIAL_CAMERA_DISTANCE,
+      );
+      this.orthographicControls.update();
+      if (u >= 1) this.cameraTween = undefined;
+      this.needsRender = true;
+    }
+  }
+
   private tick(): void {
+    this.updateTransitions();
     if (this.perspectiveControls.enabled) this.perspectiveControls.update();
     if (!this.needsRender) return;
     this.needsRender = false;
