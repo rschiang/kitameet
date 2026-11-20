@@ -1,0 +1,81 @@
+# 參考資料
+
+本文件整理建模所依據的資料來源，依性質分類，每筆註明內容摘要與在本專案中的用途。
+
+## 站體與樓層
+
+### 中文維基百科「臺北車站」
+
+<https://zh.wikipedia.org/wiki/%E8%87%BA%E5%8C%97%E8%BB%8A%E7%AB%99>
+
+第四代站體的尺寸與樓層配置：地上 6 層、地下 4 層，長 149 公尺、寬 110 公尺、高 48 公尺；地下 1 樓為穿堂層並設五條南北向通道與南、北迴廊；地下 2 樓為月台層，4 座島式月台、9 線軌道，南側為標準軌（高鐵）、北側為窄軌（臺鐵，含 1 條通過線）；地下 3 樓為三鐵共用穿堂層；捷運板南線月台位於地下 3 樓、淡水信義線月台位於地下 4 樓。
+
+本專案以此覆寫 OSM 的站體高度與樓層數，並作為捷運月台樓層歸屬的依據。
+
+### 臺灣高鐵台北站樓層導覽
+
+<https://www.thsrc.com.tw/ArticleContent/977abb69-413a-4ccf-a109-0272c24fd490>
+
+高鐵台北站各樓層的旅客動線與設施配置，可對照 B1 穿堂與 B2 月台的關係。
+
+### 臺灣高鐵台北站平面圖（PDF）
+
+<https://www.thsrc.com.tw/event/map/Taipei2.pdf>
+
+站內各層的平面配置圖，含月台、穿堂與出入口位置，用於核對月台與通道的相對關係。
+
+### 臺鐵臺北車站出版品（PDF）
+
+<https://www.railway.gov.tw/tra-tip-web/tip/file/ef87452a-34df-4808-97c0-c74b05b969a6>
+
+臺鐵對臺北車站鐵路地下化工程與站體整建的說明，提供地下化工程的歷程與站區角色描述。
+
+## 地下街
+
+### 臺北市市場處：K 區地下街
+
+<https://www.tcma.gov.taipei/News_Content.aspx?n=0D4E37187A7154F0&s=7673B74A725B3625&sms=42464882E656FEC0>
+
+K 區地下街的沿革、位置與營運概況。本專案據此將 K 區地下街歸入 B1，並作為方案 B 拆除範圍的依據。
+
+### 臺北市市場處：台北地下街
+
+<https://www.tcma.gov.taipei/News_Content.aspx?n=0D4E37187A7154F0&s=3CDB32A9AC16BEEA&sms=42464882E656FEC0>
+
+台北地下街（Y 區）全長 825 公尺、187 間店舖，位於市民大道下方，用於核對地下街的範圍與樓層。
+
+### 臺北市市場處：臺北車站特定區地下街代號
+
+<https://www.tcma.gov.taipei/News_Content.aspx?n=1B4C0C7262E0B622&s=5B692574C86ACDF3>
+
+說明臺北車站特定區有 6 條軌道路線交會，並有台北（Y 區）、站前（Z 區）、中山（R 區）與 K 區共 4 條地下街分屬不同機關管理，是地下街命名與代號的依據。
+
+## 幾何圖資
+
+### OpenStreetMap
+
+<https://www.openstreetmap.org/>
+
+本專案所有平面輪廓與路線幾何的來源，授權為 Open Database License（ODbL）：<https://opendatacommons.org/licenses/odbl/>。使用時須標示「© OpenStreetMap contributors」。
+
+模型中直接引用的主要物件包含站體 `way/23641610`、四座月台 `way/584167409`、`way/584167411`、`way/584167413`、`way/584167415`、捷運月台 `way/741259904`、`way/741259905`、K 區地下街 `way/450732441`，以及高鐵路廊的喉管節點所屬的 `way/381111230` 與 `way/323105864`。
+
+### Overpass API
+
+<https://wiki.openstreetmap.org/wiki/Overpass_API>
+
+查詢語法參考文件為 <https://dev.overpass-api.de/overpass-doc/en/>。`scripts/fetch-osm.ts` 以 POST 方式查詢，必須帶 `User-Agent` 標頭，否則伺服器會回應 HTTP 406。主要端點為 <https://overpass-api.de/api/interpreter>，備用端點為 <https://overpass.kumi.systems/api/interpreter>，兩者查詢語法相同。伺服器忙碌時會回應 429、502 或 504，腳本以指數退避重試。
+
+## 座標與投影
+
+### EPSG:3826（TWD97 / TM2 zone 121）
+
+<https://epsg.io/3826>
+
+臺灣本島常用的平面坐標系統，中央經線 121 度、尺度 0.9999。本專案以 `proj4` 將 WGS84 經緯度投影至此坐標系後，減去原點座標得到局部公尺座標。
+
+## 方案來源
+
+### 研究小組「方案 B′」示意圖
+
+檔案位於 `docs/assets/proposal-b-reference.png`。圖面標示二島對齊、月台長 410 公尺（16 節）、東側正線最小半徑約 122 公尺、西側聯絡小半徑約 82 公尺，並註明轉乘通道、捷運月台與站體牆線位置皆為推估，新股道以緩和曲線繪製、半徑為圖上幾何值、未對照高鐵設計規範。本專案的方案 B 幾何以此圖為唯一依據。
