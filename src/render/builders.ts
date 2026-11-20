@@ -4,6 +4,7 @@
  */
 import { BackSide, DoubleSide, ExtrudeGeometry, Mesh, Shape, type BufferGeometry } from "three";
 import { corridorPolygon } from "../geo/offset.ts";
+import { exaggerate } from "./depth.ts";
 import type { Feature } from "../data/schema.ts";
 import { featureColor } from "./palette.ts";
 import { createPaperMaterial } from "./materials.ts";
@@ -17,8 +18,10 @@ export interface FeatureUserData {
   confidence: Feature["confidence"];
   sourceNote?: string;
   status: NonNullable<Feature["status"]>;
-  /** 量體底面高程，視圖壓縮時用來換算位移。 */
+  /** 量體底面高程（放大後），視圖壓縮時用來換算位移。 */
   base: number;
+  /** 量體底面的真實高程（公尺）。 */
+  trueBase: number;
 }
 
 function shapeFrom(points: [number, number][]): Shape {
@@ -47,8 +50,10 @@ function extrude(points: [number, number][], height: number, base: number): Buff
 
 /** 由 {@link Feature} 建立可直接加入場景的 mesh；幾何不足時回傳 null。 */
 export function buildFeatureMesh(feature: Feature): Mesh | null {
-  const base = feature.base ?? 0;
-  const height = feature.height ?? 1;
+  // 深度放大作用於上下兩端高程，高度由差值求得，避免分別放大造成錯位
+  const trueBase = feature.base ?? 0;
+  const base = exaggerate(trueBase);
+  const height = exaggerate(trueBase + (feature.height ?? 1)) - base;
 
   let geometry: BufferGeometry;
   if (feature.geometry.polygon && feature.geometry.polygon.length >= 3) {
@@ -84,6 +89,7 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
     confidence: feature.confidence,
     status,
     base,
+    trueBase,
   };
   if (feature.name !== undefined) userData.name = feature.name;
   if (feature.sourceNote !== undefined) userData.sourceNote = feature.sourceNote;

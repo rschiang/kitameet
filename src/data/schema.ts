@@ -3,6 +3,7 @@
  * 高程以公尺計、地面為 0、向下為負。
  */
 import type { Local } from "../geo/project.ts";
+import type { StructureId } from "./levels.ts";
 
 /**
  * 資料可信度：
@@ -12,7 +13,11 @@ import type { Local } from "../geo/project.ts";
  */
 export type Confidence = "sourced" | "derived" | "estimated";
 
-/** 樓層代號。`elevated` 為高架結構，`G` 為地面層。 */
+/**
+ * 樓層標籤。`elevated` 為高架結構，`G` 為地面層。
+ * 標籤不代表深度：同一個 B2 在臺鐵高鐵站體與捷運站並不等深，
+ * 實際樓板高程由 {@link StructureId} 對應的構造物樓層表決定。
+ */
 export type LevelId = "elevated" | "G" | "B1" | "B2" | "B3" | "B4";
 
 /** 圖層代號，亦為圖層面板的開關單位。 */
@@ -52,6 +57,8 @@ export interface Feature {
   kind: FeatureKind;
   name?: string;
   level: LevelId;
+  /** 所屬構造物；決定 {@link level} 對應的實際深度。 */
+  structure?: StructureId;
   layer: LayerId;
   geometry: { polygon?: Local[]; polyline?: Local[] };
   /** 量體高度（公尺）；折線量體則為厚度。 */
@@ -75,9 +82,9 @@ export interface LevelInfo {
 }
 
 /**
- * 樓層高程表。數值為推估值，依臺北車站地上 6 層地下 4 層、
- * 總高 48 公尺的文獻描述與一般鐵路車站層高反推，
- * 取得臺北市都發局或鐵道局圖資後應整表更新。
+ * 預設樓層表，僅供未指定構造物的量體使用。
+ * 數值依臺北車站地上 6 層地下 4 層、總高 48 公尺的文獻描述與一般鐵路車站層高反推；
+ * 有獨立樓層表的構造物一律改走 `levels.ts` 的 `STRUCTURES`。
  */
 export const LEVELS: Record<LevelId, LevelInfo> = {
   elevated: { floor: 8.0, height: 9.0, label: "高架層", confidence: "estimated" },

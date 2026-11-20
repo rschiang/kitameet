@@ -159,7 +159,8 @@ export function createLegendPanel(): HTMLElement {
   }
   const note = document.createElement("p");
   note.className = "note";
-  note.textContent = "幾何來源：OpenStreetMap contributors（ODbL）。樓層高程與方案位置為推估值。";
+  note.textContent =
+    "幾何來源：OpenStreetMap contributors（ODbL）。地下深度放大 1.2 倍；各構造物樓層深度不同，數值多為推估值。";
   element.append(note);
   return element;
 }
