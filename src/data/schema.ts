@@ -111,11 +111,6 @@ export const TRACK_BAND_THICKNESS = 0.3;
 /** 通道與樓板厚度（公尺）。 */
 export const SLAB_THICKNESS = 0.4;
 
-/** 各層軌道面高程（＝月台面減去 {@link PLATFORM_RISE}）。 */
-export function railLevel(level: LevelId): number {
-  return LEVELS[level].floor - PLATFORM_RISE;
-}
-
 export const LAYER_LABELS: Record<LayerId, string> = {
   landmark: "地標建物",
   building: "一般建物",
