@@ -37,12 +37,14 @@ npm run fetch:osm
 | 文件 | 內容 |
 |---|---|
 | [`docs/status-quo.md`](docs/status-quo.md) | 臺北車站地下結構現況與資料來源分級 |
-| [`docs/proposals.md`](docs/proposals.md) | 方案 B 的內容、幾何參數與建模限制 |
+| [`docs/proposals.md`](docs/proposals.md) | 方案內容、幾何參數與建模限制 |
 | [`docs/revisions.md`](docs/revisions.md) | 提案與模型的變更紀錄 |
-| [`docs/architecture.md`](docs/architecture.md) | 資料流、座標系統、資料結構與渲染方式 |
+| [`docs/architecture.md`](docs/architecture.md) | 資料流、座標系統、資料結構與算繪方式 |
 | [`docs/references.md`](docs/references.md) | 參考資料與授權 |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 協作約定與提交規範 |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 協作守則與修改規範 |
 
 ## 資料來源與授權
+
+本專案以 [GNU AGPL 3.0](LICENSE.md) 自由軟體授權釋出。
 
 幾何資料來自 OpenStreetMap contributors，授權為 ODbL。樓層高程、地下街樓層歸屬與方案位置皆為推估值，詳見各文件中的可信度標示。
