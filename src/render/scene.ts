@@ -235,8 +235,9 @@ export class Viewer {
 
   private applyClipping(): void {
     const planes = this.clipping ? [this.clipPlane] : [];
-    for (const mesh of this.meshes.values()) {
-      const material = mesh.material as MeshStandardMaterial;
+    const materials = [...this.meshes.values()].map((mesh) => mesh.material as MeshStandardMaterial);
+    materials.push(this.ground.material as MeshStandardMaterial);
+    for (const material of materials) {
       material.clippingPlanes = planes;
       material.needsUpdate = true;
     }
