@@ -85,3 +85,25 @@ OSM 只有 2D 輪廓，捷運台北車站因而只能以單一巨塊呈現，無
 - `src/data/scenarios/proposal-b.ts`（`REBUILD_ZONE`、`connector()`）
 - `src/app/scenario.ts`、`src/geo/offset.ts`（`splitPolylineAtX`）
 - `docs/proposals.md`
+
+## 2026-11-20：方案 B 幾何對齊正本 B′ 疊圖
+
+**變更內容**
+
+- 甲、乙月台中心線的南移量由 38／62 公尺改為 51.0／72.0 公尺，兩島中心間距由 24.0 公尺改為 21.0 公尺。
+- 新月台東端改以 K 區地下街（`way/450732441`）東端定位，不再取既有第 1 月台的東端。
+- 改建區間改為 x −589（延平北路一帶）至 x 316（中山北路一段下方）。兩端的接軌點改取既有高鐵股道與界線的交點：甲月台接 `way/13991375`、`way/381111230`，乙月台接 `way/323105864`、`way/593866771`，不再使用寫死的路廊取樣點。
+- 西側反向曲線的標稱最小半徑由 82 公尺改為 122 公尺，與東側相同；個別股道可縮小半徑以在界線前收攏，下限 100 公尺，實際最小為 115.0 公尺。東側取消正本在月台東端外的切線段，西側保留 10 公尺。
+- 新增以折線為界的切割（`src/geo/clip.ts`）與開挖侵入清單（`Scenario.encroached`）：站前地下街北側三處出入口（合計 273 平方公尺）與兩段通道落在新建工程的平面包絡內，標為拆除重建，地下街主體 9851 平方公尺保留且仍為單一連通量體。
+- 機場捷運 A1 的月台改採 OSM `way/871105041`、`way/871105042`（原無 `level` 標籤，覆寫為 B3），刪除合成的 `a1/platform` 與 `a1/track/*`；進站段與機廠線六條 way 一併覆寫為 B3。
+
+**理由**
+
+取得研究小組的正本輸出《臺北車站方案 B′ 軌道配置構想》疊圖後，幾何改以該疊圖為準，不再逐項推估。偏離正本之處有三項：月台寬度維持 12 公尺（既有月台過窄為改建動機之一），因而放寬兩島間距；為維持全線最小半徑不低於 100 公尺，西側曲線較正本平緩；為在東界前收攏，取消正本的東側切線段。A1 月台則因正本即描自同一組 OSM 圖徵，改為直接採用。
+
+**受影響的資料檔**
+
+- `src/data/scenarios/proposal-b.ts`（`PLATFORM_OFFSETS`、`REBUILD_ZONE`、`WEST_RADIUS`、`newPlatformEast()`、`tieIn()`、`connector()`）
+- `src/geo/clip.ts`（新增）、`src/geo/offset.ts`（`polylineCrossingAtX`）、`src/app/scenario.ts`
+- `src/data/overrides.ts`、`src/data/structures/station-complex.ts`
+- `docs/proposals.md`、`docs/references.md`、`docs/status-quo.md`、`docs/architecture.md`

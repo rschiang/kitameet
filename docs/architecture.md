@@ -48,7 +48,7 @@ graph TD
 
 ## 分層地下構造
 
-OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一巨大多邊形。兩者於覆寫表標為 `exclude`，改由 `src/data/structures/station-complex.ts` 的 `buildStationComplex()` 產生分層量體，於 `buildBaseline()` 併入場景：站體的逐層樓板、B1 的五條南北向通道與南北迴廊、捷運兩臂的樓板與大廳、轉乘節點、垂直動線核心、A1 的月台與股道，以及地下街之間的連通道。
+OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一巨大多邊形。兩者於覆寫表標為 `exclude`，改由 `src/data/structures/station-complex.ts` 的 `buildStationComplex()` 產生分層量體，於 `buildBaseline()` 併入場景：站體的逐層樓板、B1 的五條南北向通道與南北迴廊、捷運兩臂的樓板與大廳、轉乘節點、垂直動線核心、A1 的樓板、大廳與地下量體，以及地下街之間的連通道。
 
 平面一律由既有輪廓推算（`polygonAxis`、`advance`、`offsetPolyline`、`corridorPolygon`、`nearestPair`），不新增座標常數；深度一律取該構造物的樓層表。
 
