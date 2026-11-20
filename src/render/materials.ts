@@ -21,6 +21,11 @@ export interface PaperMaterialOptions {
   rim?: number;
   /** 只畫背面可做出「掀蓋紙盒」的效果，讓外殼不遮住內部。 */
   side?: Side;
+  /**
+   * 深度偏移：樓板與站體外殼退讓給貼在它上面的量體，
+   * 避免共面造成 z-fighting（月台與樓板、大廳頂與外殼頂互閃）。
+   */
+  offset?: boolean;
 }
 
 const RIM_COLOR = new Color("#ffffff");
@@ -30,6 +35,7 @@ export function createPaperMaterial({
   opacity = 1,
   rim = 0.18,
   side = DoubleSide,
+  offset = false,
 }: PaperMaterialOptions): MeshStandardMaterial {
   const material = new MeshStandardMaterial({
     color: new Color(color),
@@ -41,6 +47,11 @@ export function createPaperMaterial({
     opacity,
     depthWrite: opacity >= 1,
   });
+  if (offset) {
+    material.polygonOffset = true;
+    material.polygonOffsetFactor = 1;
+    material.polygonOffsetUnits = 1;
+  }
 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uRim = { value: rim };
@@ -66,7 +77,7 @@ uniform vec3 uRimColor;`,
 }`,
       );
   };
-  material.customProgramCacheKey = () => `paper-${rim}`;
+  material.customProgramCacheKey = () => `paper-${rim}-${offset ? 1 : 0}`;
 
   return material;
 }

@@ -3,7 +3,7 @@
  * 全部以原生 DOM 建立，不引入 UI 框架。
  */
 import { LAYER_LABELS, LEVELS, type LayerId, type LevelId } from "../data/schema.ts";
-import { KIND_COLORS, LAYER_COLORS, STATUS_COLORS } from "../render/palette.ts";
+import { LAYER_COLORS, LINE_COLORS, STATUS_COLORS } from "../render/palette.ts";
 import { LAYER_IDS, LEVEL_IDS, type AppState, type ScenarioId } from "./state.ts";
 import type { ViewMode } from "./viewMode.ts";
 
@@ -136,9 +136,13 @@ export function createScenarioPanel(
 }
 
 const LEGEND_ROWS: { color: string; label: string }[] = [
-  { color: KIND_COLORS["track-tra"]!, label: "臺鐵股道" },
-  { color: KIND_COLORS["track-hsr"]!, label: "高鐵股道" },
-  { color: LAYER_COLORS.metro, label: "捷運" },
+  { color: LINE_COLORS.tra, label: "臺鐵" },
+  { color: LINE_COLORS.hsr, label: "高鐵" },
+  { color: LINE_COLORS.bl, label: "板南線" },
+  { color: LINE_COLORS.r, label: "淡水信義線" },
+  { color: LINE_COLORS.g, label: "松山新店線" },
+  { color: LINE_COLORS.o, label: "中和新蘆線" },
+  { color: LINE_COLORS.a, label: "機場捷運" },
   { color: LAYER_COLORS.platform, label: "月台" },
   { color: LAYER_COLORS.mall, label: "地下街" },
   { color: STATUS_COLORS.added!, label: "方案新建" },

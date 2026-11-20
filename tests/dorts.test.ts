@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { splitRuns, type Measured } from "../scripts/dorts/structures.ts";
 import { buildBaseline } from "../src/data/scene.ts";
 import { buildDorts, dortsBuildingPolygons } from "../src/data/dorts.ts";
-import { METRO_LINES } from "../src/data/levels.ts";
-import { pointInPolygon, polygonCentroid } from "../src/geo/measure.ts";
+import { METRO_LINES, type MetroLineId } from "../src/data/levels.ts";
+import { nearestOnPolyline, pointInPolygon, polygonArea, polygonCentroid } from "../src/geo/measure.ts";
+import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "../src/data/overrides.ts";
 import { polylineLength } from "../src/geo/offset.ts";
 import type { Local } from "../src/geo/project.ts";
+
+const DEFAULT_HEIGHT = DEFAULT_BUILDING_LEVELS * BUILDING_LEVEL_HEIGHT;
 
 /** 沿 x 軸、每 4 公尺一點的合成量測序列。 */
 function samples(widths: number[]): Measured[] {
@@ -39,7 +42,7 @@ describe("潛盾與明挖的分段", () => {
 describe("公告圖量體", () => {
   const features = buildDorts();
 
-  it("板南線潛盾隧道的半徑與軸心高程合於實測", () => {
+  it("潛盾隧道的半徑與軸心高程合於所屬路線", () => {
     const bores = features.filter(
       (f) => f.id.startsWith("dorts/N/bore/") || f.id.startsWith("dorts/P/bore/"),
     );
@@ -49,7 +52,12 @@ describe("公告圖量體", () => {
       // 公告圖的單孔淨寬隨圖幅年代分成 5.2 與 5.8 公尺兩種畫法
       expect(bore.radius!, bore.id).toBeGreaterThan(2.5);
       expect(bore.radius!, bore.id).toBeLessThan(3.5);
-      expect(bore.base!, bore.id).toBeCloseTo(METRO_LINES.bl.rail + 1.5, 6);
+      // 圖幅代號不等於路線：N、P 圖幅也畫了鄰線的隧道，深度須跟著幾何判定的路線
+      expect(bore.line, bore.id).toBeDefined();
+      expect(bore.base!, bore.id).toBeCloseTo(
+        METRO_LINES[bore.line as MetroLineId].rail + 1.5,
+        6,
+      );
     }
     // 長度 100 公尺以上的主要區間，淨寬量測最穩定
     const long = bores.filter((f) => polylineLength(f.geometry.tube!) >= 100);
@@ -67,6 +75,25 @@ describe("公告圖量體", () => {
       if (box.kind === "station-box") expect(box.base! + box.height!, box.id).toBeCloseTo(-5.0, 6);
       else expect(box.height!, box.id).toBeCloseTo(9.0, 6);
     }
+  });
+
+  it("潛盾隧道與軌道中心線沒有重複畫法", () => {
+    const duplicated = (items: Local[][]) =>
+      items.some((a) =>
+        items.some((b) => {
+          if (a === b) return false;
+          const near = a.filter((p) => nearestOnPolyline(p, b).distance <= 1.5).length;
+          return near / a.length >= 0.9;
+        }),
+      );
+    const bores = features.flatMap((f) => (f.geometry.tube ? [f.geometry.tube] : []));
+    const tracks = features.flatMap((f) =>
+      f.kind === "track-metro" && f.geometry.polyline ? [f.geometry.polyline] : [],
+    );
+    expect(bores.length).toBeGreaterThan(20);
+    expect(tracks.length).toBeGreaterThan(20);
+    expect(duplicated(bores)).toBe(false);
+    expect(duplicated(tracks)).toBe(false);
   });
 });
 
@@ -92,11 +119,37 @@ describe("公告圖取代 OSM 平面", () => {
     }
   });
 
-  it("公告圖涵蓋範圍內的 OSM 道路與捷運正線由公告圖取代", () => {
+  it("公告圖提供道路邊線與捷運正線，OSM 路面仍保留於其下", () => {
     const dorts = features.filter((f) => f.id.startsWith("dorts/"));
-    expect(dorts.filter((f) => f.kind === "road").length).toBeGreaterThan(100);
+    expect(dorts.filter((f) => f.kind === "road-edge").length).toBeGreaterThan(100);
     expect(dorts.filter((f) => f.kind === "track-metro").length).toBeGreaterThan(10);
     // 機場捷運不在公告圖範圍內，OSM 的正線須留下
     expect(features.some((f) => f.kind === "track-metro" && f.id.startsWith("way/"))).toBe(true);
+    // 路面為 OSM 的道路中心線外擴而成，與公告圖的路緣線並存
+    expect(features.filter((f) => f.kind === "road").length).toBeGreaterThan(100);
+  });
+
+  it("同一棟建物的附屬小面不繼承主量體樓高", () => {
+    const faces = features.filter((f) => f.id.startsWith("dorts/building/"));
+    const groups = new Map<string, { area: number; height: number }[]>();
+    for (const face of faces) {
+      const source = face.sourceNote?.match(/way\/\d+/)?.[0];
+      if (source === undefined) continue;
+      const entry = {
+        area: Math.abs(polygonArea(face.geometry.polygon!)),
+        height: face.height ?? 0,
+      };
+      const list = groups.get(source);
+      if (list) list.push(entry);
+      else groups.set(source, [entry]);
+    }
+    expect(groups.size).toBeGreaterThan(50);
+    for (const [source, list] of groups) {
+      const largest = Math.max(...list.map((f) => f.area));
+      for (const face of list) {
+        if (face.height <= DEFAULT_HEIGHT) continue;
+        expect(face.area / largest, source).toBeGreaterThanOrEqual(0.4);
+      }
+    }
   });
 });

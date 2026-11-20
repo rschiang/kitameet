@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBaseline, baselineById } from "../src/data/scene.ts";
-import { levelOf } from "../src/data/levels.ts";
+import { METRO_LINES, levelOf, railLevelOf, type MetroLineId } from "../src/data/levels.ts";
 import { PLATFORM_RISE } from "../src/data/schema.ts";
 
 const features = buildBaseline();
@@ -26,9 +26,9 @@ describe("現況場景", () => {
       expect(f!.layer).toBe("platform");
       expect(longestSpan(f!.geometry.polygon!)).toBeGreaterThan(325);
       expect(longestSpan(f!.geometry.polygon!)).toBeLessThan(336);
-      // 月台面與站體自己的 B2 樓板齊平
+      // 月台自 B2 樓板面長高 1.1 公尺
       expect(f!.structure, id).toBe("tra-hsr-station");
-      expect(f!.base! + f!.height!).toBeCloseTo(levelOf("tra-hsr-station", "B2").floor, 6);
+      expect(f!.base!).toBeCloseTo(levelOf("tra-hsr-station", "B2").floor, 6);
       expect(f!.height).toBeCloseTo(PLATFORM_RISE, 6);
     }
   });
@@ -71,5 +71,73 @@ describe("現況場景", () => {
     for (const level of ["B1", "B2", "B3", "B4"]) {
       expect(baselineById(`station/slab/${level}`)?.level).toBe(level);
     }
+  });
+
+  it("臺鐵高鐵股道一律位於站體 B2 月台層，不隨 OSM 的 layer 散落", () => {
+    const rail = features.filter((f) => f.kind === "track-tra" || f.kind === "track-hsr");
+    expect(rail.length).toBeGreaterThan(30);
+    const ramp = ["way/542501098", "way/542501099"];
+    for (const track of rail) {
+      expect(track.line, track.id).toBe(track.kind === "track-hsr" ? "hsr" : "tra");
+      if (ramp.includes(track.id)) continue;
+      expect(track.base!, track.id).toBeCloseTo(railLevelOf("tra-hsr-station", "B2"), 6);
+      expect(track.baseEnd, track.id).toBeUndefined();
+    }
+  });
+
+  it("華山引道自 B2 月台層爬升至地面", () => {
+    for (const id of ["way/542501098", "way/542501099"]) {
+      const feature = baselineById(id);
+      expect(feature, id).toBeDefined();
+      expect(feature!.base, id).toBeCloseTo(-1.0, 6);
+      expect(feature!.baseEnd!, id).toBeCloseTo(railLevelOf("tra-hsr-station", "B2"), 6);
+    }
+  });
+
+  it("捷運股道的深度由所屬路線決定，疊式段下層另行覆寫", () => {
+    const lower = new Set(["way/194585049", "way/194585053", "way/194585061"]);
+    const metro = features.filter((f) => f.kind === "track-metro" && f.line !== undefined);
+    expect(metro.length).toBeGreaterThan(20);
+    for (const track of metro) {
+      const rail = METRO_LINES[track.line as MetroLineId].rail;
+      if (lower.has(track.id)) expect(track.base!, track.id).toBeCloseTo(rail - 7.0, 6);
+      else expect(track.base!, track.id).toBeCloseTo(rail, 6);
+    }
+  });
+
+  it("台北雙星依新聞稿高度，且高於新光人壽", () => {
+    const c1 = baselineById("way/1502280687");
+    const d1 = baselineById("way/1502280746");
+    expect(c1?.height).toBe(280);
+    expect(d1?.height).toBe(360);
+    expect(c1?.layer).toBe("landmark");
+    expect(d1?.layer).toBe("landmark");
+  });
+
+  it("雨棚與通風井不以樓層數推估為實心方塊", () => {
+    const canopy = baselineById("way/197917727");
+    expect(canopy, "way/197917727").toBeDefined();
+    // 架高的薄頂板，不是自地面長起的量體
+    expect(canopy!.base!).toBeGreaterThan(3);
+    expect(canopy!.height!).toBeLessThan(1);
+  });
+
+  it("市民大道高架有梁深與橋墩，匝道自橋面斜降至地面", () => {
+    const elevated = features.filter((f) => f.kind === "elevated-road");
+    const decks = elevated.filter((f) => !f.id.includes("/pier/"));
+    const piers = elevated.filter((f) => f.id.includes("/pier/"));
+    expect(piers.length).toBeGreaterThan(20);
+    for (const pier of piers) {
+      expect(pier.base, pier.id).toBe(0);
+      expect(pier.base! + pier.height!, pier.id).toBeCloseTo(8.0 - 1.8, 6);
+    }
+    // 橋面頂維持 8.0 公尺
+    for (const deck of decks) {
+      const top = Math.max(deck.base!, deck.baseEnd ?? deck.base!) + deck.height!;
+      expect(top, deck.id).toBeLessThanOrEqual(8.0 + 1e-6);
+    }
+    const ramp = baselineById("way/581377324");
+    expect(ramp?.base).toBeCloseTo(0.1, 6);
+    expect(ramp?.baseEnd).toBeCloseTo(8.0 - 1.0, 6);
   });
 });

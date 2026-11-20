@@ -34,6 +34,9 @@ export type LayerId =
   | "passage"
   | "restriction";
 
+/** 軌道系統與捷運路線代號；決定股道、隧道與站體的著色。 */
+export type LineId = "tra" | "hsr" | "bl" | "r" | "g" | "o" | "a";
+
 /** 量體類型，決定著色與建模方式。 */
 export type FeatureKind =
   | "platform"
@@ -49,6 +52,7 @@ export type FeatureKind =
   | "landmark"
   | "elevated-road"
   | "road"
+  | "road-edge"
   | "tunnel"
   | "restriction";
 
@@ -62,6 +66,8 @@ export interface Feature {
   level: LevelId;
   /** 所屬構造物；決定 {@link level} 對應的實際深度。 */
   structure?: StructureId;
+  /** 所屬系統或路線；決定著色。 */
+  line?: LineId;
   layer: LayerId;
   /** 平面量體取 `polygon`、帶狀量體取 `polyline`、圓形隧道取 `tube`（軸心折線）。 */
   geometry: { polygon?: Local[]; polyline?: Local[]; tube?: Local[] };
@@ -69,6 +75,8 @@ export interface Feature {
   height?: number;
   /** 量體底面高程（公尺，地面為 0）。未指定時取所屬樓層樓板。 */
   base?: number;
+  /** 折線量體末端頂點的底面高程；省略時全段與 `base` 同高。僅 `polyline` 有效。 */
+  baseEnd?: number;
   /** 折線量體的寬度（公尺）；`tube` 量體則為半徑。 */
   width?: number;
   /** 圓形隧道的半徑（公尺）。 */

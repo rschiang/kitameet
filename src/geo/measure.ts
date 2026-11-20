@@ -108,6 +108,33 @@ export function nearestPair(a: Local[], b: Local[]): { a: Local; b: Local; dista
   return best;
 }
 
+/** 點到折線的最近點與距離（公尺）；折線不足兩點時回傳距第一點的距離。 */
+export function nearestOnPolyline(
+  point: Local,
+  line: Local[],
+): { point: Local; distance: number } {
+  if (line.length === 0) throw new Error("nearestOnPolyline 需要非空的折線");
+  if (line.length === 1) {
+    return { point: line[0], distance: Math.hypot(point[0] - line[0][0], point[1] - line[0][1]) };
+  }
+  let best = { point: line[0], distance: Infinity };
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1];
+    const b = line[i];
+    const vx = b[0] - a[0];
+    const vy = b[1] - a[1];
+    const len2 = vx * vx + vy * vy;
+    const t =
+      len2 === 0
+        ? 0
+        : Math.min(1, Math.max(0, ((point[0] - a[0]) * vx + (point[1] - a[1]) * vy) / len2));
+    const q: Local = [a[0] + vx * t, a[1] + vy * t];
+    const distance = Math.hypot(point[0] - q[0], point[1] - q[1]);
+    if (distance < best.distance) best = { point: q, distance };
+  }
+  return best;
+}
+
 /** 多邊形的有向面積（平方公尺），逆時針為正。環為開放式，首尾不重複。 */
 export function polygonArea(ring: Local[]): number {
   let sum = 0;

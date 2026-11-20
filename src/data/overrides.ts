@@ -6,7 +6,7 @@
  * 因此在此逐項覆寫並註明依據。取得臺北市都發局或鐵道局圖資後，
  * 僅需修改本檔與 `levels.ts` 的 `STRUCTURES`，渲染端不受影響。
  */
-import type { StructureId } from "./levels.ts";
+import { METRO_LINES, railLevelOf, type StructureId } from "./levels.ts";
 import type { Confidence, FeatureKind, LayerId, LevelId } from "./schema.ts";
 
 export interface FeatureOverride {
@@ -22,6 +22,8 @@ export interface FeatureOverride {
   height?: number;
   /** 量體底面高程（公尺）。 */
   base?: number;
+  /** 折線量體末端頂點的底面高程（公尺）；省略時全段與 `base` 同高。 */
+  baseEnd?: number;
   confidence?: Confidence;
   sourceNote?: string;
 }
@@ -41,6 +43,8 @@ export const LANDMARK_IDS: Record<string, string> = {
   "way/204711207": "亞洲廣場大樓",
   "way/605982572": "京站時尚廣場",
   "way/23641610": "臺北車站",
+  "way/1502280687": "台北雙星 C1",
+  "way/1502280746": "台北雙星 D1",
 };
 
 /** 同一構造物的多段 OSM 量體：批次指定構造物與樓層。 */
@@ -50,11 +54,44 @@ function assign(ids: string[], override: FeatureOverride): Record<string, Featur
 
 const DORTS = "臺北市捷運工程局《捷運工程大區域開挖施工實務》";
 const METRO_MAP = "捷運台北車站官方車站配置圖";
-/** 捷運正線的 OSM level 標籤與月台層不一致，一律以站區月台層為準。 */
-const METRO_TRACK_NOTE =
-  `${METRO_MAP}：以臺北車站站區的月台層深度呈現全線，站區外的實際深度不在模型範圍。`;
+
+/**
+ * 上下疊式潛盾的兩管間距（公尺）：公告圖潛盾外半徑 2.97 公尺 × 2 加淨距約 1 公尺。
+ * 取得松山線 CG02 標的設計斷面後改此一處即可。
+ */
+const STACKED_SPACING = 7.0;
+/** 疊式段下層的軌道面高程（公尺）。 */
+const STACKED_LOWER_RAIL = METRO_LINES.g.rail - STACKED_SPACING;
+const STACKED_NOTE =
+  "捷運松山線北門—西門段為上下疊式潛盾隧道；下層軌道面取上層減一組隧道間距 " +
+  `${STACKED_SPACING} 公尺（公告圖潛盾外半徑 2.97 公尺 × 2 加淨距約 1 公尺），為推估值。`;
+
+/** 華山引道兩端的軌道面高程（公尺）：東端露出地面、西端接臺鐵站體 B2 月台層。 */
+const HUASHAN_SURFACE = -1.0;
+const HUASHAN_RAIL = railLevelOf("tra-hsr-station", "B2");
+
+const TWINS_NOTE =
+  "臺北市政府捷運工程局 2026 年 4 月 27 日新聞稿〈台北雙星 606 億巨資打造國門新象〉：" +
+  "C1 棟 53 層約 280 公尺、D1 棟 70 層約 360 公尺（2024 年 6 月都審變更設計後之高度）。" +
+  "OSM 標為 building=construction 且無高度標籤。輪廓為塔樓基座，裙樓未建模。";
 
 export const OVERRIDES: Record<string, FeatureOverride> = {
+  // ── 地標建物 ──────────────────────────────────────────
+  "way/1502280687": {
+    name: "台北雙星 C1",
+    height: 280,
+    base: 0,
+    confidence: "sourced",
+    sourceNote: TWINS_NOTE,
+  },
+  "way/1502280746": {
+    name: "台北雙星 D1",
+    height: 360,
+    base: 0,
+    confidence: "sourced",
+    sourceNote: TWINS_NOTE,
+  },
+
   // ── 站體 ──────────────────────────────────────────────
   [STATION_OUTLINE_ID]: {
     name: "臺北車站",
@@ -202,34 +239,38 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   },
 
   // ── 捷運正線 ──────────────────────────────────────────
-  // OSM 的板南線標 level=-2、淡水信義線標 -4，與官方配置圖的月台層不符，逐一覆寫。
-  ...assign(["way/198199155", "way/198199171", "way/198199183"], {
+  // 深度一律由 `levels.ts` 的 METRO_LINES 依 OSM `ref` 給出；以下只列線上無法推得者。
+  // 松山新店線北門—西門段為上下疊式潛盾，OSM 以 layer 表示上下關係，下層另行覆寫。
+  ...assign(["way/194585049", "way/194585053"], {
     layer: "metro",
-    level: "B3",
-    structure: "metro-station",
+    level: "B4",
+    structure: "metro-line-g",
+    base: STACKED_LOWER_RAIL,
     confidence: "estimated",
-    sourceNote: `板南線正線。${METRO_TRACK_NOTE}`,
+    sourceNote: STACKED_NOTE,
   }),
-  ...assign(
-    [
-      "way/194618296",
-      "way/194618307",
-      "way/194618322",
-      "way/194618326",
-      "way/194618361",
-      "way/194618365",
-      "way/1226066660",
-      "way/1226066663",
-      "way/1226066664",
-    ],
-    {
-      layer: "metro",
-      level: "B4",
-      structure: "metro-station",
-      confidence: "estimated",
-      sourceNote: `淡水信義線正線。${METRO_TRACK_NOTE}`,
-    },
-  ),
+  "way/194585061": {
+    layer: "metro",
+    level: "B4",
+    structure: "metro-line-g",
+    base: STACKED_LOWER_RAIL,
+    baseEnd: METRO_LINES.g.rail,
+    confidence: "estimated",
+    sourceNote: `${STACKED_NOTE}本段北端於北門站回到與上層同高。`,
+  },
+
+  // ── 華山引道 ──────────────────────────────────────────
+  ...assign(["way/542501098", "way/542501099"], {
+    name: "華山引道",
+    level: "B2",
+    structure: "tra-hsr-station",
+    base: HUASHAN_SURFACE,
+    baseEnd: HUASHAN_RAIL,
+    confidence: "estimated",
+    sourceNote:
+      "原臺北車站地下化專案引道，今為緊急搶修基地；OSM 標 `layer=-1`，" +
+      "實為自 B2 月台層爬升至地面的引道，全長約 410 公尺、坡度約 3.3%，高程為推估。",
+  }),
   ...assign(
     [
       "way/1558102738",

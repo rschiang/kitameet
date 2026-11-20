@@ -57,10 +57,6 @@ type OverpassWay = {
   geometry?: OverpassNode[];
 };
 
-
-/** 市民大道與忠孝橋引道等高架路段的名稱特徵。 */
-const ELEVATED_NAMES = ["市民大道", "忠孝橋", "引道", "高架"];
-
 function parseLevel(tags: Record<string, string>): number | undefined {
   const raw = tags.level ?? tags.layer;
   if (raw === undefined) return undefined;
@@ -91,12 +87,8 @@ export function classify(tags: Record<string, string>, level: number | undefined
     return "station";
   }
   if (tags.building !== undefined) return "building";
-  if (tags.highway !== undefined) {
-    if (tags.bridge === "yes" && ELEVATED_NAMES.some((n) => name.includes(n))) {
-      return "elevated-road";
-    }
-    return "road";
-  }
+  // 高架與地面的區分在資料層依 bridge／layer 標籤判定，此處不看路名
+  if (tags.highway !== undefined) return "road";
   if (tags.amenity === "parking") return "underground-mall";
   return "other";
 }

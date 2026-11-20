@@ -26,6 +26,7 @@ import {
   type FeatureKind,
   type LayerId,
   type LevelId,
+  type LineId,
 } from "../schema.ts";
 
 const underground = undergroundJson as unknown as OsmDataset;
@@ -87,10 +88,12 @@ interface VolumeSpec {
   polygon: Local[];
   base: number;
   height: number;
+  /** 所屬路線；決定著色。兩線共用的量體不指定。 */
+  line?: LineId;
 }
 
 function volume(spec: VolumeSpec): Feature {
-  return {
+  const feature: Feature = {
     id: spec.id,
     kind: spec.kind,
     name: spec.name,
@@ -104,6 +107,8 @@ function volume(spec: VolumeSpec): Feature {
     sourceNote: sourceNote(spec.structure),
     status: "existing",
   };
+  if (spec.line !== undefined) feature.line = spec.line;
+  return feature;
 }
 
 /** 某層的樓板：底面自樓板高程再往下一個板厚。 */
@@ -114,6 +119,7 @@ function slab(
   structure: StructureId,
   level: LevelId,
   polygon: Local[],
+  line?: LineId,
 ): Feature {
   return volume({
     id,
@@ -125,6 +131,7 @@ function slab(
     polygon,
     base: levelOf(structure, level).floor - SLAB_THICKNESS,
     height: SLAB_THICKNESS,
+    ...(line === undefined ? {} : { line }),
   });
 }
 
@@ -137,9 +144,21 @@ function room(
   structure: StructureId,
   level: LevelId,
   polygon: Local[],
+  line?: LineId,
 ): Feature {
   const info = levelOf(structure, level);
-  return volume({ id, name, kind, layer, structure, level, polygon, base: info.floor, height: info.height });
+  return volume({
+    id,
+    name,
+    kind,
+    layer,
+    structure,
+    level,
+    polygon,
+    base: info.floor,
+    height: info.height,
+    ...(line === undefined ? {} : { line }),
+  });
 }
 
 /** 以中心點與邊長產生正方形量體的輪廓。 */
@@ -278,20 +297,20 @@ function metroFeatures(boxes: MetroBoxes): Feature[] {
 
   for (const level of ["B1", "B2", "B3"] as const) {
     features.push(
-      slab(`metro/bannan/slab/${level}`, `捷運板南線站體 ${level} 樓板`, "metro", METRO, level, boxes.bannan),
+      slab(`metro/bannan/slab/${level}`, `捷運板南線站體 ${level} 樓板`, "metro", METRO, level, boxes.bannan, "bl"),
     );
   }
   features.push(
-    room("metro/bannan/concourse/B2", "捷運板南線大廳層（B2）", "station", "metro", METRO, "B2", boxes.bannan),
+    room("metro/bannan/concourse/B2", "捷運板南線大廳層（B2）", "station", "metro", METRO, "B2", boxes.bannan, "bl"),
   );
 
   for (const level of ["B1", "B3", "B4"] as const) {
     features.push(
-      slab(`metro/tamsui/slab/${level}`, `捷運淡水信義線站體 ${level} 樓板`, "metro", METRO, level, boxes.tamsui),
+      slab(`metro/tamsui/slab/${level}`, `捷運淡水信義線站體 ${level} 樓板`, "metro", METRO, level, boxes.tamsui, "r"),
     );
   }
   features.push(
-    room("metro/tamsui/concourse/B3", "捷運淡水信義線大廳層（B3）", "station", "metro", METRO, "B3", boxes.tamsui),
+    room("metro/tamsui/concourse/B3", "捷運淡水信義線大廳層（B3）", "station", "metro", METRO, "B3", boxes.tamsui, "r"),
   );
 
   // 垂直動線：自最深的月台層貫穿至 B1 樓板，兩線交會處 1 處、各箱涵主軸中點兩側各 1 處
@@ -344,13 +363,14 @@ function a1Features(): Feature[] {
       polygon,
       base: bottom,
       height: -bottom - 0.5,
+      line: "a",
     }),
-    room("a1/concourse/B1", "機場捷運車站大廳（B1）", "station", "metro", A1, "B1", polygon),
+    room("a1/concourse/B1", "機場捷運車站大廳（B1）", "station", "metro", A1, "B1", polygon, "a"),
   ];
 
   for (const level of ["B1", "B2", "B3", "B4"] as const) {
     features.push(
-      slab(`a1/slab/${level}`, `機場捷運台北車站 ${level} 樓板`, "metro", A1, level, polygon),
+      slab(`a1/slab/${level}`, `機場捷運台北車站 ${level} 樓板`, "metro", A1, level, polygon, "a"),
     );
   }
   return features;

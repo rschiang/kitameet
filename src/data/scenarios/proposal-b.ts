@@ -267,7 +267,14 @@ const HSR_NOTE = "方案 B 改建區間（延平北路至中山北路）內之�
 export const proposalB: Scenario = {
   id: "proposal-b",
   label: "方案 B",
-  removed: ["way/450732441", "way/204711163", "way/204616534"],
+  removed: [
+    "way/450732441",
+    "way/204711163",
+    "way/204616534",
+    // 改建區間內的既有高鐵橫渡線：新配置不沿用，一併拆除
+    "way/593871105",
+    "way/593871117",
+  ],
   get added(): Feature[] {
     added ??= buildAdded();
     return added;
@@ -294,6 +301,13 @@ export const proposalB: Scenario = {
       limitX: REBUILD_ZONE.eastX,
       note: HSR_NOTE,
     })),
+    // 跨越東界的既有橫渡線：西半段隨改建拆除
+    {
+      id: "way/593871135",
+      keep: "east" as const,
+      limitX: REBUILD_ZONE.eastX,
+      note: HSR_NOTE,
+    },
   ],
   get encroached() {
     return [

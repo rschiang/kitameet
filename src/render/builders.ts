@@ -4,17 +4,19 @@
  */
 import {
   BackSide,
+  BufferGeometry,
   CatmullRomCurve3,
   DoubleSide,
   ExtrudeGeometry,
+  Float32BufferAttribute,
   Mesh,
   Shape,
   TubeGeometry,
   Vector3,
-  type BufferGeometry,
 } from "three";
-import { corridorPolygon } from "../geo/offset.ts";
+import { corridorPolygon, offsetPolyline } from "../geo/offset.ts";
 import { exaggerate } from "./depth.ts";
+import type { Local } from "../geo/project.ts";
 import type { Feature } from "../data/schema.ts";
 import { featureColor } from "./palette.ts";
 import { createPaperMaterial } from "./materials.ts";
@@ -70,6 +72,62 @@ function tube(points: [number, number][], axis: number, radius: number): BufferG
   return geometry;
 }
 
+/**
+ * 沿線漸變高程的帶狀量體：引道、匝道與疊式隧道的收斂段。
+ * 兩端高程依累積弧長線性內插後才各自放大，避免坡度被深度放大扭曲成折線。
+ */
+function slopedBand(
+  points: Local[],
+  width: number,
+  thickness: number,
+  baseStart: number,
+  baseEnd: number,
+): BufferGeometry {
+  const left = offsetPolyline(points, width / 2);
+  const right = offsetPolyline(points, -width / 2);
+  const n = points.length;
+  const along: number[] = [0];
+  for (let i = 1; i < n; i++) {
+    along.push(along[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
+  }
+  const total = along[n - 1];
+
+  const positions: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = total === 0 ? 0 : along[i] / total;
+    const elevation = baseStart + (baseEnd - baseStart) * t;
+    const lo = exaggerate(elevation);
+    const hi = exaggerate(elevation + thickness);
+    positions.push(left[i][0], lo, -left[i][1]);
+    positions.push(right[i][0], lo, -right[i][1]);
+    positions.push(left[i][0], hi, -left[i][1]);
+    positions.push(right[i][0], hi, -right[i][1]);
+  }
+
+  // 每個頂點四個角：左下、右下、左上、右上
+  const lb = (i: number) => 4 * i;
+  const rb = (i: number) => 4 * i + 1;
+  const lt = (i: number) => 4 * i + 2;
+  const rt = (i: number) => 4 * i + 3;
+  const index: number[] = [];
+  for (let i = 0; i + 1 < n; i++) {
+    const j = i + 1;
+    index.push(lt(i), rt(i), rt(j), lt(i), rt(j), lt(j)); // 頂面
+    index.push(lb(i), rb(j), rb(i), lb(i), lb(j), rb(j)); // 底面
+    index.push(lb(i), lt(i), lt(j), lb(i), lt(j), lb(j)); // 左側
+    index.push(rb(i), rt(j), rt(i), rb(i), rb(j), rt(j)); // 右側
+  }
+  const e = n - 1;
+  index.push(lb(0), rb(0), rt(0), lb(0), rt(0), lt(0)); // 起端面
+  index.push(lb(e), lt(e), rt(e), lb(e), rt(e), rb(e)); // 末端面
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 /** 由 {@link Feature} 建立可直接加入場景的 mesh；幾何不足時回傳 null。 */
 export function buildFeatureMesh(feature: Feature): Mesh | null {
   // 深度放大作用於上下兩端高程，高度由差值求得，避免分別放大造成錯位
@@ -78,13 +136,26 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   const height = exaggerate(trueBase + (feature.height ?? 1)) - base;
 
   let geometry: BufferGeometry;
+  // 傾斜量體的底面高程兩端不同，位移基準取較低的一端
+  let meshBase = base;
   if (feature.geometry.tube && feature.geometry.tube.length >= 2) {
     geometry = tube(feature.geometry.tube, base, feature.radius ?? 3);
   } else if (feature.geometry.polygon && feature.geometry.polygon.length >= 3) {
     geometry = extrude(feature.geometry.polygon, height, base);
   } else if (feature.geometry.polyline && feature.geometry.polyline.length >= 2) {
-    const band = corridorPolygon(feature.geometry.polyline, feature.width ?? 3);
-    geometry = extrude(band, height, base);
+    if (feature.baseEnd !== undefined && feature.baseEnd !== trueBase) {
+      geometry = slopedBand(
+        feature.geometry.polyline,
+        feature.width ?? 3,
+        feature.height ?? 1,
+        trueBase,
+        feature.baseEnd,
+      );
+      meshBase = Math.min(base, exaggerate(feature.baseEnd));
+    } else {
+      const band = corridorPolygon(feature.geometry.polyline, feature.width ?? 3);
+      geometry = extrude(band, height, base);
+    }
   } else {
     return null;
   }
@@ -97,11 +168,21 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   const slab = feature.kind === "slab";
   // 分層大廳同樣半透明，否則會遮住同一構造物下層的月台與股道。
   const room = feature.kind === "station" && !shell;
-  const opacity = status === "removed" ? 0.25 : shell ? 0.4 : slab ? 0.15 : room ? 0.3 : 1;
+  // 路面為半透明色塊，地形圖的道路邊線與其下的量體仍看得見
+  const road = feature.kind === "road";
+  const opacity =
+    status === "removed" ? 0.25 : shell ? 0.4 : slab ? 0.15 : room ? 0.3 : road ? 0.35 : 1;
   const material = createPaperMaterial({
-    color: featureColor(feature.kind, feature.layer, status === "existing" ? undefined : status),
+    color: featureColor(
+      feature.kind,
+      feature.layer,
+      status === "existing" ? undefined : status,
+      feature.line,
+    ),
     opacity,
     side: shell ? BackSide : DoubleSide,
+    // 樓板與外殼一律退讓給貼在它上面的量體
+    offset: slab || shell,
   });
   material.userData.baseOpacity = opacity;
 
@@ -115,7 +196,7 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
     kind: feature.kind,
     confidence: feature.confidence,
     status,
-    base,
+    base: meshBase,
     trueBase,
   };
   if (feature.name !== undefined) userData.name = feature.name;

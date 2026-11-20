@@ -4,17 +4,26 @@
  * 幾何全部來自 `scripts/fetch-dorts.ts` 的產出，精度高於 OSM；
  * 深度則一律由 `levels.ts` 的路線軌道面推算，公告圖本身沒有縱剖面。
  */
-import { pointInPolygon, polygonCentroid } from "../geo/measure.ts";
+import {
+  nearestOnPolyline,
+  pointInPolygon,
+  polygonArea,
+  polygonCentroid,
+} from "../geo/measure.ts";
+import { polylineLength } from "../geo/offset.ts";
+import undergroundJson from "./osm/underground.json";
+import type { OsmDataset } from "./osm-types.ts";
 import type { Local } from "../geo/project.ts";
 import basemapJson from "./dorts/basemap.json";
 import structuresJson from "./dorts/structures.json";
 import type { DortsBasemap, DortsLineCode, DortsStructures } from "./dorts-types.ts";
-import { METRO_LINES, type MetroLineId, type StructureId } from "./levels.ts";
+import { METRO_LINES, levelLabelFor, type MetroLineId, type StructureId } from "./levels.ts";
 import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "./overrides.ts";
 import { TRACK_BAND_WIDTH, type Feature } from "./schema.ts";
 
 const structures = structuresJson as unknown as DortsStructures;
 const basemap = basemapJson as unknown as DortsBasemap;
+const underground = undergroundJson as unknown as OsmDataset;
 
 /** 圖幅線路代號對應路線；未列出者直接擲出，不以預設值矇混。 */
 const LINE_BY_CODE: Record<DortsLineCode, MetroLineId> = {
@@ -39,13 +48,96 @@ const BOX_BASE_DROP = 1.5;
 const RESTRICTION_WIDTH = 1.0;
 const ROAD_EDGE_WIDTH = 0.4;
 
+/** 附屬小面繼承 OSM 樓高的門檻：面積須達同一棟最大面的此比例。 */
+const MAIN_FACE_RATIO = 0.4;
+
 const SOURCE = "臺北市捷運工程局兩側禁限建範圍公告圖";
 
-function lineOf(code: DortsLineCode): { id: MetroLineId; rail: number; label: string; structure: StructureId } {
-  const id = LINE_BY_CODE[code];
+/**
+ * 量體的所屬路線：以幾何為準，無命中才回退圖幅代號。
+ * 圖幅會把鄰線結構當作參考一併繪出（`T` 圖幅畫了松山線的隧道），
+ * 僅靠圖幅代號會把鄰線結構塗成自己的顏色、擺到自己的深度。
+ */
+function lineOf(
+  code: DortsLineCode,
+  points: Local[],
+): { id: MetroLineId; rail: number; label: string; structure: StructureId } {
+  const id = dortsLineOf(points) ?? LINE_BY_CODE[code];
   if (id === undefined) throw new Error(`公告圖線路代號 ${code} 未對應到路線`);
   const line = METRO_LINES[id];
   return { id, rail: line.rail, label: line.label, structure: line.structure };
+}
+
+/** 以幾何判定所屬路線時，容許的頂點距離中位數上限（公尺）。 */
+const LINE_MATCH_DISTANCE = 25;
+
+let osmTracks: { line: MetroLineId; points: Local[] }[] | null = null;
+
+/** OSM 中有 `ref` 的捷運正線，供公告圖量體比對路線。 */
+function metroRefTracks(): { line: MetroLineId; points: Local[] }[] {
+  if (osmTracks) return osmTracks;
+  const byRef: Record<string, MetroLineId> = { BL: "bl", R: "r", G: "g", O: "o", A: "a" };
+  osmTracks = [];
+  for (const feature of underground.features) {
+    if (feature.kind !== "track-metro") continue;
+    const line = byRef[feature.tags.ref ?? ""];
+    const points = feature.polyline ?? [];
+    if (line === undefined || points.length < 2) continue;
+    osmTracks.push({ line, points });
+  }
+  return osmTracks;
+}
+
+/** 公告圖量體的所屬路線：頂點到 OSM 正線的距離中位數最小且不超過上限者。 */
+export function dortsLineOf(points: Local[]): MetroLineId | undefined {
+  if (points.length === 0) return undefined;
+  let best: { line: MetroLineId; distance: number } | undefined;
+  for (const track of metroRefTracks()) {
+    const distances = points
+      .map((p) => nearestOnPolyline(p, track.points).distance)
+      .sort((a, b) => a - b);
+    const median = distances[Math.floor(distances.length / 2)];
+    if (best === undefined || median < best.distance) best = { line: track.line, distance: median };
+  }
+  if (best === undefined || best.distance > LINE_MATCH_DISTANCE) return undefined;
+  return best.line;
+}
+
+/** 重複判定：某折線 90% 以上的頂點落在另一條 1.5 公尺內，即視為同一條。 */
+const DUPLICATE_DISTANCE = 1.5;
+const DUPLICATE_COVERAGE = 0.9;
+
+/**
+ * 去除相鄰圖幅與鄰線參考畫法造成的重複折線，保留較長者（等長取 id 較小者）。
+ * 跨路線的重複會以兩種顏色、兩種深度畫在同一位置，必須去除；
+ * 重疊率不足的同線相鄰圖幅片段則保留，其顏色與深度相同，疊合不可見。
+ */
+function dedupePolylines<T>(
+  items: T[],
+  pointsOf: (item: T) => Local[],
+  idOf: (item: T) => string,
+): T[] {
+  const lengths = items.map((item) => polylineLength(pointsOf(item)));
+  const dropped = new Set<number>();
+  for (let i = 0; i < items.length; i++) {
+    if (dropped.has(i)) continue;
+    for (let j = 0; j < items.length; j++) {
+      if (i === j || dropped.has(j)) continue;
+      const a = pointsOf(items[i]);
+      const covered = a.filter(
+        (p) => nearestOnPolyline(p, pointsOf(items[j])).distance <= DUPLICATE_DISTANCE,
+      ).length;
+      if (covered / a.length < DUPLICATE_COVERAGE) continue;
+      const keepOther =
+        lengths[j] > lengths[i] ||
+        (lengths[j] === lengths[i] && idOf(items[j]) < idOf(items[i]));
+      if (keepOther) {
+        dropped.add(i);
+        break;
+      }
+    }
+  }
+  return items.filter((_, i) => !dropped.has(i));
 }
 
 /** 1/1000 地形圖的建物面；供場景比對與測試使用。 */
@@ -124,7 +216,10 @@ export function matchDortsBuildings(osm: OsmBuildingRef[]): {
   });
 
   const replaced = new Set<string>();
-  const attributes = new Map<number, BuildingAttributes>();
+  /** 每棟 OSM 建物比對到的面索引；屬性待全部收集完才決定。 */
+  const claims = new Map<string, { building: OsmBuildingRef; faces: number[] }>();
+  /** 一塊面只承接最先比對到的那一棟：地形圖的面遠小於 OSM 輪廓，重疊者幾乎都是同一棟。 */
+  const owner = new Map<number, string>();
   for (const building of osm) {
     if (building.polygon.length < 3) continue;
     const [min, max] = boundsOf(building.polygon);
@@ -137,29 +232,42 @@ export function matchDortsBuildings(osm: OsmBuildingRef[]): {
         continue;
       }
       matched = true;
-      // 同一塊面可能落在數棟 OSM 輪廓內，取先比對到的那一棟即可：
-      // 地形圖的面遠小於 OSM 輪廓，重疊者幾乎都是同一棟的不同畫法。
-      if (!attributes.has(i)) {
+      if (owner.has(i)) continue;
+      owner.set(i, building.id);
+      const claim = claims.get(building.id);
+      if (claim) claim.faces.push(i);
+      else claims.set(building.id, { building, faces: [i] });
+    }
+    if (matched) replaced.add(building.id);
+  }
+
+  // 一棟 OSM 建物常比對到數塊面：主量體以外的附屬小面（騎樓、增建、梯間）
+  // 若一併繼承樓高，會在摩天大樓旁長出同高的細柱，因此只有達主量體一定比例者才繼承。
+  const attributes = new Map<number, BuildingAttributes>();
+  for (const { building, faces: claimed } of claims.values()) {
+    const areas = claimed.map((i) => Math.abs(polygonArea(faces[i].polygon)));
+    const largest = Math.max(...areas);
+    const named = building.name === undefined ? "" : `（${building.name}）`;
+    claimed.forEach((i, n) => {
+      if (areas[n] >= largest * MAIN_FACE_RATIO) {
         attributes.set(i, {
           height: building.height,
           ...(building.name === undefined ? {} : { name: building.name }),
           landmark: building.landmark,
-          sourceNote:
-            `${SOURCE}所附 1/1000 地形圖的房屋輪廓；` +
-            `高度沿用 OSM ${building.id}${building.name === undefined ? "" : `（${building.name}）`}。`,
+          sourceNote: `${SOURCE}所附 1/1000 地形圖的房屋輪廓；高度沿用 OSM ${building.id}${named}。`,
         });
+        return;
       }
-    }
-    if (matched) replaced.add(building.id);
+      attributes.set(i, {
+        height: Math.min(building.height, DEFAULT_HEIGHT),
+        landmark: false,
+        sourceNote:
+          `${SOURCE}所附 1/1000 地形圖的房屋輪廓；OSM ${building.id}${named}之附屬量體；` +
+          `樓高未知，以 ${DEFAULT_BUILDING_LEVELS} 層推估。`,
+      });
+    });
   }
   return { replaced, attributes };
-}
-
-/** 道路中心線是否落在公告圖涵蓋範圍內（以折線中點判定）。 */
-export function dortsReplacesRoad(polyline: Local[]): boolean {
-  if (polyline.length < 2) return false;
-  const mid = polyline[Math.floor(polyline.length / 2)];
-  return structures.sheets.some((sheet) => pointInPolygon(mid, sheet.ring));
 }
 
 /** 捷運正線的全部頂點是否都在公告圖軌道中心線的 20 公尺內。 */
@@ -216,53 +324,68 @@ const DEFAULT_HEIGHT = DEFAULT_BUILDING_LEVELS * BUILDING_LEVEL_HEIGHT;
 export function buildDorts(attributes?: Map<number, BuildingAttributes>): Feature[] {
   const features: Feature[] = [];
 
+  const bores = dedupePolylines(
+    structures.tunnels.flatMap((t) => (t.kind === "bore" ? [t] : [])),
+    (t) => t.line,
+    (t) => t.id,
+  );
+  for (const tunnel of bores) {
+    const line = lineOf(tunnel.lineCode, tunnel.line);
+    const base = line.rail + BORE_AXIS_RISE;
+    features.push({
+      id: tunnel.id,
+      kind: "tunnel",
+      name: `捷運${line.label}潛盾隧道`,
+      level: levelLabelFor(base),
+      structure: line.structure,
+      line: line.id,
+      layer: "metro",
+      geometry: { tube: tunnel.line },
+      base,
+      height: tunnel.radius * 2,
+      radius: tunnel.radius,
+      confidence: "estimated",
+      sourceNote: `${SOURCE}；深度依${line.label}軌道面 ${line.rail} 公尺推估。`,
+      status: "existing",
+    });
+  }
+
   for (const tunnel of structures.tunnels) {
-    const line = lineOf(tunnel.lineCode);
-    const note = `${SOURCE}；深度依${line.label}軌道面 ${line.rail} 公尺推估。`;
-    if (tunnel.kind === "bore") {
-      features.push({
-        id: tunnel.id,
-        kind: "tunnel",
-        name: `捷運${line.label}潛盾隧道`,
-        level: "B1",
-        structure: line.structure,
-        layer: "metro",
-        geometry: { tube: tunnel.line },
-        base: line.rail + BORE_AXIS_RISE,
-        height: tunnel.radius * 2,
-        radius: tunnel.radius,
-        confidence: "estimated",
-        sourceNote: note,
-        status: "existing",
-      });
-      continue;
-    }
+    if (tunnel.kind !== "box") continue;
+    const line = lineOf(tunnel.lineCode, tunnel.polygon);
     const station = tunnel.width >= STATION_WIDTH;
     const base = line.rail - BOX_BASE_DROP;
     features.push({
       id: tunnel.id,
       kind: station ? "station-box" : "tunnel",
       name: `捷運${line.label}${station ? "車站箱涵" : "明挖箱涵"}`,
-      level: "B1",
+      level: levelLabelFor(base),
       structure: line.structure,
+      line: line.id,
       layer: "metro",
       geometry: { polygon: tunnel.polygon },
       base,
       height: station ? STATION_TOP - base : BOX_HEIGHT,
       confidence: "estimated",
-      sourceNote: note,
+      sourceNote: `${SOURCE}；深度依${line.label}軌道面 ${line.rail} 公尺推估。`,
       status: "existing",
     });
   }
 
-  for (const track of structures.tracks) {
-    const line = lineOf(track.lineCode);
+  const tracks = dedupePolylines(
+    structures.tracks,
+    (t) => t.line,
+    (t) => t.id,
+  );
+  for (const track of tracks) {
+    const line = lineOf(track.lineCode, track.line);
     features.push({
       id: track.id,
       kind: "track-metro",
       name: `捷運${line.label}正線`,
-      level: "B1",
+      level: levelLabelFor(line.rail),
       structure: line.structure,
+      line: line.id,
       layer: "track",
       geometry: { polyline: track.line },
       base: line.rail,
@@ -275,7 +398,7 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
   }
 
   for (const limit of structures.restrictionLines) {
-    const line = lineOf(limit.lineCode);
+    const line = lineOf(limit.lineCode, limit.line);
     features.push({
       id: limit.id,
       kind: "restriction",
@@ -315,7 +438,7 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
   for (const road of basemap.roadEdges) {
     features.push({
       id: road.id,
-      kind: "road",
+      kind: "road-edge",
       level: "G",
       layer: "road",
       geometry: { polyline: road.line },

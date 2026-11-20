@@ -133,3 +133,30 @@ OSM 只有 2D 輪廓，捷運台北車站因而只能以單一巨塊呈現，無
 - `src/geo/chain.ts`、`src/geo/polygonize.ts`、`src/geo/corridor.ts`（新增）、`src/geo/measure.ts`、`src/geo/project.ts`
 - `src/render/builders.ts`、`src/render/palette.ts`、`src/app/state.ts`、`src/app/permalink.ts`、`src/app/panels.ts`
 - `docs/architecture.md`、`docs/references.md`
+
+## 2026-11-21：軌道深度改由系統與路線決定，量體呈現修正
+
+**變更內容**
+
+- 軌道深度不再採用 OSM 的 `level`／`layer`：臺鐵、高鐵一律置於站體 B2 月台層，捷運依 `ref` 標籤取 `METRO_LINES` 的路線軌道面，無 `ref` 的橫渡線、側線與機廠線以幾何判定所屬路線（頂點到有 `ref` 正線的距離中位數最小且不超過 40 公尺）。原本因 `layer=-3` 而落到 B3、浮在主線下方 6 公尺的高鐵橫渡線，以及因 −2、−3、−5 三種標籤而分散到三層的松山新店線西門至北門段，因此恢復為連續的同一條路線。
+- 樓層基準改為「結構樓板面即軌道面」，月台自樓板長高 1.1 公尺。原先 `railLevelOf()` 回傳樓板減 1.1 公尺，等於將股道埋入樓板，月台頂面與樓板頂面因此共面而互相閃爍。隨之將板南線軌道面由 −17.6 改為 −16.5、淡水信義線由 −24.6 改為 −23.5，與各自月台層的樓板面一致。
+- 新增 `Feature.line`（`tra`、`hsr`、`bl`、`r`、`g`、`o`、`a`）與 `LINE_COLORS`：捷運依路線色、臺鐵深藍、高鐵橘，色票取自維基百科 Template:台北捷運色彩並與紙模型底色混色降彩度。圖例改列各路線。
+- 新增 `Feature.baseEnd` 與 `slopedBand()`：華山引道自 B2 月台層連續爬升至地面、北門至西門疊式潛盾的下層在北門站收斂回上層、市民大道匝道自橋面斜降至地面。匝道高程以路網拓樸求得（與高架主線共節點者為橋面端、與地面道路共節點者為落地端，其餘沿匝道鏈內插），切成數段的同一條匝道因此不會出現段差。
+- 公告圖的潛盾隧道與軌道中心線去重（去掉 12 段隧道與 8 條中心線），所屬路線改以幾何判定，樓層標籤改由 `levelLabelFor()` 依深度給出；道路邊線改為獨立的 `road-edge` 類型，與 OSM 路面並存。
+- 建物高度：雨棚、通風井等附屬構造不再以 4 層推估（雨棚改為架高的 0.3 公尺頂板）；公告圖中面積未達同一棟最大面 40% 的附屬小面不再繼承 OSM 樓高，消除 162 塊與摩天大樓等高的細柱狀量體。台北雙星 C1（280 公尺）、D1（360 公尺）依捷運局新聞稿覆寫並列為地標。
+- 道路改以等級外擴為半透明路面（`primary` 30、`secondary` 20、`tertiary` 14 公尺等），高架與地面的區分改依 `bridge`／`layer` 標籤判定而非路名；市民大道高架有 1.8 公尺梁深與每 30 公尺一根的中央橋墩（`src/data/structures/viaduct.ts`）。
+- 樓板與站體外殼設 `polygonOffset`，消除與貼合量體共面造成的閃爍。
+- 方案 B 的改建區間內新增拆除兩條既有高鐵橫渡線，跨越東界者只保留東半段。
+
+**理由**
+
+OSM 的 `layer` 是繪圖壓線順序，不是深度：同一條縱貫線正線出現 −1、−2、−3 三種值，當成樓層會將相連的軌道拆到相差 6 公尺的不同層。深度的唯一來源因此收斂為系統（臺鐵、高鐵）或路線（`METRO_LINES`）。公告圖的圖幅會將鄰線結構當作參考一併繪出，僅靠圖幅代號會使同一條隧道以兩種顏色、兩種深度重複繪出。
+
+**受影響的資料檔**
+
+- `src/data/levels.ts`、`src/data/schema.ts`、`src/data/overrides.ts`、`src/data/scene.ts`、`src/data/dorts.ts`
+- `src/data/structures/viaduct.ts`（新增）、`src/data/structures/station-complex.ts`、`src/data/scenarios/proposal-b.ts`
+- `src/geo/measure.ts`（新增 `nearestOnPolyline`）
+- `src/render/palette.ts`、`src/render/builders.ts`、`src/render/materials.ts`、`src/app/panels.ts`
+- `scripts/fetch-osm.ts`（高架不再以路名判斷）
+- `docs/architecture.md`、`docs/status-quo.md`、`docs/proposals.md`
