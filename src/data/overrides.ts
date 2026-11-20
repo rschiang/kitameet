@@ -37,12 +37,10 @@ export const STATION_OUTLINE_ID = "way/23641610";
 export const DEFAULT_BUILDING_LEVELS = 4;
 export const BUILDING_LEVEL_HEIGHT = 3.5;
 
-/** 列為地標的建物，與一般建物分屬不同圖層。 */
+/** 列為地標的建物，與一般建物分屬不同圖層。細部建模的四座地標見 `structures/landmarks.ts`。 */
 export const LANDMARK_IDS: Record<string, string> = {
-  "way/204711206": "新光人壽保險摩天大樓",
   "way/204711207": "亞洲廣場大樓",
   "way/605982572": "京站時尚廣場",
-  "way/23641610": "臺北車站",
   "way/1502280687": "台北雙星 C1",
   "way/1502280746": "台北雙星 D1",
 };
@@ -103,18 +101,23 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
     sourceNote:
       "OSM 標 public_transport=station、building=transportation，實為京站綜合大樓內的客運轉運站量體，非軌道車站；高度無標籤，以預設樓層數推估。",
   },
-
-  // ── 站體 ──────────────────────────────────────────────
+  // ── 細部建模的地標 ────────────────────────────────────
+  // 平面輪廓改由 `structures/landmarks.ts` 的台基、柱列、簷口與屋頂等量體取代。
   [STATION_OUTLINE_ID]: {
-    name: "臺北車站",
-    kind: "station",
-    layer: "station-box",
-    level: "G",
-    structure: "tra-hsr-station",
-    height: 48,
-    base: 0,
-    confidence: "sourced",
-    sourceNote: `${WIKI}：第四代站體長 149 公尺、寬 110 公尺、高 48 公尺，地上 6 層、地下 4 層。OSM 的 height=30、building:levels=7 與文獻不符，已覆寫。`,
+    exclude: true,
+    sourceNote: `${WIKI}：第四代站體長 149 公尺、寬 110 公尺、高 48 公尺，地上 6 層、地下 4 層。地上量體改以細部模型呈現，地下各層仍沿用本輪廓。`,
+  },
+  "way/271754072": {
+    exclude: true,
+    sourceNote: "臺北郵局：OSM 輪廓僅為廳舍外框，改以細部模型呈現。",
+  },
+  "way/204711206": {
+    exclude: true,
+    sourceNote: "新光人壽保險摩天大樓：OSM 輪廓為裙樓外框，改以裙樓與塔樓的細部模型呈現。",
+  },
+  "way/238316480": {
+    exclude: true,
+    sourceNote: "臺北府城北門：OSM 輪廓僅為台座外框，改以細部模型呈現。",
   },
 
   // ── 地下街 ────────────────────────────────────────────

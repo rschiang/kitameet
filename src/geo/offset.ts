@@ -82,6 +82,56 @@ export function corridorPolygon(center: Local[], width: number): Local[] {
   return [...left, ...right.slice().reverse()];
 }
 
+/**
+ * 多邊形環整圈平移：`distance` 為正值往內縮、負值往外長，回傳與輸入同序、同頂點數的環。
+ *
+ * 以相鄰兩邊的平移線求交點，夾角過小時退回頂點的平均法線，不做自交修復；
+ * 位移量須遠小於量體尺寸（地標的退縮層與出挑簷口皆在數十公分至數公尺之譜）。
+ * 頂點一一對應是上緣輪廓放樣的前提，因此不得增刪頂點。
+ */
+export function insetRing(ring: Local[], distance: number): Local[] {
+  const n = ring.length;
+  if (n < 3) return ring.map(([x, y]) => [x, y] as Local);
+
+  // 逆時針環的內側在各邊左手側；順時針環則相反
+  let twice = 0;
+  for (let i = 0; i < n; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % n];
+    twice += a[0] * b[1] - b[0] * a[1];
+  }
+  const sign = twice >= 0 ? 1 : -1;
+
+  /** 第 i 條邊（i → i+1）的內法線與方向。 */
+  const edges = ring.map((a, i) => {
+    const b = ring[(i + 1) % n];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    return { dx: dx / len, dy: dy / len, nx: (-dy / len) * sign, ny: (dx / len) * sign };
+  });
+
+  const out: Local[] = [];
+  for (let i = 0; i < n; i++) {
+    const prev = edges[(i - 1 + n) % n];
+    const next = edges[i];
+    const p: Local = [
+      ring[i][0] + prev.nx * distance,
+      ring[i][1] + prev.ny * distance,
+    ];
+    const q: Local = [ring[i][0] + next.nx * distance, ring[i][1] + next.ny * distance];
+    const cross = prev.dx * next.dy - prev.dy * next.dx;
+    if (Math.abs(cross) < 1e-6) {
+      // 兩邊幾乎共線：法線方向一致，直接取平移後的頂點
+      out.push(p);
+      continue;
+    }
+    const t = ((q[0] - p[0]) * next.dy - (q[1] - p[1]) * next.dx) / cross;
+    out.push([p[0] + prev.dx * t, p[1] + prev.dy * t]);
+  }
+  return out;
+}
+
 /** 線段與垂直於 x 軸之界線的交點；未穿越回傳 null。 */
 function crossingAt(a: Local, b: Local, x: number): Local | null {
   if ((a[0] - x) * (b[0] - x) >= 0 || a[0] === b[0]) return null;

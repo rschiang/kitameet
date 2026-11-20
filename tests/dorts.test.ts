@@ -110,12 +110,12 @@ describe("公告圖取代 OSM 平面", () => {
       expect(faces.some((face) => pointInPolygon(centre, face)), building.id).toBe(false);
     }
 
-    // 新光人壽保險摩天大樓的輪廓改由公告圖提供，高度沿用 OSM 的 244.15 公尺
-    const tower = features.filter((f) => f.name === "新光人壽保險摩天大樓");
+    // 亞洲廣場大樓的輪廓改由公告圖提供，高度沿用 OSM 的 101 公尺
+    const tower = features.filter((f) => f.name === "亞洲廣場大樓");
     expect(tower.length).toBeGreaterThan(0);
     for (const part of tower) {
       expect(part.id.startsWith("dorts/building/"), part.id).toBe(true);
-      expect(part.height, part.id).toBeCloseTo(244.15, 2);
+      expect(part.height, part.id).toBeCloseTo(101, 2);
     }
   });
 

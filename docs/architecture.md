@@ -16,6 +16,7 @@ graph TD
     overrides["src/data/overrides.ts<br/>文獻覆寫"] --> scene
     levels["src/data/levels.ts<br/>構造物樓層表"] --> scene
     structures["src/data/structures/station-complex.ts<br/>分層地下構造"] --> scene
+    landmarks["src/data/structures/landmarks.ts<br/>地標細部量體"] --> scene
     scene --> scenario["src/app/scenario.ts<br/>方案疊圖"]
     proposal["src/data/scenarios/proposal-b.ts"] --> scenario
     scenario --> builders["src/render/builders.ts<br/>量體建模"]
@@ -56,6 +57,16 @@ OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一�
 
 臺鐵高鐵站體與 A1 的平面由 OSM 輪廓推算（`polygonAxis`、`advance`、`offsetPolyline`、`corridorPolygon`、`nearestPair`）；捷運兩線的平面則取自公告圖的車站箱涵——以含 OSM 月台形心者為準，找不到即擲出例外。深度一律取該構造物的樓層表，不新增座標常數。
 
+## 地標細部量體
+
+臺北車站、臺北郵局、新光摩天大樓與臺北府城北門若只把輪廓拉高，站前一帶就是四塊方盒子。四者的 OSM 輪廓於覆寫表標為 `exclude`，改由 `src/data/structures/landmarks.ts` 的 `buildLandmarks()` 依現場照片的立面比例拆成台基、柱列、腰線、簷口、屋頂斜面與塔冠等量體，於 `buildBaseline()` 併入場景。
+
+平面一律由既有輪廓推算，不新增座標常數：台座與塔樓取公告圖地形圖的房屋面（`dortsFaceIn()` 取形心落在 OSM 輪廓內、面積最大的一塊），其餘取 OSM 輪廓。方位由 `minAreaRect()` 的最小面積外接矩形決定——建物輪廓的頂點疏密不均，`polygonAxis()` 的主成分分析會被密集的轉角拉偏。郵局的正面則以 `faceFrame()` 取朝向北門的外牆：先把方向相近的連續邊併為一段（輪廓常把一面牆切成數段短邊），再取法線最正對北門者，門廊、巨柱與山頭都定位在這一段上。
+
+每座地標各自宣告一塊認領範圍（即其 OSM 輪廓），形心落在範圍內的建物量體一律由 `buildBaseline()` 移除：地形圖常把一座地標切成好幾塊房屋面，光靠排除 OSM 輪廓會留下疊在細部量體裡的方塊。
+
+高度以文獻為準、細分為推估：站體總高 48 公尺、新光屋頂 238.15 公尺與尖頂 244.15 公尺取自文獻，樓層分段、柱距與屋頂斜度則依照片比例換算，量體一律標為 `estimated` 並於 `sourceNote` 說明換算方式。
+
 ## 禁限建公告圖
 
 `npm run fetch:dorts` 自捷運局的查詢系統取得逐幅向量 PDF，解析為局部公尺座標的 JSON。流程分為四步，各有獨立模組：
@@ -91,11 +102,13 @@ OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一�
 
 `confidence` 的三級定義為：`sourced` 出自文獻或官方資料並附來源、`derived` 由 OSM 幾何或文獻值計算而得、`estimated` 為本專案推估。
 
-圖層共 11 組：地標建物、一般建物、高架道路、道路、車站量體、月台、股道、地下街、捷運、通道、禁限建範圍。地標與一般建物分屬不同圖層，可單獨關閉周邊街廓而保留地標；禁限建範圍會蓋住整個畫面，預設關閉。
+圖層共 11 組：地標建物、一般建物、高架道路、道路、車站量體、月台、股道、地下街、捷運、通道、禁限建範圍。地標與一般建物分屬不同圖層，可單獨關閉周邊街廓而保留地標；四座細部建模的地標（臺北車站、臺北郵局、新光摩天大樓、北門）各部量體也都歸入地標圖層。禁限建範圍會蓋住整個畫面，預設關閉。
 
 ## 渲染
 
 多邊形以 `ExtrudeGeometry` 長出高度，折線先由中心線往兩側平移成封閉帶狀再長出厚度，圓形隧道則以 `CatmullRomCurve3` 搭配 `TubeGeometry` 沿軸心掃出，三者都在建模時將高程烘焙進頂點。
+
+多邊形量體另可指定 `geometry.polygonTop`：頂點數與 `polygon` 相同時改以 `loft()` 放樣，側面逐段四邊形相連、上下面各自封口。屋頂斜面、塔冠收分與外傾的翹角都靠這一支產生；上緣輪廓由 `insetRing()`（正值內縮、負值出挑）或框架矩形給出。放樣的各面不共用頂點，法線才逐面平直，屋面與塔冠不致被平滑成圓弧。
 
 折線量體指定 `baseEnd` 且與 `base` 不同時改以 `slopedBand()` 建模：左右緣各取一次平移，沿累積弧長線性內插兩端高程後才各自放大，再組出上下面、側面與端面。引道、匝道與疊式隧道的收斂段藉此連續呈現，不致出現段差。
 

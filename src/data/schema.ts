@@ -70,7 +70,16 @@ export interface Feature {
   line?: LineId;
   layer: LayerId;
   /** 平面量體取 `polygon`、帶狀量體取 `polyline`、圓形隧道取 `tube`（軸心折線）。 */
-  geometry: { polygon?: Local[]; polyline?: Local[]; tube?: Local[] };
+  geometry: {
+    polygon?: Local[];
+    /**
+     * 上緣輪廓，頂點數須與 `polygon` 相同且一一對應。
+     * 指定時量體由下輪廓放樣至上輪廓，用於屋頂斜面、塔冠收分與外傾的翹角。
+     */
+    polygonTop?: Local[];
+    polyline?: Local[];
+    tube?: Local[];
+  };
   /** 量體高度（公尺）；折線量體則為厚度。 */
   height?: number;
   /** 量體底面高程（公尺，地面為 0）。未指定時取所屬樓層樓板。 */

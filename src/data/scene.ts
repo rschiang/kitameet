@@ -18,7 +18,7 @@ import {
   matchDortsBuildings,
   type OsmBuildingRef,
 } from "./dorts.ts";
-import { nearestOnPolyline } from "../geo/measure.ts";
+import { nearestOnPolyline, pointInPolygon, polygonCentroid } from "../geo/measure.ts";
 import { polylineLength } from "../geo/offset.ts";
 import type { Local } from "../geo/project.ts";
 import {
@@ -29,6 +29,7 @@ import {
   type MetroLineId,
   type StructureId,
 } from "./levels.ts";
+import { buildLandmarks, landmarkClaims } from "./structures/landmarks.ts";
 import { buildStationComplex } from "./structures/station-complex.ts";
 import { RAMP_GIRDER, VIADUCT_GIRDER, buildViaduct } from "./structures/viaduct.ts";
 import {
@@ -505,12 +506,23 @@ export function buildBaseline(): Feature[] {
 
   const trunkIds = new Set(trunkDecks().map((deck) => deck.id));
   const decks = [...byId.values()].filter((f) => trunkIds.has(f.id));
+  const claims = landmarkClaims();
+  /** 地標認領範圍內的建物面改由細部量體呈現：地形圖常把一座地標切成好幾塊面。 */
+  const claimed = (feature: Feature): boolean => {
+    if (feature.kind !== "building" && feature.kind !== "landmark") return false;
+    const polygon = feature.geometry.polygon;
+    if (!polygon) return false;
+    const centre = polygonCentroid(polygon);
+    return claims.some((claim) => pointInPolygon(centre, claim));
+  };
   const features = [
     ...byId.values(),
     ...buildViaduct(decks),
     ...buildStationComplex(),
     ...buildDorts(matched.attributes),
-  ];
+  ]
+    .filter((feature) => !claimed(feature))
+    .concat(buildLandmarks());
   cached = features;
   return features;
 }

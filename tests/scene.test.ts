@@ -33,11 +33,15 @@ describe("現況場景", () => {
     }
   });
 
-  it("站體採文獻高度 48 公尺而非 OSM 的 30 公尺", () => {
-    const station = baselineById("way/23641610");
-    expect(station?.height).toBe(48);
-    expect(station?.confidence).toBe("sourced");
-    expect(station?.sourceNote).toContain("維基百科");
+  it("站體地上量體為細部模型，最高點合於文獻的 48 公尺", () => {
+    const parts = features.filter((f) => f.id.startsWith("landmark/taipei-station/"));
+    expect(parts.length).toBeGreaterThan(20);
+    const top = Math.max(...parts.map((f) => (f.base ?? 0) + (f.height ?? 0)));
+    expect(top).toBeCloseTo(48, 6);
+    expect(parts.every((f) => f.layer === "landmark")).toBe(true);
+    expect(parts[0].sourceNote).toContain("維基百科");
+    // OSM 的 height=30 不再直接成為量體
+    expect(baselineById("way/23641610")).toBeUndefined();
   });
 
   it("捷運月台依文獻分別位於 B3 與 B4", () => {

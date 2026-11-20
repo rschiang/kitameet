@@ -11,7 +11,9 @@ import {
   Float32BufferAttribute,
   Mesh,
   Shape,
+  ShapeUtils,
   TubeGeometry,
+  Vector2,
   Vector3,
 } from "three";
 import { corridorPolygon, offsetPolyline } from "../geo/offset.ts";
@@ -56,6 +58,60 @@ function extrude(points: [number, number][], height: number, base: number): Buff
   });
   geometry.rotateX(-Math.PI / 2);
   geometry.translate(0, base, 0);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/**
+ * 上下輪廓不同的量體：屋頂斜面、塔冠收分與外傾的翹角。
+ * 兩環頂點一一對應，側面以四邊形相連，上下面各自封口。
+ * 各面不共用頂點，法線才會逐面平直，屋面與塔冠不致被平滑成圓弧。
+ */
+function loft(
+  bottom: [number, number][],
+  top: [number, number][],
+  height: number,
+  base: number,
+): BufferGeometry {
+  // 逆時針環的側面才朝外；順時針時兩環一起反轉，維持頂點對應
+  const clockwise = ShapeUtils.isClockWise(bottom.map(([x, y]) => new Vector2(x, y)));
+  const lower = clockwise ? [...bottom].reverse() : bottom;
+  const upper = clockwise ? [...top].reverse() : top;
+  const n = lower.length;
+  const topY = base + Math.max(height, 0.05);
+
+  const positions: number[] = [];
+  const index: number[] = [];
+  const push = (p: [number, number], y: number): number => {
+    positions.push(p[0], y, -p[1]);
+    return positions.length / 3 - 1;
+  };
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const bi = push(lower[i], base);
+    const bj = push(lower[j], base);
+    const tj = push(upper[j], topY);
+    const ti = push(upper[i], topY);
+    index.push(bi, bj, tj, bi, tj, ti);
+  }
+  const capFaces = (ring: [number, number][], y: number, upward: boolean): void => {
+    const offset = positions.length / 3;
+    for (const p of ring) push(p, y);
+    const faces = ShapeUtils.triangulateShape(
+      ring.map(([x, z]) => new Vector2(x, z)),
+      [],
+    );
+    for (const [a, b, c] of faces) {
+      if (upward) index.push(offset + a, offset + b, offset + c);
+      else index.push(offset + a, offset + c, offset + b);
+    }
+  };
+  capFaces(lower, base, false);
+  capFaces(upper, topY, true);
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(index);
   geometry.computeVertexNormals();
   return geometry;
 }
@@ -141,7 +197,12 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   if (feature.geometry.tube && feature.geometry.tube.length >= 2) {
     geometry = tube(feature.geometry.tube, base, feature.radius ?? 3);
   } else if (feature.geometry.polygon && feature.geometry.polygon.length >= 3) {
-    geometry = extrude(feature.geometry.polygon, height, base);
+    const polygon = feature.geometry.polygon;
+    const top = feature.geometry.polygonTop;
+    geometry =
+      top && top.length === polygon.length
+        ? loft(polygon, top, height, base)
+        : extrude(polygon, height, base);
   } else if (feature.geometry.polyline && feature.geometry.polyline.length >= 2) {
     if (feature.baseEnd !== undefined && feature.baseEnd !== trueBase) {
       geometry = slopedBand(

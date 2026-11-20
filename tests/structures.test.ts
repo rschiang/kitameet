@@ -49,7 +49,8 @@ describe("分層地下構造", () => {
     expect(passages).toHaveLength(5);
     expect(corridors).toHaveLength(2);
 
-    const outline = baselineById("way/23641610")!.geometry.polygon!;
+    // 站體平面取自 OSM 輪廓，地上量體改為細部模型後由樓板沿用
+    const outline = baselineById("station/slab/B1")!.geometry.polygon!;
     const stationSouth = Math.min(...outline.map(([, y]) => y));
     for (const passage of passages) {
       expect(passage.level, passage.id).toBe("B1");

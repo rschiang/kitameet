@@ -181,3 +181,90 @@ export function pointInPolygon(point: Local, ring: Local[]): boolean {
   }
   return inside;
 }
+
+/** 凸包（Andrew monotone chain），逆時針；重複點已去除。 */
+function convexHull(points: Local[]): Local[] {
+  const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (sorted.length < 3) return sorted;
+  const cross = (o: Local, a: Local, b: Local): number =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (pts: Local[]): Local[] => {
+    const out: Local[] = [];
+    for (const p of pts) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop();
+      out.push(p);
+    }
+    out.pop();
+    return out;
+  };
+  return [...half(sorted), ...half([...sorted].reverse())];
+}
+
+/**
+ * 最小面積外接矩形：以凸包各邊為候選方向，取面積最小者。
+ * 建物輪廓的頂點疏密不均，{@link polygonAxis} 的主成分分析會被密集的轉角拉偏；
+ * 要由輪廓反推牆面方向與開間尺寸時一律用這一支。
+ */
+export function minAreaRect(points: Local[]): PolygonAxis {
+  const hull = convexHull(points);
+  if (hull.length < 3) return polygonAxis(points);
+
+  let best: { angle: number; length: number; width: number; area: number } | undefined;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    let minAlong = Infinity;
+    let maxAlong = -Infinity;
+    let minLateral = Infinity;
+    let maxLateral = -Infinity;
+    for (const [x, y] of hull) {
+      const along = x * ux + y * uy;
+      const lateral = -x * uy + y * ux;
+      minAlong = Math.min(minAlong, along);
+      maxAlong = Math.max(maxAlong, along);
+      minLateral = Math.min(minLateral, lateral);
+      maxLateral = Math.max(maxLateral, lateral);
+    }
+    const length = maxAlong - minAlong;
+    const width = maxLateral - minLateral;
+    const area = length * width;
+    if (best === undefined || area < best.area) best = { angle, length, width, area };
+  }
+
+  // 長邊為主軸；方位恆落在 (−90, 90]
+  let angle = best!.length >= best!.width ? best!.angle : best!.angle + Math.PI / 2;
+  let length = Math.max(best!.length, best!.width);
+  const width = Math.min(best!.length, best!.width);
+  while (angle > Math.PI / 2) angle -= Math.PI;
+  while (angle <= -Math.PI / 2) angle += Math.PI;
+
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+  let minAlong = Infinity;
+  let maxAlong = -Infinity;
+  let minLateral = Infinity;
+  let maxLateral = -Infinity;
+  for (const [x, y] of hull) {
+    const along = x * ux + y * uy;
+    const lateral = -x * uy + y * ux;
+    minAlong = Math.min(minAlong, along);
+    maxAlong = Math.max(maxAlong, along);
+    minLateral = Math.min(minLateral, lateral);
+    maxLateral = Math.max(maxLateral, lateral);
+  }
+  length = maxAlong - minAlong;
+  const midAlong = (minAlong + maxAlong) / 2;
+  const midLateral = (minLateral + maxLateral) / 2;
+  const center: Local = [ux * midAlong - uy * midLateral, uy * midAlong + ux * midLateral];
+  return {
+    center,
+    bearing: (angle * 180) / Math.PI,
+    length,
+    width,
+    east: [center[0] + ux * (length / 2), center[1] + uy * (length / 2)],
+    west: [center[0] - ux * (length / 2), center[1] - uy * (length / 2)],
+  };
+}
