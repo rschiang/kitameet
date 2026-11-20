@@ -17,7 +17,22 @@ export type StructureId =
   | "mall-y"
   | "mall-r"
   | "mall-ximen"
-  | "parking-east";
+  | "parking-east"
+  | "metro-line-bl"
+  | "metro-line-r"
+  | "metro-line-g";
+
+/**
+ * 公告圖涵蓋的三條捷運路線。`rail` 為軌道面高程（公尺），
+ * 潛盾段的軸心取 `rail + 1.5`、箱涵底取 `rail − 1.5`。
+ */
+export const METRO_LINES = {
+  bl: { label: "板南線", structure: "metro-line-bl", rail: -17.6, note: "沿用捷運台北車站 B3 板南線月台軌道面" },
+  r: { label: "淡水信義線", structure: "metro-line-r", rail: -24.6, note: "沿用捷運台北車站 B4 淡水信義線月台軌道面" },
+  g: { label: "松山新店線", structure: "metro-line-g", rail: -22.0, note: "推估：北門站月台為地下三層，且須自臺鐵地下隧道下方穿越" },
+} as const satisfies Record<string, { label: string; structure: StructureId; rail: number; note: string }>;
+
+export type MetroLineId = keyof typeof METRO_LINES;
 
 export interface StructureLevel {
   /** 樓板高程（公尺，地面為 0、向下為負）。 */
@@ -62,6 +77,20 @@ const sourcedUse = (floor: number, height: number, note: string): StructureLevel
   confidence: "sourced",
   note,
 });
+
+/**
+ * 路線構造物：公告圖只畫出平面，深度一律自該路線的軌道面推算，
+ * 因此樓層表只有一層，即明挖箱涵的淨空。
+ */
+function lineStructure(id: MetroLineId): StructureInfo {
+  const line = METRO_LINES[id];
+  return {
+    label: `捷運${line.label}（禁限建公告圖）`,
+    levels: { B1: estimated(line.rail - 1.5, 9.0, "明挖箱涵的結構底與淨空") },
+    bottom: line.rail - 1.5,
+    sourceNote: `臺北市捷運工程局兩側禁限建範圍公告圖；軌道面高程${line.note}。`,
+  };
+}
 
 /** 各構造物的樓層與結構底。除註明外高程皆為推估值。 */
 export const STRUCTURES: Record<StructureId, StructureInfo> = {
@@ -141,6 +170,9 @@ export const STRUCTURES: Record<StructureId, StructureInfo> = {
     bottom: -15.5,
     sourceNote: MALL_NOTE,
   },
+  "metro-line-bl": lineStructure("bl"),
+  "metro-line-r": lineStructure("r"),
+  "metro-line-g": lineStructure("g"),
 };
 
 /**

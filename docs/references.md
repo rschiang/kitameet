@@ -80,6 +80,24 @@ K 區地下街的沿革、位置與營運概況。本專案據此將 K 區地下
 
 查詢語法參考文件為 <https://dev.overpass-api.de/overpass-doc/en/>。`scripts/fetch-osm.ts` 以 POST 方式查詢，必須帶 `User-Agent` 標頭，否則伺服器會回應 HTTP 406。主要端點為 <https://overpass-api.de/api/interpreter>，備用端點為 <https://overpass.kumi.systems/api/interpreter>，兩者查詢語法相同。伺服器忙碌時會回應 429、502 或 504，腳本以指數退避重試。
 
+### 臺北都會區大眾捷運系統兩側禁限建範圍公告圖查詢系統
+
+<https://eng.dorts.gov.taipei/br>
+
+臺北市捷運工程局依《大眾捷運法》公告的逐幅禁限建範圍圖。圖幅索引由 ArcGIS FeatureServer 提供（<https://wwwgs.dorts.gov.taipei/server/rest/services/Hosted/BRshpNewCodeView/FeatureServer/0>，`outSR=3826`），逐幅 PDF 位於 `https://eng.dorts.gov.taipei/br/pdf/{圖幅名}.pdf`，皆不需認證。
+
+每幅為 AutoCAD 經 `pdfplot10.hdi` 輸出的向量 PDF，內含 1/1000 地形圖底圖、捷運結構外緣、軌道中心線與限建線。圖層名只存在於增修前的舊版頁物件，現行頁物件的標記已退化為 `/OC BMC`；兩版同一圖元的座標差小於 0.03 公尺。圖面格網為 50 公尺 TWD67 TM2 方格網，圖幅索引則為 TWD97 TM2。
+
+本專案取站區五條路線共 35 幅：南港線（`N`）、板橋線（`P`）、淡水線（`T`）、新店線（`H`）、松山線（圖幅名 `SS`、線路代號 `G`）。新莊線（`K`）的圖幅全部位於新生北路一帶，僅切到查詢範圍東緣、與站區無關，故排除。結構外緣的兩側分屬不同圖層，一側為細實線、另一側為粗虛線（PDF 中是一串長 4–6 公尺、寬 0.68 公尺的封閉四邊形）；潛盾段每孔外緣距其軌道中心線 ±2.6 至 ±2.9 公尺，隨圖幅年代而異。限建線位於結構外緣外 50.0 公尺（實測中位數 49.9），可作為套合驗算。
+
+地形圖底圖的圖層命名有三套慣例：中文敘述（`3846$0$RC、BC、建築中或高架道路下房屋`）、國土測繪中心編碼（`3946-67$0$93110_永久性房屋`）與純編號（`3845$0$6`）。純編號者無從判定語意，一律捨棄，其範圍的建物仍由 OSM 提供。
+
+### 國土測繪中心通用正射影像（WMTS）
+
+<https://wmts.nlsc.gov.tw/wmts>
+
+圖磚網址為 `https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{row}/{col}`，回應為 JPEG，須帶瀏覽器型 `User-Agent`。本專案以 2024 年版影像抽查延平南路、民生西路、館前路三處街廓，確認公告圖地形底圖的建物面與屋頂輪廓相符，且 OSM 漏繪的建物確實存在。
+
 ## 座標與投影
 
 ### EPSG:3826（TWD97 / TM2 zone 121）

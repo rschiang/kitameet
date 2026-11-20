@@ -12,6 +12,13 @@ import {
   OVERRIDES,
   levelFromOsm,
 } from "./overrides.ts";
+import {
+  buildDorts,
+  dortsReplacesMetroTrack,
+  dortsReplacesRoad,
+  matchDortsBuildings,
+  type OsmBuildingRef,
+} from "./dorts.ts";
 import { levelOf, railLevelOf, type StructureId } from "./levels.ts";
 import { buildStationComplex } from "./structures/station-complex.ts";
 import {
@@ -136,7 +143,13 @@ function convert(osm: OsmFeature): Feature | null {
 
 let cached: Feature[] | null = null;
 
-/** 現況場景的完整量體清單：OSM ＋ 覆寫 ＋ 分層構造。 */
+/**
+ * 現況場景的完整量體清單：OSM ＋ 覆寫 ＋ 分層構造 ＋ 禁限建公告圖。
+ *
+ * 公告圖涵蓋範圍內的平面幾何一律以公告圖為準：
+ * 其建物輪廓取代比對到的 OSM 建物、道路邊線取代 OSM 道路中心線、
+ * 軌道中心線取代 OSM 捷運正線。範圍外與無對應者維持 OSM。
+ */
 export function buildBaseline(): Feature[] {
   if (cached) return cached;
 
@@ -148,7 +161,36 @@ export function buildBaseline(): Feature[] {
     if (feature) byId.set(osm.id, feature);
   }
 
-  const features = [...byId.values(), ...buildStationComplex()];
+  const osmBuildings: OsmBuildingRef[] = [];
+  for (const feature of byId.values()) {
+    if (feature.kind !== "building" && feature.kind !== "landmark") continue;
+    const polygon = feature.geometry.polygon;
+    if (!polygon) continue;
+    osmBuildings.push({
+      id: feature.id,
+      polygon,
+      height: feature.height ?? DEFAULT_BUILDING_LEVELS * BUILDING_LEVEL_HEIGHT,
+      ...(feature.name === undefined ? {} : { name: feature.name }),
+      landmark: feature.kind === "landmark",
+    });
+  }
+  const matched = matchDortsBuildings(osmBuildings);
+
+  for (const [id, feature] of byId) {
+    if (matched.replaced.has(id)) {
+      byId.delete(id);
+      continue;
+    }
+    if (feature.kind === "road" && dortsReplacesRoad(feature.geometry.polyline ?? [])) {
+      byId.delete(id);
+      continue;
+    }
+    if (feature.kind === "track-metro" && dortsReplacesMetroTrack(feature.geometry.polyline ?? [])) {
+      byId.delete(id);
+    }
+  }
+
+  const features = [...byId.values(), ...buildStationComplex(), ...buildDorts(matched.attributes)];
   cached = features;
   return features;
 }

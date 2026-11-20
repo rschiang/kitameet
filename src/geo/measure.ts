@@ -107,3 +107,50 @@ export function nearestPair(a: Local[], b: Local[]): { a: Local; b: Local; dista
   }
   return best;
 }
+
+/** 多邊形的有向面積（平方公尺），逆時針為正。環為開放式，首尾不重複。 */
+export function polygonArea(ring: Local[]): number {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    sum += a[0] * b[1] - b[0] * a[1];
+  }
+  return sum / 2;
+}
+
+/** 多邊形的形心；面積為零時退回頂點平均。 */
+export function polygonCentroid(ring: Local[]): Local {
+  let area = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const cross = a[0] * b[1] - b[0] * a[1];
+    area += cross;
+    cx += (a[0] + b[0]) * cross;
+    cy += (a[1] + b[1]) * cross;
+  }
+  if (Math.abs(area) < 1e-9) {
+    return [
+      ring.reduce((s, p) => s + p[0], 0) / ring.length,
+      ring.reduce((s, p) => s + p[1], 0) / ring.length,
+    ];
+  }
+  return [cx / (3 * area), cy / (3 * area)];
+}
+
+/** 點是否落在多邊形內（射線法）。 */
+export function pointInPolygon(point: Local, ring: Local[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > point[1] !== yj > point[1]) {
+      const x = ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi;
+      if (point[0] <= x) inside = !inside;
+    }
+  }
+  return inside;
+}

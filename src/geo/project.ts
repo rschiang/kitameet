@@ -23,6 +23,16 @@ export function toLocal(lon: number, lat: number): Local {
   return [e - originTm2[0], n - originTm2[1]];
 }
 
+/** WGS84 經緯度轉 TWD97 TM2（EPSG:3826）絕對座標，供圖資查詢的範圍參數使用。 */
+export function toTm2(lon: number, lat: number): [number, number] {
+  return forward.forward([lon, lat]) as [number, number];
+}
+
+/** TWD97 TM2 絕對座標轉為局部公尺座標。 */
+export function fromTm2(e: number, n: number): Local {
+  return [e - originTm2[0], n - originTm2[1]];
+}
+
 /** 局部公尺座標轉回 WGS84 經緯度，供除錯與資料校正使用。 */
 export function toLonLat([x, y]: Local): [number, number] {
   const [lon, lat] = forward.inverse([x + originTm2[0], y + originTm2[1]]) as [number, number];

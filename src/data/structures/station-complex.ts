@@ -6,7 +6,15 @@
  * 通道與垂直動線。平面一律由 OSM 輪廓推算，不新增座標常數；
  * 深度一律取 `levels.ts` 中該構造物自己的樓層表。
  */
-import { advance, nearestPair, polygonAxis, type PolygonAxis } from "../../geo/measure.ts";
+import {
+  advance,
+  nearestPair,
+  pointInPolygon,
+  polygonAxis,
+  polygonCentroid,
+  type PolygonAxis,
+} from "../../geo/measure.ts";
+import { dortsStationBoxes } from "../dorts.ts";
 import { corridorPolygon } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
 import undergroundJson from "../osm/underground.json";
@@ -57,13 +65,7 @@ const CORRIDOR_WIDTH = 10.0;
 const CORRIDOR_INSET = 14;
 
 // ── 捷運台北車站 ────────────────────────────────────────
-/** 兩臂由月台主軸兩端各往外延伸的長度（公尺）。 */
-const ARM_EXTENSION = 20;
-const BANNAN_WIDTH = 44.0;
-const TAMSUI_WIDTH = 40.0;
-/** 轉乘節點方塊邊長（公尺）。 */
-const JUNCTION_SIZE = 60;
-/** 垂直動線核心邊長（公尺）與其沿臂的位置。 */
+/** 垂直動線核心邊長（公尺）與其沿箱涵主軸中點兩側的位置。 */
 const CORE_SIZE = 6;
 const CORE_OFFSET = 60;
 
@@ -151,14 +153,6 @@ function square(centre: Local, size: number): Local[] {
   ];
 }
 
-/** 沿主軸的帶狀中心線，兩端各往外延伸 {@link ARM_EXTENSION}。 */
-function armCentre(axis: PolygonAxis): Local[] {
-  return [
-    advance(axis.west, axis.bearing, -ARM_EXTENSION),
-    advance(axis.east, axis.bearing, ARM_EXTENSION),
-  ];
-}
-
 // ── 臺鐵／高鐵站體 ──────────────────────────────────────
 
 const STATION: StructureId = "tra-hsr-station";
@@ -239,97 +233,79 @@ function stationFeatures(): Feature[] {
 
 const METRO: StructureId = "metro-station";
 
-interface MetroArms {
+interface MetroBoxes {
   bannan: Local[];
-  bannanBand: Local[];
   tamsui: Local[];
-  tamsuiBand: Local[];
   junction: Local;
 }
 
-/** 兩條路線的站體臂與其交會的轉乘節點。 */
-function metroArms(): MetroArms {
-  const bannanAxis = polygonAxis(outline(BANNAN_PLATFORM));
-  const tamsuiAxis = polygonAxis(outline(TAMSUI_PLATFORM));
-  const bannan = armCentre(bannanAxis);
-  const tamsui = armCentre(tamsuiAxis);
-  // 板南線臂東端與淡水信義線臂南端的中點即為兩臂交會處
-  const east = bannan[1];
-  const south = tamsui[0];
-  return {
-    bannan,
-    bannanBand: corridorPolygon(bannan, BANNAN_WIDTH),
-    tamsui,
-    tamsuiBand: corridorPolygon(tamsui, TAMSUI_WIDTH),
-    junction: [(east[0] + south[0]) / 2, (east[1] + south[1]) / 2],
-  };
+/**
+ * 兩條路線的車站箱涵平面與其交會處。
+ * 平面取自公告圖的車站箱涵（含月台主軸所在者），不再以 OSM 月台軸線推算矩形。
+ */
+function metroBoxes(): MetroBoxes {
+  const bannan = boxContaining(BANNAN_PLATFORM);
+  const tamsui = boxContaining(TAMSUI_PLATFORM);
+  const bannanAxis = polygonAxis(bannan);
+  const tamsuiAxis = polygonAxis(tamsui);
+  // 兩條箱涵主軸的交點即為轉乘節點
+  const junction = axisIntersection(bannanAxis, tamsuiAxis);
+  return { bannan, tamsui, junction };
 }
 
-function metroFeatures(arms: MetroArms): Feature[] {
+/** 含指定 OSM 月台形心的公告圖車站箱涵；找不到即失敗，不以推算矩形代替。 */
+function boxContaining(platformId: string): Local[] {
+  const centre = polygonCentroid(outline(platformId));
+  const box = dortsStationBoxes().find((polygon) => pointInPolygon(centre, polygon));
+  if (!box) throw new Error(`找不到含 OSM 月台 ${platformId} 的公告圖車站箱涵`);
+  return box;
+}
+
+/** 兩條主軸的交點；平行時退回兩軸中點的中點。 */
+function axisIntersection(a: PolygonAxis, b: PolygonAxis): Local {
+  const ua: Local = [Math.cos((a.bearing * Math.PI) / 180), Math.sin((a.bearing * Math.PI) / 180)];
+  const ub: Local = [Math.cos((b.bearing * Math.PI) / 180), Math.sin((b.bearing * Math.PI) / 180)];
+  const det = ua[0] * -ub[1] - ua[1] * -ub[0];
+  if (Math.abs(det) < 1e-9) return [(a.center[0] + b.center[0]) / 2, (a.center[1] + b.center[1]) / 2];
+  const dx = b.center[0] - a.center[0];
+  const dy = b.center[1] - a.center[1];
+  const t = (dx * -ub[1] - dy * -ub[0]) / det;
+  return [a.center[0] + ua[0] * t, a.center[1] + ua[1] * t];
+}
+
+function metroFeatures(boxes: MetroBoxes): Feature[] {
   const features: Feature[] = [];
 
   for (const level of ["B1", "B2", "B3"] as const) {
     features.push(
-      slab(`metro/bannan/slab/${level}`, `捷運板南線站體 ${level} 樓板`, "metro", METRO, level, arms.bannanBand),
+      slab(`metro/bannan/slab/${level}`, `捷運板南線站體 ${level} 樓板`, "metro", METRO, level, boxes.bannan),
     );
   }
   features.push(
-    room(
-      "metro/bannan/concourse/B2",
-      "捷運板南線大廳層（B2）",
-      "station",
-      "metro",
-      METRO,
-      "B2",
-      arms.bannanBand,
-    ),
+    room("metro/bannan/concourse/B2", "捷運板南線大廳層（B2）", "station", "metro", METRO, "B2", boxes.bannan),
   );
 
   for (const level of ["B1", "B3", "B4"] as const) {
     features.push(
-      slab(`metro/tamsui/slab/${level}`, `捷運淡水信義線站體 ${level} 樓板`, "metro", METRO, level, arms.tamsuiBand),
+      slab(`metro/tamsui/slab/${level}`, `捷運淡水信義線站體 ${level} 樓板`, "metro", METRO, level, boxes.tamsui),
     );
   }
   features.push(
-    room(
-      "metro/tamsui/concourse/B3",
-      "捷運淡水信義線大廳層（B3）",
-      "station",
-      "metro",
-      METRO,
-      "B3",
-      arms.tamsuiBand,
-    ),
+    room("metro/tamsui/concourse/B3", "捷運淡水信義線大廳層（B3）", "station", "metro", METRO, "B3", boxes.tamsui),
   );
 
-  for (const level of ["B1", "B2"] as const) {
-    features.push(
-      room(
-        `metro/junction/${level}`,
-        `捷運轉乘大廳（${level}）`,
-        "station",
-        "metro",
-        METRO,
-        level,
-        square(arms.junction, JUNCTION_SIZE),
-      ),
-    );
-  }
-
-  // 垂直動線：自最深的月台層貫穿至 B1 樓板
+  // 垂直動線：自最深的月台層貫穿至 B1 樓板，兩線交會處 1 處、各箱涵主軸中點兩側各 1 處
   const deepest: LevelId = "B4";
   const base = levelOf(METRO, deepest).floor;
   const top = levelOf(METRO, "B1").floor;
-  const bannanMid = midpoint(arms.bannan);
-  const tamsuiMid = midpoint(arms.tamsui);
-  const bannanBearing = bearingOf(arms.bannan);
-  const tamsuiBearing = bearingOf(arms.tamsui);
+  const bannanAxis = polygonAxis(boxes.bannan);
+  const tamsuiAxis = polygonAxis(boxes.tamsui);
   const cores: Local[] = [
-    arms.junction,
-    advance(bannanMid, bannanBearing, -CORE_OFFSET),
-    advance(bannanMid, bannanBearing, CORE_OFFSET),
-    advance(tamsuiMid, tamsuiBearing, -CORE_OFFSET),
-    advance(tamsuiMid, tamsuiBearing, CORE_OFFSET),
+    boxes.junction,
+    advance(bannanAxis.center, bannanAxis.bearing, -CORE_OFFSET),
+    advance(bannanAxis.center, bannanAxis.bearing, CORE_OFFSET),
+    advance(tamsuiAxis.center, tamsuiAxis.bearing, -CORE_OFFSET),
+    advance(tamsuiAxis.center, tamsuiAxis.bearing, CORE_OFFSET),
   ];
   cores.forEach((centre, index) => {
     features.push(
@@ -348,18 +324,6 @@ function metroFeatures(arms: MetroArms): Feature[] {
   });
 
   return features;
-}
-
-function midpoint(line: Local[]): Local {
-  const a = line[0];
-  const b = line[line.length - 1];
-  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-}
-
-function bearingOf(line: Local[]): number {
-  const a = line[0];
-  const b = line[line.length - 1];
-  return (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
 }
 
 // ── 機場捷運 A1 ────────────────────────────────────────
@@ -410,15 +374,15 @@ function link(
   return room(id, name, "passage", "passage", structure, "B1", corridorPolygon([pair.a, pair.b], LINK_WIDTH));
 }
 
-function linkFeatures(arms: MetroArms): Feature[] {
+function linkFeatures(boxes: MetroBoxes): Feature[] {
   const station = outline(STATION_OUTLINE);
   const candidates = [
     link("mall/link/k-z", "K 區地下街 ↔ 站前地下街", "mall-k", outline(MALL_K), outline(MALL_Z)),
-    link("mall/link/k-bannan", "K 區地下街 ↔ 捷運板南線", "mall-k", outline(MALL_K), arms.bannanBand),
-    link("mall/link/z-bannan", "站前地下街 ↔ 捷運板南線", "mall-z", outline(MALL_Z), arms.bannanBand),
+    link("mall/link/k-bannan", "K 區地下街 ↔ 捷運板南線", "mall-k", outline(MALL_K), boxes.bannan),
+    link("mall/link/z-bannan", "站前地下街 ↔ 捷運板南線", "mall-z", outline(MALL_Z), boxes.bannan),
     link("mall/link/y-station", "台北地下街 ↔ 臺北車站", "mall-y", outline(MALL_Y), station),
-    link("mall/link/r-tamsui", "中山地下街 ↔ 捷運淡水信義線", "mall-r", outline(MALL_R), arms.tamsuiBand),
-    link("mall/link/station-bannan", "臺北車站 ↔ 捷運板南線", STATION, station, arms.bannanBand),
+    link("mall/link/r-tamsui", "中山地下街 ↔ 捷運淡水信義線", "mall-r", outline(MALL_R), boxes.tamsui),
+    link("mall/link/station-bannan", "臺北車站 ↔ 捷運板南線", STATION, station, boxes.bannan),
     link("a1/link/taipei-mall", "機場捷運台北車站 ↔ 台北地下街", A1, outline(A1_OUTLINE), outline(MALL_Y)),
   ];
   return candidates.filter((f): f is Feature => f !== null);
@@ -426,6 +390,6 @@ function linkFeatures(arms: MetroArms): Feature[] {
 
 /** 臺北車站站區的分層地下構造。 */
 export function buildStationComplex(): Feature[] {
-  const arms = metroArms();
-  return [...stationFeatures(), ...metroFeatures(arms), ...a1Features(), ...linkFeatures(arms)];
+  const boxes = metroBoxes();
+  return [...stationFeatures(), ...metroFeatures(boxes), ...a1Features(), ...linkFeatures(boxes)];
 }

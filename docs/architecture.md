@@ -8,7 +8,11 @@
 graph TD
     overpass["Overpass API"] -- "overpassql 查詢" --> fetch["scripts/fetch-osm.ts"]
     fetch -- "局部公尺座標 JSON" --> osm["src/data/osm/*.json"]
+    dortspdf["捷運局禁限建公告圖 PDF"] -- "向量解析、圖幅定位" --> fetchd["scripts/fetch-dorts.ts"]
+    fetchd -- "局部公尺座標 JSON" --> dorts["src/data/dorts/*.json"]
     osm --> scene["src/data/scene.ts<br/>buildBaseline()"]
+    dorts --> dortsmod["src/data/dorts.ts<br/>buildDorts()"]
+    dortsmod --> scene
     overrides["src/data/overrides.ts<br/>文獻覆寫"] --> scene
     levels["src/data/levels.ts<br/>構造物樓層表"] --> scene
     structures["src/data/structures/station-complex.ts<br/>分層地下構造"] --> scene
@@ -18,7 +22,7 @@ graph TD
     builders --> viewer["src/render/scene.ts<br/>three.js 場景"]
 ```
 
-擷取與渲染完全分離：`npm run fetch:osm` 僅在需要更新圖資時執行，網站執行期不連外。產出的 `src/data/osm/underground.json` 與 `surface.json` 進版控，目前分別為 192 與 2294 項量體。
+擷取與渲染完全分離：`npm run fetch:osm` 與 `npm run fetch:dorts` 僅在需要更新圖資時執行，網站執行期不連外。產出的 `src/data/osm/underground.json` 與 `surface.json` 進版控，目前分別為 192 與 2294 項量體；`src/data/dorts/structures.json` 與 `basemap.json` 亦進版控，PDF 快取則留在 `data/cache/dorts/`，不進版控。
 
 ## 座標系統
 
@@ -48,9 +52,26 @@ graph TD
 
 ## 分層地下構造
 
-OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一巨大多邊形。兩者於覆寫表標為 `exclude`，改由 `src/data/structures/station-complex.ts` 的 `buildStationComplex()` 產生分層量體，於 `buildBaseline()` 併入場景：站體的逐層樓板、B1 的五條南北向通道與南北迴廊、捷運兩臂的樓板與大廳、轉乘節點、垂直動線核心、A1 的樓板、大廳與地下量體，以及地下街之間的連通道。
+OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一巨大多邊形。兩者於覆寫表標為 `exclude`，改由 `src/data/structures/station-complex.ts` 的 `buildStationComplex()` 產生分層量體，於 `buildBaseline()` 併入場景：站體的逐層樓板、B1 的五條南北向通道與南北迴廊、捷運兩線的樓板與大廳、垂直動線核心、A1 的樓板、大廳與地下量體，以及地下街之間的連通道。
 
-平面一律由既有輪廓推算（`polygonAxis`、`advance`、`offsetPolyline`、`corridorPolygon`、`nearestPair`），不新增座標常數；深度一律取該構造物的樓層表。
+臺鐵高鐵站體與 A1 的平面由 OSM 輪廓推算（`polygonAxis`、`advance`、`offsetPolyline`、`corridorPolygon`、`nearestPair`）；捷運兩線的平面則取自公告圖的車站箱涵——以含 OSM 月台形心者為準，找不到即擲出例外。深度一律取該構造物的樓層表，不新增座標常數。
+
+## 禁限建公告圖
+
+`npm run fetch:dorts` 自捷運局的查詢系統取得逐幅向量 PDF，解析為局部公尺座標的 JSON。流程分為四步，各有獨立模組：
+
+| 模組 | 作用 |
+|---|---|
+| `scripts/dorts/pdf.ts` | 以 `node:zlib` 解開內容流，解析 PDF 路徑運算子與圖層標記，輸出帶圖層名的向量路徑 |
+| `scripts/dorts/georef.ts` | 以 50 公尺 TWD67 方格網求比例與方向、以指北針定北，再以格網落在 50 公尺整數倍的條件校正平移 |
+| `scripts/dorts/layers.ts` | 依圖層名分為結構外緣、限建線、軌道中心線、建物與道路五類 |
+| `scripts/dorts/structures.ts`、`basemap.ts` | 沿軌道中心線量測淨寬切出潛盾與箱形段；地形圖的建物線段以平面圖解析求面 |
+
+旋轉角一律由格網與指北針決定，不可改用圖框四角的最小平方套合：矩形有 180 度旋轉對稱，四角對應有兩組殘差同為零的解，會使部分圖幅整幅翻轉。比例亦逐幅自格網求取，`SA01RWSS02A` 的圖面比例與其餘圖幅相差 5.8%，以相鄰圖幅的建物吻合度（中位數 0.03 公尺）證實。
+
+腳本結束前輸出品質報告，格網殘差、格網校正量、相鄰圖幅建物吻合度與「限建線距結構外緣 50 公尺」任一項超出門檻即以非零狀態結束，不寫出產出檔。
+
+涵蓋範圍內的平面幾何一律以公告圖為準：建物面取代比對到的 OSM 建物並承接其高度與名稱、道路邊線取代 OSM 道路中心線、軌道中心線取代 OSM 捷運正線；範圍外與無對應者維持 OSM。深度則全為推估，由 `levels.ts` 的 `METRO_LINES` 給出各路線軌道面高程，潛盾段軸心取 `rail + 1.5`、箱涵底取 `rail − 1.5`。
 
 ## 量體結構
 
@@ -58,25 +79,27 @@ OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一�
 
 | 欄位 | 說明 |
 |---|---|
-| `id` | OSM id（如 `way/584167409`）或方案量體的識別字串 |
+| `id` | OSM id（如 `way/584167409`）、公告圖識別字串（如 `dorts/N/bore/3`）或方案量體的識別字串 |
 | `level` | 所屬樓層標籤 |
 | `structure` | 所屬構造物，決定該樓層標籤對應的實際深度 |
 | `layer` | 圖層代號，亦為圖層面板的開關單位 |
-| `geometry` | `polygon` 或 `polyline`，局部公尺座標 |
-| `base`、`height`、`width` | 底面高程、高度、折線量體寬度 |
+| `geometry` | `polygon`、`polyline` 或 `tube`（圓形隧道的軸心折線），局部公尺座標 |
+| `base`、`height`、`width`、`radius` | 底面高程、高度、折線量體寬度、圓形隧道半徑 |
 | `confidence` | `sourced`、`derived` 或 `estimated` |
 | `sourceNote` | 資料依據或推估方式 |
 | `status` | `existing`、`added`、`removed` 或 `repurposed` |
 
 `confidence` 的三級定義為：`sourced` 出自文獻或官方資料並附來源、`derived` 由 OSM 幾何或文獻值計算而得、`estimated` 為本專案推估。
 
-圖層共 10 組：地標建物、一般建物、高架道路、道路、車站量體、月台、股道、地下街、捷運、通道。地標與一般建物分屬不同圖層，可單獨關閉周邊街廓而保留地標。
+圖層共 11 組：地標建物、一般建物、高架道路、道路、車站量體、月台、股道、地下街、捷運、通道、禁限建範圍。地標與一般建物分屬不同圖層，可單獨關閉周邊街廓而保留地標；禁限建範圍會蓋住整個畫面，預設關閉。
 
 ## 渲染
 
-多邊形以 `ExtrudeGeometry` 長出高度，折線先由中心線往兩側平移成封閉帶狀再長出厚度，兩者都在建模時將底面高程烘焙進頂點。
+多邊形以 `ExtrudeGeometry` 長出高度，折線先由中心線往兩側平移成封閉帶狀再長出厚度，圓形隧道則以 `CatmullRomCurve3` 搭配 `TubeGeometry` 沿軸心掃出，三者都在建模時將高程烘焙進頂點。
 
 地下高程於建模時放大 1.2 倍，使各層的相對關係在畫面上分辨得出。放大只作用於負高程，單一入口為 `src/render/depth.ts` 的 `exaggerate()`，於 `buildFeatureMesh` 中套用於量體的上下兩端高程、高度取兩端之差，資料層一律保存真實高程。
+
+圓形隧道的放大只作用於軸心高程，半徑維持真實值，否則隧道會被壓成與斷面不符的扁管。
 
 紙模型色調以 `MeshStandardMaterial` 為底（`roughness` 0.95、`metalness` 0），於 `onBeforeCompile` 注入菲涅耳邊緣提亮與極淡的垂直漸層，不加描邊。車站量體與樓板以半透明呈現，外殼僅繪製背面，使內部的月台與股道不致遭到遮蔽。光照為半球光加單一平行光，色調映射採 ACES Filmic。
 
@@ -100,7 +123,8 @@ OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一�
 | `v` | 格式版本，目前為 `1` |
 | `m` | 視圖模式，`3d` 或 `aerial` |
 | `s` | 方案，`status-quo` 或 `proposal-b` |
-| `loff` | 關閉的圖層代號，以逗號分隔 |
+| `loff` | 關閉的圖層代號，以逗號分隔（僅記錄預設開啟者） |
+| `lon` | 開啟的圖層代號，以逗號分隔（僅記錄預設關閉者，目前為禁限建範圍） |
 | `voff` | 關閉的樓層代號，以逗號分隔 |
 | `sec` | 剖面的方位角與位置，僅在啟用時出現 |
 | `cam` | 相機位置、目標與縮放，共 7 個數值 |

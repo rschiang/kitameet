@@ -9,6 +9,9 @@ import type { ViewMode } from "./viewMode.ts";
 
 const VERSION = "1";
 
+/** 預設開關狀態；永久連結只記錄與預設不同的圖層。 */
+const DEFAULT_LAYERS = defaultState().layers;
+
 const round = (n: number) => Math.round(n * 10) / 10;
 
 export function encodeState(state: AppState): string {
@@ -17,8 +20,11 @@ export function encodeState(state: AppState): string {
   params.set("m", state.mode);
   params.set("s", state.scenario);
 
-  const layersOff = LAYER_IDS.filter((id) => !state.layers[id]);
+  const layersOff = LAYER_IDS.filter((id) => !state.layers[id] && DEFAULT_LAYERS[id]);
   if (layersOff.length > 0) params.set("loff", layersOff.join(","));
+  // 預設關閉的圖層（禁限建範圍）開啟時另記，否則分享出去的連結會把它關掉
+  const layersOn = LAYER_IDS.filter((id) => state.layers[id] && !DEFAULT_LAYERS[id]);
+  if (layersOn.length > 0) params.set("lon", layersOn.join(","));
   const levelsOff = LEVEL_IDS.filter((id) => !state.levels[id]);
   if (levelsOff.length > 0) params.set("voff", levelsOff.join(","));
 
@@ -57,6 +63,9 @@ export function decodeState(hash: string): AppState {
 
   for (const id of (params.get("loff") ?? "").split(",")) {
     if (LAYER_IDS.includes(id as LayerId)) state.layers[id as LayerId] = false;
+  }
+  for (const id of (params.get("lon") ?? "").split(",")) {
+    if (LAYER_IDS.includes(id as LayerId)) state.layers[id as LayerId] = true;
   }
   for (const id of (params.get("voff") ?? "").split(",")) {
     if (LEVEL_IDS.includes(id as LevelId)) state.levels[id as LevelId] = false;

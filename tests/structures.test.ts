@@ -113,7 +113,10 @@ describe("深度放大", () => {
     expect(bounds.min).toBeCloseTo(core.base! * DEPTH_EXAGGERATION, 2);
     expect(bounds.max).toBeCloseTo((core.base! + core.height!) * DEPTH_EXAGGERATION, 2);
 
-    const tower = boundsY("way/204711206");
-    expect(tower.min).toBeCloseTo(0, 6);
+    // 地面建物不受放大影響；輪廓可能來自 OSM 或公告圖地形底圖，故不綁定單一 id
+    const ground = features.find(
+      (f) => (f.kind === "building" || f.kind === "landmark") && f.base === 0 && f.geometry.polygon,
+    )!;
+    expect(boundsY(ground.id).min).toBeCloseTo(0, 6);
   });
 });

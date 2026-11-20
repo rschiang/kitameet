@@ -31,7 +31,8 @@ export type LayerId =
   | "track"
   | "mall"
   | "metro"
-  | "passage";
+  | "passage"
+  | "restriction";
 
 /** 量體類型，決定著色與建模方式。 */
 export type FeatureKind =
@@ -47,7 +48,9 @@ export type FeatureKind =
   | "building"
   | "landmark"
   | "elevated-road"
-  | "road";
+  | "road"
+  | "tunnel"
+  | "restriction";
 
 /** 方案狀態：沿用、新建、拆除、改作他用。 */
 export type FeatureStatus = "existing" | "added" | "removed" | "repurposed";
@@ -60,13 +63,16 @@ export interface Feature {
   /** 所屬構造物；決定 {@link level} 對應的實際深度。 */
   structure?: StructureId;
   layer: LayerId;
-  geometry: { polygon?: Local[]; polyline?: Local[] };
+  /** 平面量體取 `polygon`、帶狀量體取 `polyline`、圓形隧道取 `tube`（軸心折線）。 */
+  geometry: { polygon?: Local[]; polyline?: Local[]; tube?: Local[] };
   /** 量體高度（公尺）；折線量體則為厚度。 */
   height?: number;
   /** 量體底面高程（公尺，地面為 0）。未指定時取所屬樓層樓板。 */
   base?: number;
-  /** 折線量體的寬度（公尺）。 */
+  /** 折線量體的寬度（公尺）；`tube` 量體則為半徑。 */
   width?: number;
+  /** 圓形隧道的半徑（公尺）。 */
+  radius?: number;
   confidence: Confidence;
   sourceNote?: string;
   status?: FeatureStatus;
@@ -122,6 +128,7 @@ export const LAYER_LABELS: Record<LayerId, string> = {
   mall: "地下街",
   metro: "捷運",
   passage: "通道",
+  restriction: "禁限建範圍",
 };
 
 export const CONFIDENCE_LABELS: Record<Confidence, string> = {

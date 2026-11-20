@@ -24,10 +24,10 @@ export interface AppState {
 export const LAYER_IDS = Object.keys(LAYER_LABELS) as LayerId[];
 export const LEVEL_IDS = Object.keys(LEVELS) as LevelId[];
 
-/** 預設顯示全部圖層與樓層，3D 視圖、現況、不剖切。 */
+/** 預設顯示全部樓層與圖層，3D 視圖、現況、不剖切；限建線會蓋住整個畫面，預設關閉。 */
 export function defaultState(): AppState {
   const layers = {} as Record<LayerId, boolean>;
-  for (const id of LAYER_IDS) layers[id] = true;
+  for (const id of LAYER_IDS) layers[id] = id !== "restriction";
   const levels = {} as Record<LevelId, boolean>;
   for (const id of LEVEL_IDS) levels[id] = true;
   return {

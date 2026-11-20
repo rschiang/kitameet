@@ -56,7 +56,9 @@ describe("現況場景", () => {
     expect(features.length).toBeGreaterThan(500);
     for (const f of features) {
       const size =
-        (f.geometry.polygon?.length ?? 0) + (f.geometry.polyline?.length ?? 0);
+        (f.geometry.polygon?.length ?? 0) +
+        (f.geometry.polyline?.length ?? 0) +
+        (f.geometry.tube?.length ?? 0);
       expect(size, f.id).toBeGreaterThan(1);
       expect(f.confidence, f.id).toBeDefined();
       expect(Number.isFinite(f.height!), f.id).toBe(true);

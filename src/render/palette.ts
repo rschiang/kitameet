@@ -15,6 +15,8 @@ export const LAYER_COLORS: Record<LayerId, string> = {
   mall: "#e3d7c2",
   metro: "#7a6fae",
   passage: "#dcd3e0",
+  // 限建線為地面標線，取低彩度的灰褐色
+  restriction: "#c9c2b0",
 };
 
 /** 特定量體以類型覆寫圖層色，主要用於區分三種軌道系統。 */
@@ -23,6 +25,8 @@ export const KIND_COLORS: Partial<Record<FeatureKind, string>> = {
   "track-hsr": "#b03a3a",
   "track-metro": "#7a6fae",
   slab: "#ded7c8",
+  // 隧道較站體量體深一階，才能與同屬捷運圖層的車站箱涵、股道區分
+  tunnel: "#5d5390",
 };
 
 /** 方案狀態著色：新建提案紅、拆除灰、歸還臺鐵藍。 */

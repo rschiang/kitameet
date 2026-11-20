@@ -107,3 +107,29 @@ OSM 只有 2D 輪廓，捷運台北車站因而只能以單一巨塊呈現，無
 - `src/geo/clip.ts`（新增）、`src/geo/offset.ts`（`polylineCrossingAtX`）、`src/app/scenario.ts`
 - `src/data/overrides.ts`、`src/data/structures/station-complex.ts`
 - `docs/proposals.md`、`docs/references.md`、`docs/status-quo.md`、`docs/architecture.md`
+
+## 2026-11-21：匯入捷運禁限建範圍公告圖，重建地下結構與地形底圖
+
+**變更內容**
+
+- 新增 `npm run fetch:dorts`：自臺北市捷運工程局的禁限建範圍公告圖查詢系統取得 35 幅向量 PDF，解析為局部公尺座標的 JSON。涵蓋南港線、板橋線、淡水線、新店線與松山線，產出 39 段潛盾隧道、14 段箱涵、36 條軌道中心線、599 條限建線、3,999 棟建物與 1,358 條道路邊線。
+- 捷運正線與車站改以公告圖的結構外緣量體化：沿軌道中心線每 4 公尺取樣、向兩側投射法線射線量出淨寬，淨寬不大於 8 公尺者建為圓形隧道（半徑 2.6–2.9 公尺），其餘建為箱形量體。原本以 OSM 月台主軸推算的兩臂與轉乘節點方塊一併刪除，站區分層構造的平面改用公告圖的車站箱涵。
+- 涵蓋範圍內的平面幾何改以公告圖為準：建物面取代比對到的 OSM 建物並承接其高度與名稱（776 棟）、道路邊線取代 OSM 道路中心線（137 條）、軌道中心線取代 OSM 捷運正線（33 條）。範圍外與無對應者維持 OSM，場景不會出現空洞。
+- 新增「禁限建範圍」圖層（預設關閉）與 `tube` 幾何（圓形隧道）；永久連結新增 `lon` 參數，否則預設關閉的圖層一旦開啟便無法分享。
+- 新增共用幾何工具 `src/geo/chain.ts`（線段串接與去重）、`polygonize.ts`（平面圖解析求面）、`corridor.ts`（廊帶量測）。
+
+**理由**
+
+公告圖的精度遠高於 OSM：相鄰圖幅同一棟建物吻合至 0.03 公尺，與 OSM 建物的最近邊距中位數則為 1.8–2.4 公尺。捷運結構原以月台主軸推算的矩形兩臂無法呈現潛盾與明挖的差異，也無法呈現站體箱涵的實際輪廓。限建線距結構外緣 50 公尺的特性另可作為套合驗算，實測中位數 49.90 公尺。
+
+各路線的軌道面高程仍為推估：板南線 −17.6 公尺、淡水信義線 −24.6 公尺沿用捷運台北車站月台層，松山新店線 −22.0 公尺為推估值，集中於 `levels.ts` 的 `METRO_LINES`，取得縱剖面圖後只需修改該處。
+
+**受影響的資料檔**
+
+- `scripts/fetch-dorts.ts`、`scripts/dorts/*`（新增）
+- `src/data/dorts/structures.json`、`src/data/dorts/basemap.json`（新增）
+- `src/data/dorts.ts`、`src/data/dorts-types.ts`（新增）、`src/data/scene.ts`、`src/data/levels.ts`、`src/data/schema.ts`
+- `src/data/structures/station-complex.ts`（捷運兩臂改為公告圖箱涵）
+- `src/geo/chain.ts`、`src/geo/polygonize.ts`、`src/geo/corridor.ts`（新增）、`src/geo/measure.ts`、`src/geo/project.ts`
+- `src/render/builders.ts`、`src/render/palette.ts`、`src/app/state.ts`、`src/app/permalink.ts`、`src/app/panels.ts`
+- `docs/architecture.md`、`docs/references.md`

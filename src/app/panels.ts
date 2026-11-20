@@ -160,7 +160,8 @@ export function createLegendPanel(): HTMLElement {
   const note = document.createElement("p");
   note.className = "note";
   note.textContent =
-    "幾何來源：OpenStreetMap contributors（ODbL）。地下深度放大 1.2 倍；各構造物樓層深度不同，數值多為推估值。";
+    "幾何來源：OpenStreetMap contributors（ODbL）、臺北市捷運工程局兩側禁限建範圍公告圖。" +
+    "地下深度放大 1.2 倍；各構造物樓層深度不同，數值多為推估值。";
   element.append(note);
   return element;
 }

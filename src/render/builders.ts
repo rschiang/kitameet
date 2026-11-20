@@ -2,7 +2,17 @@
  * 量體建模：多邊形以 ExtrudeGeometry 長出高度，折線以中心線兩側平移成扁帶後長出厚度。
  * 所有幾何在建模時就把底面高程烘焙進頂點，之後僅以 position／scale 做視圖壓縮。
  */
-import { BackSide, DoubleSide, ExtrudeGeometry, Mesh, Shape, type BufferGeometry } from "three";
+import {
+  BackSide,
+  CatmullRomCurve3,
+  DoubleSide,
+  ExtrudeGeometry,
+  Mesh,
+  Shape,
+  TubeGeometry,
+  Vector3,
+  type BufferGeometry,
+} from "three";
 import { corridorPolygon } from "../geo/offset.ts";
 import { exaggerate } from "./depth.ts";
 import type { Feature } from "../data/schema.ts";
@@ -48,6 +58,18 @@ function extrude(points: [number, number][], height: number, base: number): Buff
   return geometry;
 }
 
+/**
+ * 圓形隧道：以軸心折線掃出管狀量體。
+ * 深度放大只作用於軸心高程，半徑維持真實值，否則隧道會被壓成扁管。
+ */
+function tube(points: [number, number][], axis: number, radius: number): BufferGeometry {
+  const curve = new CatmullRomCurve3(points.map(([x, y]) => new Vector3(x, axis, -y)));
+  const segments = Math.max(8, points.length - 1);
+  const geometry = new TubeGeometry(curve, segments, radius, 12, false);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 /** 由 {@link Feature} 建立可直接加入場景的 mesh；幾何不足時回傳 null。 */
 export function buildFeatureMesh(feature: Feature): Mesh | null {
   // 深度放大作用於上下兩端高程，高度由差值求得，避免分別放大造成錯位
@@ -56,7 +78,9 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   const height = exaggerate(trueBase + (feature.height ?? 1)) - base;
 
   let geometry: BufferGeometry;
-  if (feature.geometry.polygon && feature.geometry.polygon.length >= 3) {
+  if (feature.geometry.tube && feature.geometry.tube.length >= 2) {
+    geometry = tube(feature.geometry.tube, base, feature.radius ?? 3);
+  } else if (feature.geometry.polygon && feature.geometry.polygon.length >= 3) {
     geometry = extrude(feature.geometry.polygon, height, base);
   } else if (feature.geometry.polyline && feature.geometry.polyline.length >= 2) {
     const band = corridorPolygon(feature.geometry.polyline, feature.width ?? 3);
@@ -68,7 +92,8 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   const status = feature.status ?? "existing";
   // 站體外殼只畫背面，做出掀蓋紙盒的效果，使內部月台、股道不被遮住；
   // 樓板則以半透明呈現，仍能看出層層相疊的關係。
-  const shell = feature.layer === "station-box" && feature.kind !== "slab";
+  const shell =
+    feature.kind === "station-box" || (feature.layer === "station-box" && feature.kind !== "slab");
   const slab = feature.kind === "slab";
   // 分層大廳同樣半透明，否則會遮住同一構造物下層的月台與股道。
   const room = feature.kind === "station" && !shell;
