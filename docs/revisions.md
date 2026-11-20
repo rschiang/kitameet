@@ -49,3 +49,39 @@ OSM 的 `level` 標法與市府及營運單位的樓層稱呼不一致，站體�
 
 - `src/data/schema.ts`（`LEVELS`）
 - `src/data/overrides.ts`
+
+## 2026-11-20：地下構造分層化與構造物樓層表
+
+**變更內容**
+
+- 新增 `src/data/levels.ts`：每個地下構造物各有一份樓層表（樓板高程與淨高）與結構底高程，樓層代號降為標籤。`src/data/schema.ts` 的 `LEVELS` 改為僅供未指定構造物的量體使用的預設表。
+- 捷運台北車站與機場捷運 A1 站的單一 OSM 輪廓改為排除，改由 `src/data/structures/station-complex.ts` 產生分層量體：逐層樓板、大廳、月台、股道、通道、垂直動線與地下街連通道。
+- 地下高程於建模時放大 1.2 倍，單一入口為 `src/render/depth.ts`。
+
+**理由**
+
+OSM 只有 2D 輪廓，捷運台北車站因而只能以單一巨塊呈現，無法表現站區的多層結構。樓層代號亦不足以表示深度：同樣標為 B2 的樓層，臺鐵高鐵月台層位於 −14.5 公尺、捷運板南線大廳層位於 −11.0 公尺。機場捷運 A1 車站的開挖深度 27.1 公尺與各層用途取自捷運局文獻，其餘高程為推估。
+
+**受影響的資料檔**
+
+- `src/data/levels.ts`、`src/data/structures/station-complex.ts`（新增）
+- `src/data/schema.ts`、`src/data/overrides.ts`、`src/data/scene.ts`
+- `src/render/depth.ts`、`src/render/builders.ts`
+
+## 2026-11-20：方案 B 的改建區間改以延平北路為西界
+
+**變更內容**
+
+- 新增 `REBUILD_ZONE`：改建區間自延平北路一段東側（局部座標 x −524）至中山北路一段東側（x 460）。新建股道不再以既有喉管節點為終點，改為延伸至該區間的界線。
+- 區間內的既有高鐵隧道（`way/13991375`、`way/323105864`、`way/381111230`、`way/593866771`）切為兩截，區間內的部分標為拆除重建。
+- `docs/proposals.md` 刪除「新建股道的接軌點落在既有喉管之外」的限制敘述。
+
+**理由**
+
+方案 B 原本即包含自延平北路以東改建高鐵隧道，先前的模型只將新建股道接至既有喉管（約在重慶北路），因而將提案範圍內的延伸誤判為超出既有喉管的限制。西界取延平北路是因其西側為機場捷運 A1 車站與 C1、D1 聯開大樓的共構基地（地下四層、開挖深度約 27.1 公尺），已無改建空間。東界 460 公尺依示意圖估算。
+
+**受影響的資料檔**
+
+- `src/data/scenarios/proposal-b.ts`（`REBUILD_ZONE`、`connector()`）
+- `src/app/scenario.ts`、`src/geo/offset.ts`（`splitPolylineAtX`）
+- `docs/proposals.md`

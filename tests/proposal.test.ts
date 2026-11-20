@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 import { featuresFor } from "../src/app/scenario.ts";
 import { baselineById } from "../src/data/scene.ts";
 import {
-  EAST_THROAT,
   NEW_PLATFORM_LENGTH,
   PLATFORM_OFFSETS,
-  WEST_THROAT,
+  REBUILD_ZONE,
   proposalB,
 } from "../src/data/scenarios/proposal-b.ts";
-import { decompose, polygonAxis } from "../src/geo/measure.ts";
+import { polygonAxis } from "../src/geo/measure.ts";
 import { PLATFORM_WIDTH } from "../src/data/schema.ts";
 
 const features = featuresFor("proposal-b");
@@ -58,19 +57,38 @@ describe("方案 B 幾何", () => {
     }
   });
 
-  it("新建股道兩端對齊既有高鐵路廊的中心線", () => {
-    const bearing = polygonAxis(baselineById("way/584167409")!.geometry.polygon!).bearing;
+  it("新建股道西至延平北路、東至中山北路", () => {
     for (const name of Object.keys(PLATFORM_OFFSETS)) {
       for (const side of ["北", "南"]) {
         const track = byId.get(`proposal-b/track/${name}-${side}`);
         expect(track, `${name}${side}`).toBeDefined();
         const line = track!.geometry.polyline!;
-        // 兩端的橫向位置須落在既有喉管的路廊線上；縱向可超出喉管
-        const west = decompose(WEST_THROAT, bearing, line[0]).lateral;
-        const east = decompose(EAST_THROAT, bearing, line[line.length - 1]).lateral;
-        expect(Math.abs(west), `${name}${side} 西端`).toBeLessThan(3);
-        expect(Math.abs(east), `${name}${side} 東端`).toBeLessThan(3);
+        expect(Math.abs(line[0][0] - REBUILD_ZONE.westX), `${name}${side} 西端`).toBeLessThan(1.5);
+        expect(
+          Math.abs(line[line.length - 1][0] - REBUILD_ZONE.eastX),
+          `${name}${side} 東端`,
+        ).toBeLessThan(1.5);
       }
+    }
+  });
+
+  it("改建區間內的既有高鐵股道標為改建、區間外保留", () => {
+    for (const { id, keep, limitX } of proposalB.rebuilt) {
+      const rebuilt = byId.get(`${id}/rebuilt`);
+      expect(rebuilt, id).toBeDefined();
+      expect(rebuilt!.status, id).toBe("removed");
+      const kept = byId.get(id);
+      expect(kept, id).toBeDefined();
+      for (const [x] of kept!.geometry.polyline!) {
+        if (keep === "west") expect(x, `${id} 保留段`).toBeLessThanOrEqual(limitX + 1e-6);
+        else expect(x, `${id} 保留段`).toBeGreaterThanOrEqual(limitX - 1e-6);
+      }
+    }
+  });
+
+  it("站內 5 條高鐵股道改作臺鐵使用", () => {
+    for (const id of ["way/593871124", "way/593871149", "way/615600478", "way/615600479", "way/615600481"]) {
+      expect(byId.get(id)?.status, id).toBe("repurposed");
     }
   });
 

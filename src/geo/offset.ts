@@ -81,3 +81,26 @@ export function corridorPolygon(center: Local[], width: number): Local[] {
   const right = offsetPolyline(center, -half);
   return [...left, ...right.slice().reverse()];
 }
+
+/**
+ * 以垂直於 x 軸的界線切割折線，回傳界線兩側的折線（含交點）。
+ * 多段穿越界線時以第一個交點為準；完全落在同側時另一側回傳空陣列。
+ */
+export function splitPolylineAtX(pts: Local[], x: number): { west: Local[]; east: Local[] } {
+  const west: Local[] = [];
+  const east: Local[] = [];
+  let crossed = false;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    (p[0] <= x ? west : east).push(p);
+    const q = pts[i + 1];
+    if (crossed || q === undefined) continue;
+    if ((p[0] - x) * (q[0] - x) >= 0) continue;
+    const t = (x - p[0]) / (q[0] - p[0]);
+    const cut: Local = [x, p[1] + (q[1] - p[1]) * t];
+    west.push(cut);
+    east.push(cut);
+    crossed = true;
+  }
+  return { west, east };
+}

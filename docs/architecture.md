@@ -10,6 +10,8 @@ graph TD
     fetch -- "局部公尺座標 JSON" --> osm["src/data/osm/*.json"]
     osm --> scene["src/data/scene.ts<br/>buildBaseline()"]
     overrides["src/data/overrides.ts<br/>文獻覆寫"] --> scene
+    levels["src/data/levels.ts<br/>構造物樓層表"] --> scene
+    structures["src/data/structures/station-complex.ts<br/>分層地下構造"] --> scene
     scene --> scenario["src/app/scenario.ts<br/>方案疊圖"]
     proposal["src/data/scenarios/proposal-b.ts"] --> scenario
     scenario --> builders["src/render/builders.ts<br/>量體建模"]
@@ -27,20 +29,28 @@ graph TD
 
 擷取範圍分為兩組：地下結構為 25.0400–25.0580° N、121.5050–121.5330° E；地面建物為 25.0440–25.0530° N、121.5090–121.5250° E。兩組範圍定義於 `data/queries/*.overpassql` 的 `[bbox:…]` 設定，腳本由查詢檔讀取後寫入產出檔的檔頭。
 
-## 樓層高程
+## 樓層標籤與構造物深度
 
-定義於 `src/data/schema.ts` 的 `LEVELS`，數值為推估值。
+`LevelId`（`elevated`、`G`、`B1`–`B4`）只是樓層標籤，不代表深度：臺鐵高鐵站體的 B2 為月台層、深度 −14.5 公尺，捷運台北車站的 B2 為板南線大廳層、深度 −11.0 公尺。
 
-| 代號 | 名稱 | 樓板高程 | 層高 |
+實際深度由 `src/data/levels.ts` 的 `STRUCTURES` 決定，每個構造物各有一份 `floor`（樓板高程）與 `height`（淨高）的樓層表，另記結構底高程。`levelOf(structure, level)` 為唯一查詢入口；構造物未指定、或該構造物沒有這一層時回退 `src/data/schema.ts` 的預設樓層表，不拋出例外。
+
+| 代號 | 名稱 | 預設樓板高程 | 預設層高 |
 |---|---|---|---|
 | `elevated` | 高架層 | 8.0 公尺 | 9.0 公尺 |
 | `G` | 地面層 | 0 | 7.0 公尺 |
-| `B1` | 穿堂層 | −7.0 公尺 | 6.0 公尺 |
-| `B2` | 月台層 | −14.5 公尺 | 7.5 公尺 |
-| `B3` | 共用穿堂層 | −22.0 公尺 | 7.5 公尺 |
-| `B4` | 捷運月台層 | −29.5 公尺 | 7.5 公尺 |
+| `B1` | 地下一層 | −7.0 公尺 | 6.0 公尺 |
+| `B2` | 地下二層 | −14.5 公尺 | 7.5 公尺 |
+| `B3` | 地下三層 | −22.0 公尺 | 7.5 公尺 |
+| `B4` | 地下四層 | −29.5 公尺 | 7.5 公尺 |
 
-軌道面為該層樓板高程減去月台面高度 1.1 公尺。
+軌道面為該層樓板高程減去月台面高度 1.1 公尺，以 `railLevelOf(structure, level)` 取得。各構造物的實際深度列於 `docs/status-quo.md`。
+
+## 分層地下構造
+
+OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一巨大多邊形。兩者於覆寫表標為 `exclude`，改由 `src/data/structures/station-complex.ts` 的 `buildStationComplex()` 產生分層量體，於 `buildBaseline()` 併入場景：站體的逐層樓板、B1 的五條南北向通道與南北迴廊、捷運兩臂的樓板與大廳、轉乘節點、垂直動線核心、A1 的月台與股道，以及地下街之間的連通道。
+
+平面一律由既有輪廓推算（`polygonAxis`、`advance`、`offsetPolyline`、`corridorPolygon`、`nearestPair`），不新增座標常數；深度一律取該構造物的樓層表。
 
 ## 量體結構
 
@@ -49,8 +59,8 @@ graph TD
 | 欄位 | 說明 |
 |---|---|
 | `id` | OSM id（如 `way/584167409`）或方案量體的識別字串 |
-| `kind` | 量體類型，決定建模與著色方式 |
-| `level` | 所屬樓層代號 |
+| `level` | 所屬樓層標籤 |
+| `structure` | 所屬構造物，決定該樓層標籤對應的實際深度 |
 | `layer` | 圖層代號，亦為圖層面板的開關單位 |
 | `geometry` | `polygon` 或 `polyline`，局部公尺座標 |
 | `base`、`height`、`width` | 底面高程、高度、折線量體寬度 |
@@ -65,6 +75,8 @@ graph TD
 ## 渲染
 
 多邊形以 `ExtrudeGeometry` 長出高度，折線先由中心線往兩側平移成封閉帶狀再長出厚度，兩者都在建模時將底面高程烘焙進頂點。
+
+地下高程於建模時放大 1.2 倍，使各層的相對關係在畫面上分辨得出。放大只作用於負高程，單一入口為 `src/render/depth.ts` 的 `exaggerate()`，於 `buildFeatureMesh` 中套用於量體的上下兩端高程、高度取兩端之差，資料層一律保存真實高程。
 
 紙模型色調以 `MeshStandardMaterial` 為底（`roughness` 0.95、`metalness` 0），於 `onBeforeCompile` 注入菲涅耳邊緣提亮與極淡的垂直漸層，不加描邊。車站量體與樓板以半透明呈現，外殼僅繪製背面，使內部的月台與股道不致遭到遮蔽。光照為半球光加單一平行光，色調映射採 ACES Filmic。
 
