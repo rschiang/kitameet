@@ -89,10 +89,10 @@ export interface LevelInfo {
 export const LEVELS: Record<LevelId, LevelInfo> = {
   elevated: { floor: 8.0, height: 9.0, label: "高架層", confidence: "estimated" },
   G: { floor: 0, height: 7.0, label: "地面層", confidence: "sourced" },
-  B1: { floor: -7.0, height: 6.0, label: "B1 穿堂層", confidence: "estimated" },
-  B2: { floor: -14.5, height: 7.5, label: "B2 月台層", confidence: "estimated" },
-  B3: { floor: -22.0, height: 7.5, label: "B3 共用穿堂層", confidence: "estimated" },
-  B4: { floor: -29.5, height: 7.5, label: "B4 捷運月台層", confidence: "estimated" },
+  B1: { floor: -7.0, height: 6.0, label: "地下一層", confidence: "estimated" },
+  B2: { floor: -14.5, height: 7.5, label: "地下二層", confidence: "estimated" },
+  B3: { floor: -22.0, height: 7.5, label: "地下三層", confidence: "estimated" },
+  B4: { floor: -29.5, height: 7.5, label: "地下四層", confidence: "estimated" },
 };
 
 /** 月台面高出軌道面的高度（公尺）。 */

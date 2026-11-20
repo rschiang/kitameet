@@ -11,14 +11,13 @@ import {
   DEFAULT_BUILDING_LEVELS,
   LANDMARK_IDS,
   OVERRIDES,
-  STATION_BOX_BOTTOM,
   STATION_OUTLINE_ID,
   levelFromOsm,
 } from "./overrides.ts";
+import { STRUCTURES, levelOf, railLevelOf, type StructureId } from "./levels.ts";
 import {
   LEVELS,
   PLATFORM_RISE,
-  railLevel,
   type Confidence,
   type Feature,
   type FeatureKind,
@@ -60,31 +59,38 @@ function buildingHeight(tags: Record<string, string>): number {
   return n * BUILDING_LEVEL_HEIGHT;
 }
 
-/** 依類型與樓層決定量體的底面高程與高度。 */
+/** 依類型、樓層與所屬構造物決定量體的底面高程與高度。 */
 function volumeOf(
   kind: FeatureKind,
   level: LevelId,
+  structure: StructureId | undefined,
   tags: Record<string, string>,
 ): { base: number; height: number; confidence: Confidence } {
   switch (kind) {
     case "platform":
       // 月台面與該層樓板齊平，量體自軌道面長出
-      return { base: railLevel(level), height: PLATFORM_RISE, confidence: "derived" };
+      return { base: railLevelOf(structure, level), height: PLATFORM_RISE, confidence: "derived" };
     case "track-hsr":
     case "track-tra":
     case "track-metro":
-      return { base: railLevel(level), height: TRACK_BAND_THICKNESS, confidence: "derived" };
-    case "underground-mall":
-    case "station":
       return {
-        base: LEVELS[level].floor,
-        height: LEVELS[level].height - 1.5,
+        base: railLevelOf(structure, level),
+        height: TRACK_BAND_THICKNESS,
+        confidence: "derived",
+      };
+    case "underground-mall":
+    case "station": {
+      const info = levelOf(structure, level);
+      return { base: info.floor, height: info.height, confidence: info.confidence };
+    }
+    case "passage":
+      return { base: levelOf(structure, level).floor, height: 4.0, confidence: "estimated" };
+    case "slab":
+      return {
+        base: levelOf(structure, level).floor - SLAB_THICKNESS,
+        height: SLAB_THICKNESS,
         confidence: "estimated",
       };
-    case "passage":
-      return { base: LEVELS[level].floor, height: 4.0, confidence: "estimated" };
-    case "slab":
-      return { base: LEVELS[level].floor - SLAB_THICKNESS, height: SLAB_THICKNESS, confidence: "estimated" };
     case "elevated-road":
       return { base: LEVELS.elevated.floor, height: 0.8, confidence: "estimated" };
     case "road":
@@ -99,14 +105,15 @@ function volumeOf(
 
 function convert(osm: OsmFeature): Feature | null {
   const override = OVERRIDES[osm.id] ?? {};
+  if (override.exclude === true) return null;
   const kind: FeatureKind = (override.kind ?? osm.kind) as FeatureKind;
-  if (kind === ("other" as FeatureKind)) return null;
 
   const level = override.level ?? levelFromOsm(kind, osm.level);
+  const structure = override.structure;
   const isLandmark = LANDMARK_IDS[osm.id] !== undefined && kind === "building";
   const layer: LayerId =
     override.layer ?? (isLandmark ? "landmark" : (LAYER_BY_KIND[kind] ?? "building"));
-  const volume = volumeOf(kind, level, osm.tags);
+  const volume = volumeOf(kind, level, structure, osm.tags);
 
   const feature: Feature = {
     id: osm.id,
@@ -119,6 +126,7 @@ function convert(osm: OsmFeature): Feature | null {
     confidence: override.confidence ?? volume.confidence,
     status: "existing",
   };
+  if (structure !== undefined) feature.structure = structure;
   const name = override.name ?? LANDMARK_IDS[osm.id] ?? osm.name;
   if (name !== undefined) feature.name = name;
   if (override.sourceNote !== undefined) feature.sourceNote = override.sourceNote;
@@ -130,17 +138,20 @@ function convert(osm: OsmFeature): Feature | null {
   return feature;
 }
 
-/** 站體各層樓板：平面取 OSM 站體輪廓，深度依 LEVELS 推估。 */
+const STATION: StructureId = "tra-hsr-station";
+
+/** 站體各層樓板：平面取 OSM 站體輪廓，深度取站體自己的樓層表。 */
 function stationSlabs(outline: Local[]): Feature[] {
-  const levels: LevelId[] = ["B1", "B2", "B3"];
+  const levels: LevelId[] = ["B1", "B2", "B3", "B4"];
   return levels.map((level) => ({
     id: `station-slab/${level}`,
     kind: "slab" as const,
-    name: `臺北車站 ${LEVELS[level].label}樓板`,
+    name: `臺北車站 ${level} 樓板`,
     level,
+    structure: STATION,
     layer: "station-box" as const,
     geometry: { polygon: outline },
-    base: LEVELS[level].floor - SLAB_THICKNESS,
+    base: levelOf(STATION, level).floor - SLAB_THICKNESS,
     height: SLAB_THICKNESS,
     confidence: "estimated" as const,
     sourceNote: "樓板高程依地上 6 層地下 4 層、總高 48 公尺推估，平面取 OSM 站體輪廓。",
@@ -148,20 +159,21 @@ function stationSlabs(outline: Local[]): Feature[] {
   }));
 }
 
-/** 站體地下量體：自地面至 B4 結構底，平面取 OSM 站體輪廓。 */
+/** 站體地下量體：自地面至結構底，平面取 OSM 站體輪廓。 */
 function stationBox(outline: Local[]): Feature {
+  const bottom = STRUCTURES[STATION].bottom;
   return {
     id: "station-box/underground",
     kind: "station-box",
     name: "臺北車站地下量體",
     level: "B4",
+    structure: STATION,
     layer: "station-box",
     geometry: { polygon: outline },
-    base: STATION_BOX_BOTTOM,
-    height: -STATION_BOX_BOTTOM - 0.5,
+    base: bottom,
+    height: -bottom - 0.5,
     confidence: "estimated",
-    sourceNote:
-      "地下 4 層的開挖範圍以 OSM 站體輪廓推估，結構底取 −33.5 公尺；實際地下連續壁位置未知。",
+    sourceNote: `地下 4 層的開挖範圍以 OSM 站體輪廓推估，結構底取 ${bottom} 公尺；實際地下連續壁位置未知。`,
     status: "existing",
   };
 }
