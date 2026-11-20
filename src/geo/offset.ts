@@ -82,6 +82,22 @@ export function corridorPolygon(center: Local[], width: number): Local[] {
   return [...left, ...right.slice().reverse()];
 }
 
+/** 線段與垂直於 x 軸之界線的交點；未穿越回傳 null。 */
+function crossingAt(a: Local, b: Local, x: number): Local | null {
+  if ((a[0] - x) * (b[0] - x) >= 0 || a[0] === b[0]) return null;
+  const t = (x - a[0]) / (b[0] - a[0]);
+  return [x, a[1] + (b[1] - a[1]) * t];
+}
+
+/** 折線與垂直於 x 軸之界線的第一個交點；未穿越回傳 null。 */
+export function polylineCrossingAtX(pts: Local[], x: number): Local | null {
+  for (let i = 1; i < pts.length; i++) {
+    const cut = crossingAt(pts[i - 1], pts[i], x);
+    if (cut) return cut;
+  }
+  return null;
+}
+
 /**
  * 以垂直於 x 軸的界線切割折線，回傳界線兩側的折線（含交點）。
  * 多段穿越界線時以第一個交點為準；完全落在同側時另一側回傳空陣列。
@@ -95,9 +111,8 @@ export function splitPolylineAtX(pts: Local[], x: number): { west: Local[]; east
     (p[0] <= x ? west : east).push(p);
     const q = pts[i + 1];
     if (crossed || q === undefined) continue;
-    if ((p[0] - x) * (q[0] - x) >= 0) continue;
-    const t = (x - p[0]) / (q[0] - p[0]);
-    const cut: Local = [x, p[1] + (q[1] - p[1]) * t];
+    const cut = crossingAt(p, q, x);
+    if (!cut) continue;
     west.push(cut);
     east.push(cut);
     crossed = true;
