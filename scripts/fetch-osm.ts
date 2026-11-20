@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { ORIGIN, toLocal } from "../src/geo/project.ts";
+import type { OsmDataset, OsmFeature, OsmKind } from "../src/data/osm-types.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ENDPOINTS = [
@@ -56,36 +57,6 @@ type OverpassWay = {
   geometry?: OverpassNode[];
 };
 
-export type OsmKind =
-  | "platform"
-  | "track-hsr"
-  | "track-tra"
-  | "track-metro"
-  | "underground-mall"
-  | "station"
-  | "building"
-  | "elevated-road"
-  | "road"
-  | "other";
-
-export interface OsmFeature {
-  id: string;
-  source: "osm";
-  kind: OsmKind;
-  name?: string;
-  level?: number;
-  tags: Record<string, string>;
-  polygon?: [number, number][];
-  polyline?: [number, number][];
-}
-
-export interface OsmDataset {
-  generatedAt: string;
-  queryBbox: { south: number; west: number; north: number; east: number };
-  overpassTimestamp: string | null;
-  originLatLon: { lat: number; lon: number };
-  features: OsmFeature[];
-}
 
 /** 市民大道與忠孝橋引道等高架路段的名稱特徵。 */
 const ELEVATED_NAMES = ["市民大道", "忠孝橋", "引道", "高架"];
