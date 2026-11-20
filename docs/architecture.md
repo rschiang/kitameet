@@ -109,6 +109,6 @@ OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一�
 
 ## 部署
 
-`npm run build` 先以 `tsc --noEmit` 檢查型別，再由 Vite 建置至 `dist/`。`vite.config.ts` 的 `base` 由環境變數 `BASE_PATH` 決定，預設為 `/`。
+`npm run build` 先以 `tsc --noEmit` 檢查型別，再由 Vite 建置至 `dist/`。`vite.config.ts` 的 `base` 固定為 `./`，產出的資產路徑相對於 `index.html`，部署在網域根目錄或專案子路徑皆可載入。
 
-`.github/workflows/pages.yml` 於推送至 `main` 時執行測試與建置，建置時設定 `BASE_PATH=/kitameet-taipei/`，再以 `actions/upload-pages-artifact` 與 `actions/deploy-pages` 發布至 GitHub Pages。
+`.github/workflows/pages.yml` 於推送至 `main` 時執行測試與建置，再以 `actions/upload-pages-artifact` 與 `actions/deploy-pages` 發布至 GitHub Pages。網站路徑為相對路徑，更名儲存庫或改掛網域根目錄都不需要調整建置設定。
