@@ -37,7 +37,7 @@ export const STATION_OUTLINE_ID = "way/23641610";
 export const DEFAULT_BUILDING_LEVELS = 4;
 export const BUILDING_LEVEL_HEIGHT = 3.5;
 
-/** 列為地標的建物，與一般建物分屬不同圖層。細部建模的四座地標見 `structures/landmarks.ts`。 */
+/** 列為地標的建物，與一般建物分屬不同圖層。細部建模的二十座地標見 `structures/landmarks/`。 */
 export const LANDMARK_IDS: Record<string, string> = {
   "way/204711207": "亞洲廣場大樓",
   "way/605982572": "京站時尚廣場",
@@ -102,7 +102,7 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
       "OSM 標 public_transport=station、building=transportation，實為京站綜合大樓內的客運轉運站量體，非軌道車站；高度無標籤，以預設樓層數推估。",
   },
   // ── 細部建模的地標 ────────────────────────────────────
-  // 平面輪廓改由 `structures/landmarks.ts` 的台基、柱列、簷口與屋頂等量體取代。
+  // 平面輪廓改由 `structures/landmarks/` 的台基、柱列、簷口與屋頂等量體取代。
   [STATION_OUTLINE_ID]: {
     exclude: true,
     sourceNote: `${WIKI}：第四代站體長 149 公尺、寬 110 公尺、高 48 公尺，地上 6 層、地下 4 層。地上量體改以細部模型呈現，地下各層仍沿用本輪廓。`,

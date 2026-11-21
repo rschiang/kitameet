@@ -10,12 +10,14 @@ import {
   ExtrudeGeometry,
   Float32BufferAttribute,
   Mesh,
+  MeshStandardMaterial,
   Shape,
   ShapeUtils,
   TubeGeometry,
   Vector2,
   Vector3,
 } from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { corridorPolygon, offsetPolyline } from "../geo/offset.ts";
 import { exaggerate } from "./depth.ts";
 import type { Local } from "../geo/project.ts";
@@ -184,6 +186,19 @@ function slopedBand(
   return geometry;
 }
 
+/**
+ * 極淡填色的量體：路面、公園水域與地塊皆為半透明色塊，其下的量體仍看得見；
+ * 未列出者為實心。地塊幾乎全透明，只負責界定涵蓋範圍與承接陰影。
+ */
+const FILL_OPACITY: Partial<Record<Feature["kind"], number>> = {
+  road: 0.35,
+  terrain: 0.08,
+  water: 0.35,
+  green: 0.3,
+  sand: 0.35,
+  plaza: 0.25,
+};
+
 /** 由 {@link Feature} 建立可直接加入場景的 mesh；幾何不足時回傳 null。 */
 export function buildFeatureMesh(feature: Feature): Mesh | null {
   // 深度放大作用於上下兩端高程，高度由差值求得，避免分別放大造成錯位
@@ -229,10 +244,10 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   const slab = feature.kind === "slab";
   // 分層大廳同樣半透明，否則會遮住同一構造物下層的月台與股道。
   const room = feature.kind === "station" && !shell;
-  // 路面為半透明色塊，地形圖的道路邊線與其下的量體仍看得見
-  const road = feature.kind === "road";
+  const terrain = feature.kind === "terrain";
+  const fill = FILL_OPACITY[feature.kind];
   const opacity =
-    status === "removed" ? 0.25 : shell ? 0.4 : slab ? 0.15 : room ? 0.3 : road ? 0.35 : 1;
+    status === "removed" ? 0.25 : shell ? 0.4 : slab ? 0.15 : room ? 0.3 : (fill ?? 1);
   const material = createPaperMaterial({
     color: featureColor(
       feature.kind,
@@ -242,14 +257,14 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
     ),
     opacity,
     side: shell ? BackSide : DoubleSide,
-    // 樓板與外殼一律退讓給貼在它上面的量體
-    offset: slab || shell,
+    // 樓板、外殼與地塊一律退讓給貼在它上面的量體
+    offset: slab || shell || terrain,
   });
   material.userData.baseOpacity = opacity;
 
   const mesh = new Mesh(geometry, material);
   mesh.castShadow = feature.layer === "building" || feature.layer === "landmark";
-  mesh.receiveShadow = feature.level === "G";
+  mesh.receiveShadow = terrain || feature.level === "G";
   const userData: FeatureUserData = {
     featureId: feature.id,
     layer: feature.layer,
@@ -264,6 +279,69 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   if (feature.sourceNote !== undefined) userData.sourceNote = feature.sourceNote;
   mesh.userData = userData;
   mesh.name = feature.id;
+  return mesh;
+}
+
+/**
+ * 外觀與擺放方式的分組鍵：同鍵的量體併為單一 mesh 不改變任何呈現。
+ * 鍵涵蓋材質參數與 `applyMorph()` 會用到的每一項欄位。
+ */
+export function meshGroupKey(mesh: Mesh): string {
+  const data = mesh.userData as FeatureUserData;
+  const material = mesh.material as MeshStandardMaterial;
+  return [
+    data.layer,
+    data.level,
+    data.kind,
+    data.status,
+    material.color.getHexString(),
+    material.opacity.toFixed(3),
+    material.side,
+    material.polygonOffset ? 1 : 0,
+    data.base.toFixed(3),
+    data.trueBase.toFixed(3),
+    mesh.castShadow ? 1 : 0,
+    mesh.receiveShadow ? 1 : 0,
+  ].join("|");
+}
+
+/**
+ * 同組量體併為單一 mesh。
+ *
+ * 幾何先統一為無索引、且只留位置與法線：`ExtrudeGeometry` 帶 uv 而不帶索引、
+ * 放樣與斜帶量體帶索引而不帶 uv，屬性組合不一致時無法合併。
+ * 只有一項的組直接沿用原 mesh，保留其量體名稱與來源說明。
+ */
+export function mergeMeshes(key: string, group: Mesh[]): Mesh {
+  if (group.length === 1) return group[0];
+
+  const geometries = group.map((mesh) => {
+    const source = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+    const plain = new BufferGeometry();
+    plain.setAttribute("position", source.getAttribute("position"));
+    plain.setAttribute("normal", source.getAttribute("normal"));
+    return plain;
+  });
+  const merged = mergeGeometries(geometries, false);
+  for (const mesh of group) mesh.geometry.dispose();
+  for (let i = 1; i < group.length; i++) (group[i].material as MeshStandardMaterial).dispose();
+
+  const source = group[0].userData as FeatureUserData;
+  const mesh = new Mesh(merged, group[0].material);
+  mesh.castShadow = group[0].castShadow;
+  mesh.receiveShadow = group[0].receiveShadow;
+  // 合併後的 mesh 不再對應單一量體，逐項的名稱與來源說明一併略去
+  mesh.userData = {
+    featureId: key,
+    layer: source.layer,
+    level: source.level,
+    kind: source.kind,
+    confidence: source.confidence,
+    status: source.status,
+    base: source.base,
+    trueBase: source.trueBase,
+  } satisfies FeatureUserData;
+  mesh.name = key;
   return mesh;
 }
 

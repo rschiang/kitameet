@@ -8,7 +8,6 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   PCFSoftShadowMap,
-  PlaneGeometry,
   Plane,
   Scene,
   Vector3,
@@ -27,9 +26,14 @@ import {
   VIEW_TRANSITION_MS,
   type ViewMode,
 } from "../app/viewMode.ts";
-import { buildFeatureMesh, disposeMesh, type FeatureUserData } from "./builders.ts";
+import {
+  buildFeatureMesh,
+  disposeMesh,
+  meshGroupKey,
+  mergeMeshes,
+  type FeatureUserData,
+} from "./builders.ts";
 import { BACKGROUND_COLOR, setupLighting } from "./materials.ts";
-import { GROUND } from "./palette.ts";
 
 export interface CameraState {
   position: [number, number, number];
@@ -83,7 +87,6 @@ export class Viewer {
   private readonly perspectiveControls: OrbitControls;
   private readonly orthographicControls: OrbitControls;
   private readonly featureGroup = new Group();
-  private readonly ground: Mesh;
   private readonly clipPlane = new Plane(new Vector3(0, 0, 1), 0);
 
   private mode: ViewMode = "3d";
@@ -119,33 +122,17 @@ export class Viewer {
     this.scene.add(this.featureGroup);
     setupLighting(this.scene);
 
-    this.perspective = new PerspectiveCamera(PERSPECTIVE_FOV, 1, 1, 6000);
+    // 地面由涵蓋範圍的地塊量體承擔，場景不另設平面
+    this.perspective = new PerspectiveCamera(PERSPECTIVE_FOV, 1, 1, 12000);
     this.orthographic = new OrthographicCamera(-500, 500, 500, -500, -2000, 4000);
-
-    // 地面以半透明紙面呈現，讓地下結構在 3D 視圖中可見
-    this.ground = new Mesh(
-      new PlaneGeometry(4000, 4000),
-      new MeshStandardMaterial({
-        color: GROUND,
-        roughness: 1,
-        metalness: 0,
-        transparent: true,
-        opacity: 0.3,
-        depthWrite: false,
-      }),
-    );
-    this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.y = -0.2;
-    this.ground.renderOrder = 1;
-    this.ground.receiveShadow = true;
-    this.scene.add(this.ground);
 
     this.perspectiveControls = new OrbitControls(this.perspective, canvas);
     this.perspectiveControls.enableDamping = true;
     this.perspectiveControls.dampingFactor = 0.08;
     this.perspectiveControls.maxPolarAngle = Math.PI / 2 - 0.01;
     this.perspectiveControls.minDistance = 40;
-    this.perspectiveControls.maxDistance = 2500;
+    // 涵蓋範圍東西向約 4.3 公里，拉遠到此距離才看得全
+    this.perspectiveControls.maxDistance = 5000;
 
     this.orthographicControls = new OrbitControls(this.orthographic, canvas);
     this.orthographicControls.enableDamping = false;
@@ -184,7 +171,14 @@ export class Viewer {
     return this.mode === "aerial" ? this.orthographicControls : this.perspectiveControls;
   }
 
-  /** 重建所有量體；提案切換時整批替換。 */
+  /**
+   * 重建所有量體；提案切換時整批替換。
+   *
+   * 外觀與擺放方式相同的量體併為單一 mesh：涵蓋範圍內有上萬項量體，
+   * 逐項一個 mesh 時繪製呼叫的數量本身就使畫面低於 30 fps。
+   * 分組鍵涵蓋 {@link applyMorph} 與材質會用到的每一項（圖層、樓層、類型、方案狀態、
+   * 顏色、不透明度、底面高程與繪製旗標），因此分組不改變任何呈現行為。
+   */
   setFeatures(features: Feature[]): void {
     for (const mesh of this.meshes.values()) {
       this.featureGroup.remove(mesh);
@@ -192,11 +186,20 @@ export class Viewer {
     }
     this.meshes.clear();
 
+    const groups = new Map<string, Mesh[]>();
     for (const feature of features) {
       const mesh = buildFeatureMesh(feature);
       if (!mesh) continue;
-      this.meshes.set(feature.id, mesh);
-      this.featureGroup.add(mesh);
+      const key = meshGroupKey(mesh);
+      const list = groups.get(key);
+      if (list) list.push(mesh);
+      else groups.set(key, [mesh]);
+    }
+
+    for (const [key, group] of groups) {
+      const merged = mergeMeshes(key, group);
+      this.meshes.set(key, merged);
+      this.featureGroup.add(merged);
     }
     this.applyMorph();
     this.applyClipping();
@@ -281,9 +284,6 @@ export class Viewer {
   private applyMorph(): void {
     const t = this.morph;
     const squash = 1 + (AERIAL_SQUASH - 1) * t;
-    const groundMaterial = this.ground.material as MeshStandardMaterial;
-    groundMaterial.opacity = 0.3 * (1 - t);
-    this.ground.visible = t < 1;
     for (const mesh of this.meshes.values()) {
       const data = mesh.userData as FeatureUserData;
       const fade = AERIAL_HIDDEN_LAYERS[data.layer] ? 1 - t : 1;
@@ -322,7 +322,6 @@ export class Viewer {
   private applyClipping(): void {
     const planes = this.clipping ? [this.clipPlane] : [];
     const materials = [...this.meshes.values()].map((mesh) => mesh.material as MeshStandardMaterial);
-    materials.push(this.ground.material as MeshStandardMaterial);
     for (const material of materials) {
       material.clippingPlanes = planes;
       material.needsUpdate = true;

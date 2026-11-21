@@ -26,6 +26,8 @@ export type LayerId =
   | "building"
   | "elevated-road"
   | "road"
+  | "ground"
+  | "terrain"
   | "station-box"
   | "platform"
   | "track"
@@ -52,7 +54,12 @@ export type FeatureKind =
   | "landmark"
   | "elevated-road"
   | "road"
-  | "road-edge"
+  | "footway"
+  | "terrain"
+  | "water"
+  | "sand"
+  | "green"
+  | "plaza"
   | "tunnel"
   | "restriction";
 
@@ -139,6 +146,8 @@ export const LAYER_LABELS: Record<LayerId, string> = {
   building: "一般建物",
   "elevated-road": "高架道路",
   road: "道路",
+  ground: "公園水域",
+  terrain: "地塊",
   "station-box": "車站量體",
   platform: "月台",
   track: "股道",

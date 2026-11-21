@@ -2,6 +2,7 @@
  * 以折線為界切割量體：新建工程的開挖包絡邊緣與街道同向（方位約 −11 度），
  * 不是垂直於 x 軸的直線，因此不能以 {@link splitPolylineAtX} 落刀。
  */
+import { pointInPolygon, polygonArea } from "./measure.ts";
 import type { Local } from "./project.ts";
 
 /** 點相對於折線的側別：取最近線段，折線行進方向的左側為正，回傳帶號距離（公尺）。 */
@@ -112,4 +113,148 @@ export function splitPolylineByPolyline(
     left: pieces.filter((p) => p.left).map((p) => p.pts),
     right: pieces.filter((p) => !p.left).map((p) => p.pts),
   };
+}
+
+/**
+ * 線段 a→b 與環的第一個交點，連同所在的環邊編號與該邊上的參數。
+ * 以解析解求交，才能在封口時沿著環補上轉角頂點。
+ */
+function firstRingCrossing(
+  ring: Local[],
+  a: Local,
+  b: Local,
+): { point: Local; edge: number; t: number } | null {
+  const rx = b[0] - a[0];
+  const ry = b[1] - a[1];
+  let best: { point: Local; edge: number; t: number; s: number } | null = null;
+  for (let i = 0; i < ring.length; i++) {
+    const c = ring[i];
+    const d = ring[(i + 1) % ring.length];
+    const sx = d[0] - c[0];
+    const sy = d[1] - c[1];
+    const denom = rx * sy - ry * sx;
+    if (Math.abs(denom) < 1e-12) continue;
+    const qx = c[0] - a[0];
+    const qy = c[1] - a[1];
+    const s = (qx * sy - qy * sx) / denom;
+    const t = (qx * ry - qy * rx) / denom;
+    if (s < -1e-9 || s > 1 + 1e-9 || t < -1e-9 || t > 1 + 1e-9) continue;
+    if (best !== null && s >= best.s) continue;
+    best = { point: [a[0] + rx * s, a[1] + ry * s], edge: i, t, s };
+  }
+  return best === null ? null : { point: best.point, edge: best.edge, t: best.t };
+}
+
+/**
+ * 多邊形裁切至逆時針封閉環內；回傳界內的各塊（皆為逆時針的開放環）。
+ *
+ * 內外一律以 {@link pointInPolygon} 判定，不走 {@link sideOfPolyline}：
+ * 涵蓋範圍帶有凸出段，其凹角背後有一整片扇形區域的最近線段是同一個頂點，
+ * 取最近線段判側會在該處得到相反的答案。
+ *
+ * 界內的走訪切成數段後沿環縫合：自某段的離境點沿環的行進方向前進，遇到的下一個
+ * 入境點即該段的接續處，兩點之間的環頂點一併補入。離境點不可逕自配回同一段的
+ * 入境點：多邊形與環交錯數次時，那會使封口繞行幾乎整圈環。
+ */
+export function clipPolygonToRing(polygon: Local[], ring: Local[]): Local[][] {
+  const m = ring.length;
+  if (polygon.length < 3 || m < 3) return [];
+  // 環為逆時針，縫合時沿環補點的方向才對；多邊形一併正規化為逆時針
+  const source =
+    polygonArea(polygon) >= 0
+      ? polygon.map((p) => [...p] as Local)
+      : polygon.map((p) => [...p] as Local).reverse();
+  const n = source.length;
+
+  const inside = source.map((p) => pointInPolygon(p, ring));
+  if (inside.every((s) => s)) return [source];
+  if (inside.every((s) => !s)) return [];
+
+  /** 界內的連續走訪，附其入境與離境處在環上的位置（邊編號加邊上參數）。 */
+  const runs: { points: Local[]; entry: number; exit: number }[] = [];
+  const start = inside.indexOf(false);
+  let points: Local[] = [];
+  let entry = -1;
+  for (let i = 0; i < n; i++) {
+    const a = (start + i) % n;
+    const b = (start + i + 1) % n;
+    if (inside[a]) points.push(source[a]);
+    if (inside[a] === inside[b]) continue;
+    const cut = firstRingCrossing(ring, source[a], source[b]);
+    if (cut === null) continue;
+    if (!inside[a]) {
+      points = [cut.point];
+      entry = cut.edge + cut.t;
+      continue;
+    }
+    points.push(cut.point);
+    if (entry >= 0) runs.push({ points, entry, exit: cut.edge + cut.t });
+    points = [];
+    entry = -1;
+  }
+  if (runs.length === 0) return [];
+
+  const used = new Array<boolean>(runs.length).fill(false);
+  const out: Local[][] = [];
+  for (let s = 0; s < runs.length; s++) {
+    if (used[s]) continue;
+    const piece: Local[] = [];
+    let k = s;
+    for (let guard = 0; guard <= runs.length; guard++) {
+      used[k] = true;
+      piece.push(...runs[k].points);
+      // 沿環往前最近的入境點即接續處；入境與離境沿環必然交錯出現
+      let next = -1;
+      let nearest = Infinity;
+      for (let j = 0; j < runs.length; j++) {
+        let delta = runs[j].entry - runs[k].exit;
+        if (delta < 0) delta += m;
+        if (delta < nearest) {
+          nearest = delta;
+          next = j;
+        }
+      }
+      if (next < 0) break;
+      let edge = Math.floor(runs[k].exit);
+      const target = Math.floor(runs[next].entry);
+      if (!(edge === target && runs[next].entry >= runs[k].exit)) {
+        for (let step = 0; step < m; step++) {
+          edge = (edge + 1) % m;
+          piece.push([...ring[edge]] as Local);
+          if (edge === target) break;
+        }
+      }
+      if (next === s || used[next]) break;
+      k = next;
+    }
+    if (piece.length >= 3) out.push(piece);
+  }
+  return out;
+}
+
+/** 折線裁切至逆時針封閉環內；回傳界內的各段。 */
+export function clipPolylineToRing(line: Local[], ring: Local[]): Local[][] {
+  if (line.length < 2 || ring.length < 3) return [];
+  const inside = line.map((p) => pointInPolygon(p, ring));
+  if (inside.every((s) => s)) return [line.map((p) => [...p] as Local)];
+
+  const parts: Local[][] = [];
+  let part: Local[] = inside[0] ? [[...line[0]] as Local] : [];
+  for (let i = 0; i + 1 < line.length; i++) {
+    if (inside[i] === inside[i + 1]) {
+      if (inside[i + 1]) part.push([...line[i + 1]] as Local);
+      continue;
+    }
+    const cut = firstRingCrossing(ring, line[i], line[i + 1]);
+    if (cut === null) continue;
+    if (inside[i]) {
+      part.push(cut.point);
+      parts.push(part);
+      part = [];
+    } else {
+      part = [cut.point, [...line[i + 1]] as Local];
+    }
+  }
+  if (part.length >= 2) parts.push(part);
+  return parts.filter((p) => p.length >= 2);
 }

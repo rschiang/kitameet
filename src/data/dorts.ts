@@ -44,9 +44,8 @@ const STATION_TOP = -5.0;
 const BORE_AXIS_RISE = 1.5;
 /** 箱涵結構底低於軌道面的距離（公尺）。 */
 const BOX_BASE_DROP = 1.5;
-/** 限建線與道路邊線的帶寬（公尺）。 */
+/** 限建線的帶寬（公尺）。 */
 const RESTRICTION_WIDTH = 1.0;
-const ROAD_EDGE_WIDTH = 0.4;
 
 /** 附屬小面繼承 OSM 樓高的門檻：面積須達同一棟最大面的此比例。 */
 const MAIN_FACE_RATIO = 0.4;
@@ -434,22 +433,6 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
       status: "existing",
     });
   });
-
-  for (const road of basemap.roadEdges) {
-    features.push({
-      id: road.id,
-      kind: "road-edge",
-      level: "G",
-      layer: "road",
-      geometry: { polyline: road.line },
-      base: 0.05,
-      height: 0.1,
-      width: ROAD_EDGE_WIDTH,
-      confidence: "sourced",
-      sourceNote: `${SOURCE}所附 1/1000 地形圖的道路邊線。`,
-      status: "existing",
-    });
-  }
 
   return features;
 }

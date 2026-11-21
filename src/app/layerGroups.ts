@@ -1,5 +1,5 @@
 /**
- * 介面層的圖層分組：資料層的 {@link LayerId} 維持 11 種，
+ * 介面層的圖層分組：資料層的 {@link LayerId} 維持 13 種，
  * 開關只給使用者四組，避免面板塞滿一眼看不完的核取方塊。
  */
 import { LAYER_COLORS, LINE_COLORS } from "../render/palette.ts";
@@ -19,9 +19,9 @@ export const LAYER_GROUPS: LayerGroup[] = [
   {
     id: "surface",
     label: "地面街廓",
-    hint: "建物、地標、道路與高架道路",
+    hint: "建物、地標、道路、公園水域與地塊",
     swatch: LAYER_COLORS.building,
-    layers: ["building", "landmark", "road", "elevated-road"],
+    layers: ["building", "landmark", "road", "elevated-road", "ground", "terrain"],
   },
   {
     id: "rail",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Box3 } from "three";
 import { buildBaseline } from "../src/data/scene.ts";
-import { buildLandmarks, landmarkClaims } from "../src/data/structures/landmarks.ts";
+import { buildLandmarks, landmarkClaims } from "../src/data/structures/landmarks/index.ts";
 import { buildFeatureMesh } from "../src/render/builders.ts";
 import { pointInPolygon, polygonCentroid } from "../src/geo/measure.ts";
 import { insetRing } from "../src/geo/offset.ts";
@@ -18,18 +18,47 @@ const groupTop = (prefix: string): number =>
   );
 
 describe("地標細部量體", () => {
-  it("四座地標各有細部量體，最高點合於文獻或照片比例", () => {
-    for (const id of ["taipei-station", "post-office", "shin-kong", "north-gate"]) {
+  const SLUGS = [
+    "taipei-station",
+    "post-office",
+    "shin-kong",
+    "north-gate",
+    "presidential-office",
+    "judicial-building",
+    "zhongshan-hall",
+    "mitsui-warehouse",
+    "taiwan-museum",
+    "peace-monument",
+    "taipei-guest-house",
+    "longshan-temple",
+    "qingshan-temple",
+    "red-house",
+    "railway-department",
+    "moca-taipei",
+    "executive-yuan",
+    "control-yuan",
+    "jiancheng-circle",
+    "south-gate",
+  ];
+
+  it("二十座地標各有細部量體，最高點合於文獻或照片比例", () => {
+    for (const id of SLUGS) {
       expect(parts.filter((f) => f.id.startsWith(`landmark/${id}/`)).length, id).toBeGreaterThan(10);
     }
-    // 站體 48 公尺、新光尖頂 244.15 公尺為文獻值
+    // 站體 48 公尺、新光尖頂 244.15 公尺、司法大廈 31.8 公尺為文獻值
     expect(groupTop("taipei-station")).toBeCloseTo(48, 6);
     expect(groupTop("shin-kong")).toBeCloseTo(244.15, 6);
+    expect(groupTop("judicial-building")).toBeCloseTo(31.8, 6);
     // 郵局四層與北門城樓依立面照片推估，量級須合理
     expect(groupTop("post-office")).toBeGreaterThan(18);
     expect(groupTop("post-office")).toBeLessThan(24);
     expect(groupTop("north-gate")).toBeGreaterThan(12);
     expect(groupTop("north-gate")).toBeLessThan(16);
+    // 其餘地標的最高點須落在合理量級：最低的建成圓環廣場亦應高於 0.5 公尺
+    for (const id of SLUGS) {
+      expect(groupTop(id), id).toBeGreaterThan(0.5);
+      expect(groupTop(id), id).toBeLessThan(250);
+    }
   });
 
   it("地標量體一律歸入地標圖層的地面層，並附來源說明", () => {

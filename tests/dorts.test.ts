@@ -101,13 +101,32 @@ describe("公告圖取代 OSM 平面", () => {
   const features = buildBaseline();
   const faces = dortsBuildingPolygons();
 
+  /** 公告圖房屋面依外接矩形登錄格網：量體與面各以千計，逐一比對過慢。 */
+  const cell = 25;
+  const index = new Map<string, number[]>();
+  faces.forEach((face, i) => {
+    const xs = face.map((p) => p[0]);
+    const ys = face.map((p) => p[1]);
+    for (let gx = Math.floor(Math.min(...xs) / cell); gx <= Math.floor(Math.max(...xs) / cell); gx++) {
+      for (let gy = Math.floor(Math.min(...ys) / cell); gy <= Math.floor(Math.max(...ys) / cell); gy++) {
+        const key = `${gx},${gy}`;
+        const list = index.get(key);
+        if (list) list.push(i);
+        else index.set(key, [i]);
+      }
+    }
+  });
+  const insideAnyFace = (centre: Local): boolean =>
+    (index.get(`${Math.floor(centre[0] / cell)},${Math.floor(centre[1] / cell)}`) ?? []).some((i) =>
+      pointInPolygon(centre, faces[i]),
+    );
+
   it("形心落在公告圖建物面內的 OSM 建物不再出現，且該面承接其高度", () => {
     const osmBuildings = features.filter(
       (f) => f.id.startsWith("way/") && (f.kind === "building" || f.kind === "landmark"),
     );
     for (const building of osmBuildings) {
-      const centre = polygonCentroid(building.geometry.polygon!);
-      expect(faces.some((face) => pointInPolygon(centre, face)), building.id).toBe(false);
+      expect(insideAnyFace(polygonCentroid(building.geometry.polygon!)), building.id).toBe(false);
     }
 
     // 亞洲廣場大樓的輪廓改由公告圖提供，高度沿用 OSM 的 101 公尺
@@ -119,14 +138,20 @@ describe("公告圖取代 OSM 平面", () => {
     }
   });
 
-  it("公告圖提供道路邊線與捷運正線，OSM 路面仍保留於其下", () => {
+  it("公告圖提供捷運正線，路面改由 OSM 中心線合併而成", () => {
     const dorts = features.filter((f) => f.id.startsWith("dorts/"));
-    expect(dorts.filter((f) => f.kind === "road-edge").length).toBeGreaterThan(100);
+    // 地形圖的道路邊線不再輸出：路緣改由合併後的路面自己界定
+    expect(dorts.some((f) => f.layer === "road")).toBe(false);
     expect(dorts.filter((f) => f.kind === "track-metro").length).toBeGreaterThan(10);
     // 機場捷運不在公告圖範圍內，OSM 的正線須留下
     expect(features.some((f) => f.kind === "track-metro" && f.id.startsWith("way/"))).toBe(true);
-    // 路面為 OSM 的道路中心線外擴而成，與公告圖的路緣線並存
-    expect(features.filter((f) => f.kind === "road").length).toBeGreaterThan(100);
+    // 重疊的路面帶合併為互不重疊的單一路面網格，不再逐條 OSM way 各自成帶
+    const merged = features.filter((f) => f.id.startsWith("road/merged/"));
+    expect(merged.length).toBeGreaterThan(100);
+    expect(merged.every((f) => f.geometry.polygon !== undefined), "合併後一律為面").toBe(true);
+    expect(features.some((f) => f.kind === "road" && f.geometry.polyline !== undefined)).toBe(
+      false,
+    );
   });
 
   it("同一棟建物的附屬小面不繼承主量體樓高", () => {

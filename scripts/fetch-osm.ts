@@ -8,7 +8,15 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
-import { ORIGIN, toLocal } from "../src/geo/project.ts";
+import { ORIGIN, toLocal, type Local } from "../src/geo/project.ts";
+import { nearestOnPolyline } from "../src/geo/measure.ts";
+import {
+  OVERGROUND_BOUNDARY,
+  OVERGROUND_RING,
+  UNDERGROUND_BOUNDARY,
+  UNDERGROUND_RING,
+  insideRing,
+} from "../src/data/coverage.ts";
 import type { OsmDataset, OsmFeature, OsmKind } from "../src/data/osm-types.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -47,14 +55,23 @@ const KEPT_TAGS = [
   "name",
   "name:en",
   "area",
+  "leisure",
+  "landuse",
+  "natural",
+  "water",
+  "place",
+  "waterway",
+  "historic",
 ];
 
 type OverpassNode = { lat: number; lon: number };
+type OverpassMember = { type: string; ref: number; role?: string; geometry?: OverpassNode[] };
 type OverpassWay = {
   type: string;
   id: number;
   tags?: Record<string, string>;
   geometry?: OverpassNode[];
+  members?: OverpassMember[];
 };
 
 function parseLevel(tags: Record<string, string>): number | undefined {
@@ -65,6 +82,26 @@ function parseLevel(tags: Record<string, string>): number | undefined {
   const n = Number(first);
   return Number.isFinite(n) ? sign * Math.abs(n) : undefined;
 }
+
+/** 視為綠地的 `leisure` 與 `landuse` 值，以及只取橋隧的人行路線等級。 */
+const GREEN_LEISURE: Record<string, true> = {
+  park: true,
+  garden: true,
+  pitch: true,
+  playground: true,
+};
+const GREEN_LANDUSE: Record<string, true> = {
+  grass: true,
+  forest: true,
+  cemetery: true,
+  recreation_ground: true,
+};
+const FOOT_HIGHWAY: Record<string, true> = {
+  footway: true,
+  steps: true,
+  path: true,
+  cycleway: true,
+};
 
 export function classify(tags: Record<string, string>, level: number | undefined): OsmKind {
   const name = tags.name ?? "";
@@ -83,8 +120,24 @@ export function classify(tags: Record<string, string>, level: number | undefined
   // （華山車站舊站房、臺北轉運站），車站量體一律由 overrides.ts 指定
   if (tags.railway === "station") return "station";
   if (tags.building !== undefined) return "building";
+  // 二二八和平紀念碑的面只有 historic 標籤，不另列會在此被當作 other 捨棄
+  if (tags.historic === "memorial") return "building";
+
+  // 面狀地物：水域、沙洲、綠地與廣場，一律在道路之前判定
+  if (tags.natural === "water" || tags.waterway === "riverbank") return "water";
+  if (tags.natural === "sand" || tags.natural === "beach") return "sand";
+  if (GREEN_LEISURE[tags.leisure ?? ""]) return "green";
+  if (GREEN_LANDUSE[tags.landuse ?? ""]) return "green";
+  if (tags.natural === "wood" || tags.natural === "scrub") return "green";
+  if (tags.place === "square") return "plaza";
+  if (tags.highway === "pedestrian" && tags.area === "yes") return "plaza";
+
   // 高架與地面的區分在資料層依 bridge／layer 標籤判定，此處不看路名
-  if (tags.highway !== undefined) return "road";
+  if (tags.highway !== undefined) {
+    // 人行道網路只取橋隧：整片人行道帶進來會淹沒街廓，且與路面重疊
+    if (!FOOT_HIGHWAY[tags.highway]) return "road";
+    return tags.bridge !== undefined || tags.tunnel !== undefined ? "footway" : "other";
+  }
   if (tags.amenity === "parking") return "underground-mall";
   return "other";
 }
@@ -153,42 +206,113 @@ async function queryOverpass(query: string): Promise<unknown> {
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
+const toPoints = (geometry: OverpassNode[]): Local[] =>
+  geometry.map((n) => {
+    const [x, y] = toLocal(n.lon, n.lat);
+    return [round(x), round(y)] as Local;
+  });
+
+/** 多重多邊形外環的端點相接容差（公尺）。 */
+const RING_TOLERANCE = 0.5;
+
+const near = (a: Local, b: Local): boolean =>
+  Math.abs(a[0] - b[0]) <= RING_TOLERANCE && Math.abs(a[1] - b[1]) <= RING_TOLERANCE;
+
+/**
+ * 以端點相接把多重多邊形的 `outer` 成員串成封閉環。
+ * 串不成封閉環的成員捨棄並回報，不以未封閉的折線矇混成面。
+ */
+function assembleRings(parts: Local[][]): { rings: Local[][]; dropped: number } {
+  const pool = parts.filter((p) => p.length >= 2);
+  const used = new Array<boolean>(pool.length).fill(false);
+  const rings: Local[][] = [];
+  let dropped = 0;
+  for (let i = 0; i < pool.length; i++) {
+    if (used[i]) continue;
+    used[i] = true;
+    const chain = [...pool[i]];
+    for (;;) {
+      if (near(chain[0], chain[chain.length - 1])) break;
+      let extended = false;
+      for (let j = 0; j < pool.length; j++) {
+        if (used[j]) continue;
+        const part = pool[j];
+        const end = chain[chain.length - 1];
+        if (near(end, part[0])) chain.push(...part.slice(1));
+        else if (near(end, part[part.length - 1])) chain.push(...part.slice(0, -1).reverse());
+        else continue;
+        used[j] = true;
+        extended = true;
+        break;
+      }
+      if (!extended) break;
+    }
+    if (chain.length >= 4 && near(chain[0], chain[chain.length - 1])) rings.push(chain.slice(0, -1));
+    else dropped += 1;
+  }
+  return { rings, dropped };
+}
+
+/** 圖徵離涵蓋範圍界線超過此距離且全部頂點在界外者捨棄（公尺）。 */
+const COVERAGE_MARGIN = 80;
+
+function withinCoverage(points: Local[], ring: Local[], boundary: Local[]): boolean {
+  for (const p of points) {
+    if (insideRing(p, ring)) return true;
+    if (nearestOnPolyline(p, boundary).distance <= COVERAGE_MARGIN) return true;
+  }
+  return false;
+}
+
 function convert(
   json: { elements: OverpassWay[]; osm3s?: { timestamp_osm_base?: string } },
   bbox: OsmDataset["queryBbox"],
+  coverage: { ring: Local[]; boundary: Local[] },
 ): OsmDataset {
   const features: OsmFeature[] = [];
-  for (const el of json.elements) {
-    if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
-    const tags = el.tags ?? {};
+  const add = (id: string, tags: Record<string, string>, kind: OsmKind, points: Local[], asPolygon: boolean) => {
+    if (!withinCoverage(points, coverage.ring, coverage.boundary)) return;
     const kept: Record<string, string> = {};
     for (const key of KEPT_TAGS) if (tags[key] !== undefined) kept[key] = tags[key];
-
     const level = parseLevel(tags);
-    const kind = classify(tags, level);
+    const feature: OsmFeature = { id, source: "osm", kind, tags: kept };
+    if (tags.name !== undefined) feature.name = tags.name;
+    if (level !== undefined) feature.level = level;
+    if (asPolygon) feature.polygon = points;
+    else feature.polyline = points;
+    features.push(feature);
+  };
+
+  let brokenRings = 0;
+  for (const el of json.elements) {
+    const tags = el.tags ?? {};
+    const kind = classify(tags, parseLevel(tags));
     if (kind === "other") continue;
 
-    const pts = el.geometry.map((n) => {
-      const [x, y] = toLocal(n.lon, n.lat);
-      return [round(x), round(y)] as [number, number];
-    });
+    if (el.type === "relation") {
+      // 內環（沙洲）捨棄：Feature 不支援孔洞，沙洲另由 natural=sand 的面取得
+      const outer = (el.members ?? [])
+        .filter((m) => m.type === "way" && (m.role ?? "") === "outer" && m.geometry)
+        .map((m) => toPoints(m.geometry as OverpassNode[]));
+      if (outer.length === 0) continue;
+      const { rings, dropped } = assembleRings(outer);
+      brokenRings += dropped;
+      rings.forEach((ring, n) => {
+        add(`relation/${el.id}${rings.length > 1 ? `/${n}` : ""}`, tags, kind, ring, true);
+      });
+      continue;
+    }
+    if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
+
+    const pts = toPoints(el.geometry);
     const first = pts[0];
     const last = pts[pts.length - 1];
     const closed =
       pts.length > 3 && Math.abs(first[0] - last[0]) < 0.02 && Math.abs(first[1] - last[1]) < 0.02;
-
-    const feature: OsmFeature = {
-      id: `way/${el.id}`,
-      source: "osm",
-      kind,
-      tags: kept,
-    };
-    if (tags.name !== undefined) feature.name = tags.name;
-    if (level !== undefined) feature.level = level;
-    if (closed || tags.area === "yes") feature.polygon = pts.slice(0, closed ? -1 : undefined);
-    else feature.polyline = pts;
-    features.push(feature);
+    const asPolygon = closed || tags.area === "yes";
+    add(`way/${el.id}`, tags, kind, asPolygon && closed ? pts.slice(0, -1) : pts, asPolygon);
   }
+  if (brokenRings > 0) console.error(`${brokenRings} 個多重多邊形的外環串不成封閉環，已捨棄`);
 
   features.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
@@ -204,12 +328,16 @@ function convert(
 async function run(name: string) {
   const query = await readFile(join(ROOT, `data/queries/${name}.overpassql`), "utf8");
   const bbox = readBbox(query);
+  const coverage =
+    name === "underground"
+      ? { ring: UNDERGROUND_RING, boundary: UNDERGROUND_BOUNDARY }
+      : { ring: OVERGROUND_RING, boundary: OVERGROUND_BOUNDARY };
   const json = (await queryOverpass(query)) as Parameters<typeof convert>[0];
 
   await mkdir(join(ROOT, "data/cache"), { recursive: true });
   await writeFile(join(ROOT, `data/cache/${name}.json`), JSON.stringify(json), "utf8");
 
-  const dataset = convert(json, bbox);
+  const dataset = convert(json, bbox, coverage);
   const outDir = join(ROOT, "src/data/osm");
   await mkdir(outDir, { recursive: true });
   const tmp = join(outDir, `.${name}.json.tmp`);

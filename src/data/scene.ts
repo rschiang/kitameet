@@ -18,8 +18,15 @@ import {
   matchDortsBuildings,
   type OsmBuildingRef,
 } from "./dorts.ts";
-import { nearestOnPolyline, pointInPolygon, polygonCentroid } from "../geo/measure.ts";
-import { polylineLength } from "../geo/offset.ts";
+import {
+  nearestOnPolyline,
+  pointInPolygon,
+  polygonArea,
+  polygonCentroid,
+} from "../geo/measure.ts";
+import { corridorPolygon, polylineLength } from "../geo/offset.ts";
+import { polygonize } from "../geo/polygonize.ts";
+import { TERRAIN_DEPTH, OVERGROUND_RING, clipToCoverage } from "./coverage.ts";
 import type { Local } from "../geo/project.ts";
 import {
   METRO_LINES,
@@ -29,7 +36,7 @@ import {
   type MetroLineId,
   type StructureId,
 } from "./levels.ts";
-import { buildLandmarks, landmarkClaims } from "./structures/landmarks.ts";
+import { buildLandmarks, landmarkClaims } from "./structures/landmarks/index.ts";
 import { buildStationComplex } from "./structures/station-complex.ts";
 import { RAMP_GIRDER, VIADUCT_GIRDER, buildViaduct } from "./structures/viaduct.ts";
 import {
@@ -64,7 +71,17 @@ const LAYER_BY_KIND: Record<string, LayerId> = {
   building: "building",
   "elevated-road": "elevated-road",
   road: "road",
+  water: "ground",
+  sand: "ground",
+  green: "ground",
+  plaza: "ground",
 };
+
+/** 人行橋隧依樓層歸入高架或地面道路圖層；其餘類型查 {@link LAYER_BY_KIND}。 */
+function layerOf(kind: FeatureKind, level: LevelId): LayerId {
+  if (kind === "footway") return level === "elevated" ? "elevated-road" : "road";
+  return LAYER_BY_KIND[kind] ?? "building";
+}
 
 /**
  * 無高度標籤時的推估高度（公尺）：雨棚、通風井等附屬構造不適用一般樓層數。
@@ -160,7 +177,7 @@ const ROAD_WIDTH: Record<string, number> = {
 };
 const ROAD_WIDTH_DEFAULT = 12;
 
-/** 地面路面的底面高程與厚度（公尺）：薄薄一層鋪面，疊在地形圖道路邊線之下。 */
+/** 地面路面的底面高程與厚度（公尺）：薄薄一層鋪面，貼在地塊頂面之上。 */
 const ROAD_BASE = 0.02;
 const ROAD_THICKNESS = 0.06;
 /** 車行地下道的高程與厚度（公尺）。 */
@@ -168,6 +185,35 @@ const UNDERPASS_BASE = -5.0;
 const UNDERPASS_THICKNESS = 0.6;
 /** 匝道落地端的高程（公尺）。 */
 const RAMP_GROUND = 0.1;
+/** 人行天橋橋面（淨高 4.6 加梁深 0.8）、車行地下道人行段的高程、寬度與板厚（公尺）。 */
+const FOOT_BRIDGE_BASE = 5.4;
+const FOOT_TUNNEL_BASE = -4.5;
+const FOOT_WIDTH = 4;
+const FOOT_THICKNESS = 0.5;
+/** 只取橋隧的人行路線等級；地面人行道網路不建模。 */
+const FOOT_HIGHWAY: Record<string, true> = {
+  footway: true,
+  steps: true,
+  path: true,
+  cycleway: true,
+};
+
+/** 水域：感潮段水面低於兩岸地面約 3.5 公尺，主槽水深約 6 公尺，均為推估。 */
+const WATER_SURFACE = -3.5;
+const CHANNEL_BED = -9.5;
+/** 面積達此值者視為河道，其餘為池塘（平方公尺）。 */
+const CHANNEL_AREA = 50_000;
+const POND_BED = -1.2;
+const POND_SURFACE = -0.2;
+/** 沙洲頂面與厚度（公尺）。 */
+const SANDBAR_TOP = -2.0;
+const SANDBAR_THICKNESS = 1.5;
+/** 公園、綠地與廣場的薄層厚度（公尺）。 */
+const GROUND_FILL_THICKNESS = 0.15;
+
+const WATER_NOTE =
+  "淡水河、新店溪為感潮河段，水面取低於兩岸地面 3.5 公尺、河床取 9.5 公尺，" +
+  "依第十河川分署河道疏濬計畫的航道維護水深推估；池塘另取 1.2 公尺。均為推估值。";
 
 interface RoadVolume {
   kind: FeatureKind;
@@ -287,12 +333,31 @@ function rampNodeElevations(): Map<string, number> {
 }
 
 /**
- * 道路量體：高架與地面的區分一律以 `bridge`／`layer` 標籤判定，不看路名。
- * 匝道（`*_link`）在高架上時依 {@link rampNodeElevations} 做成斜坡。
+ * 道路量體：高架與地面的區分一律以 `bridge`／`tunnel`／`layer` 標籤判定，不看路名。
+ * 匝道（`*_link`）在高架上時依 {@link rampNodeElevations} 做成斜坡；
+ * 人行路線只有天橋與地下道進得了場景，兩者各自成一片薄板。
  */
 function roadOf(tags: Record<string, string>, polyline: Local[]): RoadVolume {
   const highway = tags.highway ?? "";
   const width = ROAD_WIDTH[highway] ?? ROAD_WIDTH_DEFAULT;
+  if (FOOT_HIGHWAY[highway]) {
+    if (tags.tunnel !== undefined) {
+      return {
+        kind: "footway",
+        level: "B1",
+        base: FOOT_TUNNEL_BASE,
+        height: FOOT_THICKNESS,
+        width: FOOT_WIDTH,
+      };
+    }
+    return {
+      kind: "footway",
+      level: "elevated",
+      base: FOOT_BRIDGE_BASE,
+      height: FOOT_THICKNESS,
+      width: FOOT_WIDTH,
+    };
+  }
   if (isElevated(tags)) {
     if (highway.endsWith("_link") && polyline.length >= 2) {
       const nodes = rampNodeElevations();
@@ -335,7 +400,8 @@ function volumeOf(
   level: LevelId,
   structure: StructureId | undefined,
   tags: Record<string, string>,
-): { base: number; height: number; confidence: Confidence } {
+  polygon: Local[] | undefined,
+): { base: number; height: number; confidence: Confidence; note?: string } {
   switch (kind) {
     case "platform":
       // 樓板面即軌道面，月台自樓板長高
@@ -367,9 +433,27 @@ function volumeOf(
         height: VIADUCT_GIRDER,
         confidence: "estimated",
       };
+    case "footway":
+      return { base: FOOT_BRIDGE_BASE, height: FOOT_THICKNESS, confidence: "estimated" };
     case "road":
-    case "road-edge":
       return { base: ROAD_BASE, height: ROAD_THICKNESS, confidence: "derived" };
+    case "water": {
+      // 河道與池塘的水深差一個量級，以面積區分
+      const channel = polygon !== undefined && Math.abs(polygonArea(polygon)) >= CHANNEL_AREA;
+      const base = channel ? CHANNEL_BED : POND_BED;
+      const top = channel ? WATER_SURFACE : POND_SURFACE;
+      return { base, height: top - base, confidence: "estimated", note: WATER_NOTE };
+    }
+    case "sand":
+      return {
+        base: SANDBAR_TOP - SANDBAR_THICKNESS,
+        height: SANDBAR_THICKNESS,
+        confidence: "estimated",
+        note: "沙洲頂面取低於兩岸地面 2 公尺、厚 1.5 公尺，為推估值。",
+      };
+    case "green":
+    case "plaza":
+      return { base: 0, height: GROUND_FILL_THICKNESS, confidence: "derived" };
     default: {
       const height = buildingHeight(tags);
       const sourced = Number.isFinite(Number(tags.height)) && Number(tags.height) > 0;
@@ -389,7 +473,7 @@ function convert(osm: OsmFeature): Feature | null {
   if (override.exclude === true) return null;
   // 道路的高架、地面、地下一律重新判定：OSM 產出的 kind 對道路不再具權威性。
   // 已有覆寫指定類型、樓層或構造物者（如標為 highway=corridor 的地下街通道）不適用。
-  const roadKind = osm.kind === "road" || osm.kind === "elevated-road";
+  const roadKind = osm.kind === "road" || osm.kind === "elevated-road" || osm.kind === "footway";
   const overridden =
     override.kind !== undefined || override.level !== undefined || override.structure !== undefined;
   const road = roadKind && !overridden ? roadOf(osm.tags, osm.polyline ?? []) : undefined;
@@ -426,9 +510,8 @@ function convert(osm: OsmFeature): Feature | null {
   if (override.structure !== undefined) structure = override.structure;
 
   const isLandmark = LANDMARK_IDS[osm.id] !== undefined && kind === "building";
-  const layer: LayerId =
-    override.layer ?? (isLandmark ? "landmark" : (LAYER_BY_KIND[kind] ?? "building"));
-  const volume = volumeOf(kind, level, structure, osm.tags);
+  const layer: LayerId = override.layer ?? (isLandmark ? "landmark" : layerOf(kind, level));
+  const volume = volumeOf(kind, level, structure, osm.tags, osm.polygon);
 
   const feature: Feature = {
     id: osm.id,
@@ -448,6 +531,7 @@ function convert(osm: OsmFeature): Feature | null {
   const name = override.name ?? LANDMARK_IDS[osm.id] ?? osm.name;
   if (name !== undefined) feature.name = name;
   if (override.sourceNote !== undefined) feature.sourceNote = override.sourceNote;
+  else if (volume.note !== undefined) feature.sourceNote = volume.note;
   if (kind === "track-hsr" || kind === "track-tra" || kind === "track-metro") {
     feature.width = TRACK_BAND_WIDTH;
   } else if (road && osm.polygon === undefined) {
@@ -456,6 +540,128 @@ function convert(osm: OsmFeature): Feature | null {
   if (feature.geometry.polyline && feature.geometry.polyline.length < 2) return null;
   if (feature.geometry.polygon && feature.geometry.polygon.length < 3) return null;
   return feature;
+}
+
+/** 道路面合併時的節點量化格距與最小面積（公尺、平方公尺）。 */
+const MERGE_SNAP = 0.5;
+const MERGE_MIN_AREA = 2;
+
+const MERGE_NOTE = "OSM 道路中心線依等級推估路寬後，同高程的路面合併為單一面。";
+
+/**
+ * 可合併的路面：等高的平直帶狀量體。
+ * 兩端高程不同的匝道與引道不合併，維持逐條呈現，否則坡度會被壓平。
+ */
+function mergeableRoad(feature: Feature): boolean {
+  if (feature.kind !== "road" && feature.kind !== "elevated-road" && feature.kind !== "footway") {
+    return false;
+  }
+  return (
+    (feature.geometry.polyline?.length ?? 0) >= 2 &&
+    feature.width !== undefined &&
+    feature.base !== undefined &&
+    feature.height !== undefined &&
+    feature.baseEnd === undefined
+  );
+}
+
+/** 多邊形依外接矩形登錄格網，供形心的覆蓋判定篩候選。 */
+function polygonIndex(polygons: Local[][], cell: number): Map<string, number[]> {
+  const index = new Map<string, number[]>();
+  polygons.forEach((polygon, i) => {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [x, y] of polygon) {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    for (let gx = Math.floor(minX / cell); gx <= Math.floor(maxX / cell); gx++) {
+      for (let gy = Math.floor(minY / cell); gy <= Math.floor(maxY / cell); gy++) {
+        const key = `${gx},${gy}`;
+        const list = index.get(key);
+        if (list) list.push(i);
+        else index.set(key, [i]);
+      }
+    }
+  });
+  return index;
+}
+
+/** 格網的單一儲存格查詢；形心必在自己的儲存格內，不需查鄰格。 */
+const cellAt = (index: Map<string, number[]>, p: Local, cell: number): number[] =>
+  index.get(`${Math.floor(p[0] / cell)},${Math.floor(p[1] / cell)}`) ?? [];
+
+/**
+ * 重疊的路面帶合併為互不重疊的單一路面網格。
+ *
+ * 各帶的邊展開為線段集合後交給 {@link polygonize} 求面，重疊處因此被分割為小面；
+ * 再保留形心落在任一路面帶內的面，街廓與圓環中央等被道路圍住的面即被捨棄。
+ * 合併後不再帶路名，面板沒有逐量體資訊，無使用者可見的損失。
+ */
+export function mergeRoadSurfaces(features: Feature[]): Feature[] {
+  const groups = new Map<string, Feature[]>();
+  for (const feature of features) {
+    if (!mergeableRoad(feature)) continue;
+    const key = `${feature.kind}|${feature.level}|${(feature.base as number).toFixed(2)}|${(feature.height as number).toFixed(2)}`;
+    const list = groups.get(key);
+    if (list) list.push(feature);
+    else groups.set(key, [feature]);
+  }
+
+  const merged: Feature[] = [];
+  for (const [key, group] of groups) {
+    const bands = group.map((f) =>
+      corridorPolygon(f.geometry.polyline as Local[], f.width as number),
+    );
+    const segments: [Local, Local][] = [];
+    for (const band of bands) {
+      for (let i = 0; i < band.length; i++) segments.push([band[i], band[(i + 1) % band.length]]);
+    }
+    const faces = polygonize(segments, {
+      snap: MERGE_SNAP,
+      minArea: MERGE_MIN_AREA,
+      maxArea: Number.POSITIVE_INFINITY,
+    });
+
+    const cell = 50;
+    const bandLookup = polygonIndex(bands, cell);
+    const covered = faces.filter((face) => {
+      const centre = polygonCentroid(face);
+      return cellAt(bandLookup, centre, cell).some((i) => pointInPolygon(centre, bands[i]));
+    });
+
+    // `polygonize` 不處理孔洞：完全包在另一條路面帶裡的短路段會另成一面，
+    // 與包住它的面重疊。包住者已覆蓋同一塊路面，被包者直接捨棄。
+    const areas = covered.map((face) => Math.abs(polygonArea(face)));
+    const faceLookup = polygonIndex(covered, cell);
+    const kept = covered.filter((face, i) => {
+      const centre = polygonCentroid(face);
+      return !cellAt(faceLookup, centre, cell).some(
+        (j) => j !== i && areas[j] > areas[i] && pointInPolygon(centre, covered[j]),
+      );
+    });
+
+    const sample = group[0];
+    kept.forEach((face, n) => {
+      merged.push({
+        id: `road/merged/${key}/${n}`,
+        kind: sample.kind,
+        level: sample.level,
+        layer: sample.layer,
+        geometry: { polygon: face },
+        base: sample.base,
+        height: sample.height,
+        confidence: "derived",
+        sourceNote: MERGE_NOTE,
+        status: "existing",
+      });
+    });
+  }
+  return merged;
 }
 
 let cached: Feature[] | null = null;
@@ -478,8 +684,16 @@ export function buildBaseline(): Feature[] {
     if (feature) byId.set(osm.id, feature);
   }
 
-  const osmBuildings: OsmBuildingRef[] = [];
+  // 涵蓋範圍的裁切須早於公告圖比對：比對依形心判定，裁切會使形心移位，
+  // 兩者順序顛倒會讓跨越範圍界線的建物在比對後才變形，與公告圖的房屋面重疊。
+  // 裁切後的量體不再進入最後一輪裁切：切口頂點就落在界線上，重切會把它判在界外。
+  const clipped = new Map<string, Feature>();
   for (const feature of byId.values()) {
+    for (const piece of clipToCoverage(feature)) clipped.set(piece.id, piece);
+  }
+
+  const osmBuildings: OsmBuildingRef[] = [];
+  for (const feature of clipped.values()) {
     if (feature.kind !== "building" && feature.kind !== "landmark") continue;
     const polygon = feature.geometry.polygon;
     if (!polygon) continue;
@@ -493,19 +707,25 @@ export function buildBaseline(): Feature[] {
   }
   const matched = matchDortsBuildings(osmBuildings);
 
-  for (const [id, feature] of byId) {
+  for (const [id, feature] of clipped) {
     if (matched.replaced.has(id)) {
-      byId.delete(id);
+      clipped.delete(id);
       continue;
     }
-    // 公告圖的道路邊線疊在 OSM 路面上，兩者並存：邊線為路緣、路面為依等級外擴的色塊
+    // 公告圖只提供捷運正線的平面；路面一律由 OSM 中心線合併而成
     if (feature.kind === "track-metro" && dortsReplacesMetroTrack(feature.geometry.polyline ?? [])) {
-      byId.delete(id);
+      clipped.delete(id);
     }
   }
 
+  // 橋墩定位依賴逐條高架主線的幾何，必須在道路合併之前取得
   const trunkIds = new Set(trunkDecks().map((deck) => deck.id));
-  const decks = [...byId.values()].filter((f) => trunkIds.has(f.id));
+  const decks = [...clipped.values()].filter((f) => trunkIds.has(f.id.split("#")[0]));
+  const viaduct = buildViaduct(decks);
+
+  const mergedRoads = mergeRoadSurfaces([...clipped.values()]);
+  for (const [id, feature] of clipped) if (mergeableRoad(feature)) clipped.delete(id);
+
   const claims = landmarkClaims();
   /** 地標認領範圍內的建物面改由細部量體呈現：地形圖常把一座地標切成好幾塊面。 */
   const claimed = (feature: Feature): boolean => {
@@ -515,14 +735,28 @@ export function buildBaseline(): Feature[] {
     const centre = polygonCentroid(polygon);
     return claims.some((claim) => pointInPolygon(centre, claim));
   };
-  const features = [
-    ...byId.values(),
-    ...buildViaduct(decks),
-    ...buildStationComplex(),
-    ...buildDorts(matched.attributes),
-  ]
+
+  const features = [...clipped.values()]
     .filter((feature) => !claimed(feature))
-    .concat(buildLandmarks());
+    .concat(
+      [...mergedRoads, ...viaduct, ...buildStationComplex(), ...buildDorts(matched.attributes)]
+        .filter((feature) => !claimed(feature))
+        .concat(buildLandmarks())
+        .flatMap(clipToCoverage),
+    );
+  features.push({
+    id: "terrain/overground",
+    kind: "terrain",
+    name: "涵蓋範圍地塊",
+    level: "G",
+    layer: "terrain",
+    geometry: { polygon: OVERGROUND_RING },
+    base: -TERRAIN_DEPTH,
+    height: TERRAIN_DEPTH,
+    confidence: "estimated",
+    sourceNote: `地面涵蓋範圍的土方量體，厚度 ${TERRAIN_DEPTH} 公尺為呈現用的設定值，非地質資料。`,
+    status: "existing",
+  });
   cached = features;
   return features;
 }

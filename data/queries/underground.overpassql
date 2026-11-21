@@ -1,6 +1,7 @@
 /* 臺北車站周邊地下結構：月台、股道、地下街、車站量體。
-   範圍：環河北路—新生南路、民生西路—長沙街／凱達格蘭大道。 */
-[out:json][timeout:180][bbox:25.0400,121.5050,25.0580,121.5330];
+   範圍為地面與地下兩圈涵蓋範圍的外接矩形加 100 公尺餘裕，
+   界外的圖徵由 scripts/fetch-osm.ts 依 src/data/coverage.ts 的地下範圍濾除。 */
+[out:json][timeout:600][bbox:25.0250,121.4760,25.0595,121.5395];
 (
   way["railway"="platform"];
   way["railway"="rail"];

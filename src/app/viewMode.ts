@@ -2,12 +2,13 @@ import type { LayerId, LevelId } from "../data/schema.ts";
 
 export type ViewMode = "3d" | "aerial";
 
-/** 空拍（正投影俯視）模式隱藏的圖層：地面以上的一切。 */
+/** 空拍（正投影俯視）模式隱藏的圖層：地面以上的一切，以及代表地面的地塊。 */
 export const AERIAL_HIDDEN_LAYERS: Partial<Record<LayerId, true>> = {
   building: true,
   landmark: true,
   "elevated-road": true,
   road: true,
+  terrain: true,
 };
 
 /** 空拍模式的高程壓縮比例：量體壓成薄板，僅保留相對厚度。 */

@@ -11,6 +11,11 @@ export type OsmKind =
   | "building"
   | "elevated-road"
   | "road"
+  | "footway"
+  | "water"
+  | "sand"
+  | "green"
+  | "plaza"
   | "other";
 
 export interface OsmFeature {

@@ -9,6 +9,9 @@ export const LAYER_COLORS: Record<LayerId, string> = {
   building: "#e8e2d6",
   "elevated-road": "#e0d9cb",
   road: "#ece7dc",
+  // 公園水域與地塊沿用底色：填色極淡，面與面之間靠不透明度區分
+  ground: "#e9e3d6",
+  terrain: GROUND,
   "station-box": "#d8cfc0",
   platform: "#cfd8e2",
   track: "#8d8478",
@@ -39,8 +42,10 @@ export const KIND_COLORS: Partial<Record<FeatureKind, string>> = {
   slab: "#ded7c8",
   // 隧道較站體量體深一階，才能與同屬捷運圖層的車站箱涵、股道區分
   tunnel: "#5d5390",
-  // 地形圖的道路邊線：較半透明路面深一階，才能在路面上看見
-  "road-edge": "#cfc7b6",
+  green: "#d9e0cb",
+  water: "#bcd3da",
+  sand: "#e6ddc6",
+  plaza: "#e9e3d6",
 };
 
 /** 方案狀態著色：新建提案紅、拆除灰、歸還臺鐵藍。 */
