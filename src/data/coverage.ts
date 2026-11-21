@@ -8,72 +8,88 @@
 import { clipPolygonToRing, clipPolylineToRing } from "../geo/clip.ts";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geo/measure.ts";
 import { toLocal, type Local } from "../geo/project.ts";
-import type { Feature } from "./schema.ts";
+import type { Feature, LayerId } from "./schema.ts";
 
 /** 地塊厚度（公尺）：深於最深的 B4 樓板與潛盾段。 */
 export const TERRAIN_DEPTH = 60;
 
 /**
+ * 兩圈共用的西緣與南緣。西緣自淡水河西岸切口（121.4905）一路正南，不再向西繞出
+ * 大漢溪河口與新店溪西岸；南緣沿莒光路、和平西路二段、南海路向東。
+ */
+const SHARED_WEST_AND_SOUTH: [number, number][] = [
+  [121.4905, 25.0478], // 西界切口北端
+  [121.4905, 25.031], // 西界 × 莒光路緯度
+  [121.49688, 25.03095], // 莒光路 × 西園路（南移 15 公尺納入莒光路）
+  [121.50416, 25.03111], // 莒光路 × 中華路二段
+  [121.5084, 25.03107], // 莒光路延伸線 × 和平西路二段（虛擬交會點）
+  [121.50923, 25.03036], // 和平西路二段 × 南海路（南移 15 公尺）
+  [121.51365, 25.03158], // 南海路
+  [121.51635, 25.03227], // 南海路
+];
+
+/**
+ * 兩圈共用的東緣：建國南北路。取路廊（含建國高架）逐緯度的最東頂點再外推約 20 公尺。
+ * 信義路口至仁愛路口之間取同一條經線 121.53831，不設轉折點。此經線切在仁愛路口
+ * 東側：高架（橋面中心線最東 121.53799）與地面主線完整在界內，OSM 標為
+ * `secondary_link`、實際為路口右轉側車道的一段（最東達 121.53906）落在界外。
+ */
+const SHARED_EAST: [number, number][] = [
+  [121.53831, 25.03766], // 仁愛路 × 建國南路（地面範圍的東南角；與信義路口同經度）
+  [121.53851, 25.0396],
+  [121.53811, 25.04096],
+  [121.5376, 25.04231],
+  [121.53734, 25.04367], // 自此以北路廊轉直，沿同一經線北上
+];
+
+/**
  * 地面涵蓋範圍（逆時針：北緣由東往西、西緣由北往南、南緣由西往東、東緣由南往北）。
  *
- * 北緣為南京東西路、西緣為淡水河與新店溪西岸、南緣為莒光路—南海路—仁愛路、
+ * 北緣為南京東西路、西緣為淡水河西岸、南緣為莒光路—和平西路二段—南海路—仁愛路、
  * 東緣為建國南北路。各段一律取街道中心線向外偏移 15 至 30 公尺以納入該街道本身；
  * 南海路例外，向內偏移 15 公尺以排除南海路本身。
  */
 const OVERGROUND_LONLAT: [number, number][] = [
-  [121.5371, 25.05218], // 建國北路 × 南京東路（東偏 30 公尺納入建國高架）
+  [121.53734, 25.05218], // 建國北路 × 南京東路
   [121.52248, 25.05243], // 中山北路 × 南京西路
   [121.51436, 25.0545], // 重慶北路 × 南京西路（北移 45 公尺，使建成圓環整圈在界內）
   [121.51176, 25.05405], // 延平北路 × 南京西路
   [121.5075, 25.05389], // 環河北路 × 南京西路
-  [121.4958, 25.05389], // 同緯度延伸至淡水河西岸
-  [121.4945, 25.0518], // 淡水河西岸水線以西 40 公尺
-  [121.4905, 25.0478],
-  [121.4775, 25.0463], // 大漢溪河口西岸
-  [121.4775, 25.044],
-  [121.4825, 25.0415], // 淡水河西岸
-  [121.4818, 25.0345], // 新店溪西岸
-  [121.483, 25.0312], // 莒光路緯度延伸至西岸（華江派出所以西）
-  [121.49688, 25.03095], // 莒光路 × 西園路（南移 15 公尺排除莒光路本身）
-  [121.50416, 25.03111], // 莒光路 × 中華路二段
-  [121.50709, 25.02663], // 中華路二段 × 南海路
-  [121.50891, 25.02943], // 南海路（北移 15 公尺排除南海路本身）
-  [121.50928, 25.03041], // 南海路
-  [121.51365, 25.03158], // 南海路
-  [121.51635, 25.03227], // 南海路
-  [121.51811, 25.0328], // 南海路 × 羅斯福路
-  [121.51674, 25.0349], // 愛國東路 × 中山南路／羅斯福路（中央銀行在界內）
-  [121.518, 25.03945], // 景福門（中山南路 × 仁愛路）
-  // 建國南路 × 仁愛路（南移 15 公尺納入仁愛路）。經度取地下範圍東緣（建國南北路）
-  // 在此緯度上的位置：兩圈共用這條界線，地面範圍不應凸出於地下範圍之外。
-  [121.53793, 25.03793],
+  [121.499, 25.0558], // 忠孝碼頭（淡水河西岸）
+  [121.4945, 25.0519], // 淡水河西岸
+  ...SHARED_WEST_AND_SOUTH,
+  [121.51674, 25.0349], // 愛國東路 × 中山南路
+  [121.51775, 25.0383], // 中山南路東側，景福門圓環以南
+  [121.51824, 25.03872], // 景福門圓環東南，圓環整圈納入界內
+  [121.52176, 25.03846], // 仁愛路一段南側（南移約 25 公尺納入仁愛路）
+  [121.52513, 25.03802], // 仁愛路二段南側
+  [121.53306, 25.0377], // 仁愛路三段南側
+  ...SHARED_EAST,
 ];
 
-/** 地面與地下共用的西緣與南緣：自淡水河西岸至南海路 × 羅斯福路。 */
-const SHARED_WEST_AND_SOUTH = OVERGROUND_LONLAT.slice(6, 21);
-
 /**
- * 地下涵蓋範圍：北緣推至民生東西路、南緣推至信義路，另含捷運中正紀念堂站。
+ * 地下涵蓋範圍：北緣推至民生東西路、西緣外推至機場捷運過河隧道末端以西、
+ * 南緣推至信義路，另含捷運中正紀念堂站的凸出段。
  *
- * 地面範圍的頂點「愛國東路 × 中山南路」不出現在此圈：中正紀念堂站的凸出段
- * 北緣（25.03560）已在其北側，照抄會使邊界自交。凸出段西端與該頂點同經度，
- * 直接接上景福門後仍完整涵蓋中央銀行一帶，界線不因此內縮。
+ * 地面範圍繞過景福門圓環的兩點不出現在此圈：中正紀念堂站凸出段的北緣（25.036）
+ * 已在其北側，照抄會使邊界自交。凸出段直接接上信義路 × 杭州南路後仍完整涵蓋
+ * 地面範圍，界線不因此內縮。
  */
 const UNDERGROUND_LONLAT: [number, number][] = [
-  [121.53712, 25.05808], // 建國北路 × 民生東路
+  [121.53727, 25.05808], // 建國北路 × 民生東路
   [121.52279, 25.05809], // 中山北路 × 民生西路
   [121.51376, 25.05717], // 重慶北路 × 民生西路
   [121.51158, 25.05712], // 延平北路 × 民生西路
   [121.50829, 25.05705], // 環河北路 × 民生西路
-  [121.4995, 25.05705], // 同緯度延伸至淡水河西岸
-  [121.4955, 25.0539], // 西岸水線以西，接上共用的西緣
+  [121.50248, 25.05843], // 民生西路緯度上的淡水河西岸
+  [121.4937, 25.0533], // 機場捷運隧道末端（121.49494, 25.05331）以西 120 公尺
   ...SHARED_WEST_AND_SOUTH,
   [121.5212, 25.0333], // 中正紀念堂站凸出段東南角
   [121.5212, 25.036], // 中正紀念堂站凸出段東北角
-  [121.51674, 25.0356], // 凸出段回到中山南路
-  [121.518, 25.03945], // 景福門
   [121.52436, 25.03568], // 信義路 × 杭州南路（北移 25 公尺排除東門站與信義路本身）
-  [121.5381, 25.03373], // 信義路 × 建國南路（北移 25 公尺）
+  [121.53831, 25.03373], // 信義路 × 建國南路（北移 25 公尺；經度同東緣，界線為一直線）
+  ...SHARED_EAST,
+  [121.53734, 25.05218], // 建國北路 × 南京東路，自此北上接民生東路
 ];
 
 /** 換算為局部公尺座標並斷言逆時針；裁切的內外判定依賴這項約定。 */
@@ -92,9 +108,20 @@ const closed = (r: Local[]): Local[] => [...r, r[0]];
 export const OVERGROUND_BOUNDARY: Local[] = closed(OVERGROUND_RING);
 export const UNDERGROUND_BOUNDARY: Local[] = closed(UNDERGROUND_RING);
 
-/** 依底面高程選涵蓋範圍：負值取地下、其餘取地面。 */
-export function coverageRingFor(base: number): Local[] {
-  return base < 0 ? UNDERGROUND_RING : OVERGROUND_RING;
+/** 以地下涵蓋範圍裁切的圖層；其餘圖層一律取地面範圍。 */
+const UNDERGROUND_LAYERS: Partial<Record<LayerId, true>> = {
+  "station-box": true,
+  platform: true,
+  track: true,
+  mall: true,
+  metro: true,
+  passage: true,
+  restriction: true,
+};
+
+/** 依圖層選涵蓋範圍：軌道系統取地下、街廓與面狀地物取地面。 */
+export function coverageRingFor(layer: LayerId): Local[] {
+  return UNDERGROUND_LAYERS[layer] ? UNDERGROUND_RING : OVERGROUND_RING;
 }
 
 /** 點是否落在範圍內（擷取腳本與測試共用）。 */
@@ -144,14 +171,44 @@ function pieces(feature: Feature, parts: Local[][], key: "polygon" | "polyline")
 }
 
 /**
+ * 點落在折線上的累積弧長比例。裁切產生的端點必定落在原折線上，
+ * 取最近線段的投影即為精確值；引道不自我交疊，不會配錯線段。
+ */
+function fractionAlong(line: Local[], point: Local): number {
+  const cumulative: number[] = [0];
+  for (let i = 1; i < line.length; i++) {
+    cumulative.push(
+      cumulative[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]),
+    );
+  }
+  const total = cumulative[cumulative.length - 1];
+  if (total <= 0) return 0;
+  let best = 0;
+  let nearest = Infinity;
+  for (let i = 0; i + 1 < line.length; i++) {
+    const [ax, ay] = line[i];
+    const dx = line[i + 1][0] - ax;
+    const dy = line[i + 1][1] - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((point[0] - ax) * dx + (point[1] - ay) * dy) / len2)) : 0;
+    const d = Math.hypot(ax + t * dx - point[0], ay + t * dy - point[1]);
+    if (d < nearest) {
+      nearest = d;
+      best = (cumulative[i] + t * Math.sqrt(len2)) / total;
+    }
+  }
+  return best;
+}
+
+/**
  * 量體裁切至所屬涵蓋範圍；完全落在範圍外時回傳空陣列。
  *
- * 上緣輪廓（`polygonTop`）與兩端高程不同的斜帶量體只做形心判定：
- * 前者的頂點需與 `polygon` 一一對應、後者的兩端高程靠弧長內插，切開都會失真。
+ * 上緣輪廓（`polygonTop`）只做形心判定：其頂點需與 `polygon` 一一對應，切開會失真。
+ * 兩端高程不同的斜帶量體照切，切出的各段依弧長內插自己那一段的兩端高程。
  */
 export function clipToCoverage(feature: Feature): Feature[] {
   if (feature.kind === "terrain") return [feature];
-  const ring = coverageRingFor(feature.base ?? 0);
+  const ring = coverageRingFor(feature.layer);
   const { polygon, polygonTop, polyline, tube } = feature.geometry;
 
   if (polygon && polygon.length >= 3) {
@@ -161,10 +218,18 @@ export function clipToCoverage(feature: Feature): Feature[] {
   }
   if (polyline && polyline.length >= 2) {
     if (outsideBounds(polyline, ring)) return [];
-    if (feature.baseEnd !== undefined) {
-      return insideRing(polygonCentroid(polyline), ring) ? [feature] : [];
-    }
-    return pieces(feature, clipPolylineToRing(polyline, ring), "polyline");
+    const parts = clipPolylineToRing(polyline, ring);
+    if (feature.baseEnd === undefined) return pieces(feature, parts, "polyline");
+    // 兩端高程依弧長線性內插，切出的各段各自保留自己那一段的坡度
+    const base = feature.base ?? 0;
+    const span = feature.baseEnd - base;
+    return parts.map((part, n) => ({
+      ...feature,
+      id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
+      geometry: { ...feature.geometry, polyline: part },
+      base: base + span * fractionAlong(polyline, part[0]),
+      baseEnd: base + span * fractionAlong(polyline, part[part.length - 1]),
+    }));
   }
   if (tube && tube.length >= 2) {
     if (outsideBounds(tube, ring)) return [];

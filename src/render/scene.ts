@@ -52,6 +52,10 @@ const POLAR_EXIT_THRESHOLD = 2;
 
 /** 正投影視錐的半高（公尺），同時用於與透視距離互換。 */
 const ORTHO_HALF_HEIGHT = 620;
+
+/** 正投影縮放上下限：下限的視野半高 4,133 公尺可一次看全涵蓋範圍，上限約當半高 15 公尺。 */
+const ORTHO_MIN_ZOOM = 0.15;
+const ORTHO_MAX_ZOOM = 40;
 const PERSPECTIVE_FOV = 50;
 const TAN_HALF_FOV = Math.tan((PERSPECTIVE_FOV * Math.PI) / 360);
 
@@ -137,6 +141,9 @@ export class Viewer {
     this.orthographicControls = new OrbitControls(this.orthographic, canvas);
     this.orthographicControls.enableDamping = false;
     this.orthographicControls.enabled = false;
+    // OrbitControls 的 minZoom 預設為 0，不設上下限時滾輪可把畫面縮到空白
+    this.orthographicControls.minZoom = ORTHO_MIN_ZOOM;
+    this.orthographicControls.maxZoom = ORTHO_MAX_ZOOM;
 
     for (const controls of [this.perspectiveControls, this.orthographicControls]) {
       controls.addEventListener("change", () => {
@@ -230,7 +237,11 @@ export class Viewer {
     if (mode === "aerial") {
       // 記下使用者當下的視線方向，切回 3D 時還原
       this.restoreDirection = { azimuth, polar };
-      this.orthographic.zoom = clamp(ORTHO_HALF_HEIGHT / (distance * TAN_HALF_FOV), 0.05, 40);
+      this.orthographic.zoom = clamp(
+        ORTHO_HALF_HEIGHT / (distance * TAN_HALF_FOV),
+        ORTHO_MIN_ZOOM,
+        ORTHO_MAX_ZOOM,
+      );
       this.orthographic.position.copy(target).addScaledVector(dir, AERIAL_CAMERA_DISTANCE);
       this.cameraTween = { azimuth, polar, start: performance.now() };
     } else {
@@ -241,7 +252,7 @@ export class Viewer {
       const nextAzimuth = dragged ? azimuth : restore.azimuth;
       const nextPolar = Math.max(dragged ? polar : restore.polar, MIN_PERSPECTIVE_POLAR);
       const d = clamp(
-        ORTHO_HALF_HEIGHT / (Math.max(this.orthographic.zoom, 0.05) * TAN_HALF_FOV),
+        ORTHO_HALF_HEIGHT / (Math.max(this.orthographic.zoom, ORTHO_MIN_ZOOM) * TAN_HALF_FOV),
         this.perspectiveControls.minDistance,
         this.perspectiveControls.maxDistance,
       );

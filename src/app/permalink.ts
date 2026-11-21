@@ -31,7 +31,10 @@ export function encodeState(state: AppState): string {
   }
 
   const { position, target, zoom } = state.camera;
-  params.set("cam", [...position, ...target, zoom].map(round).join(","));
+  const camera = [...position, ...target].map(round);
+  // 正投影的 zoom 可小於 0.2，取三位小數才不致在往返網址時跳動
+  camera.push(Math.round(zoom * 1000) / 1000);
+  params.set("cam", camera.join(","));
   return params.toString();
 }
 

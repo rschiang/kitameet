@@ -1,7 +1,7 @@
 /* 涵蓋範圍內的地面地物：建物、主要道路、橋隧、公園綠地、廣場與水域。
    範圍為地面與地下兩圈涵蓋範圍的外接矩形加 100 公尺餘裕，
    界外的圖徵由 scripts/fetch-osm.ts 依 src/data/coverage.ts 的範圍濾除。 */
-[out:json][timeout:600][bbox:25.0250,121.4760,25.0595,121.5395];
+[out:json][timeout:600][bbox:25.0294,121.4895,25.0594,121.5395];
 (
   way["building"];
   relation["building"]["type"="multipolygon"];

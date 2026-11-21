@@ -18,6 +18,7 @@ import { dortsStationBoxes } from "../dorts.ts";
 import { corridorPolygon } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
 import undergroundJson from "../osm/underground.json";
+import surfaceJson from "../osm/surface.json";
 import type { OsmDataset } from "../osm-types.ts";
 import { STRUCTURES, levelOf, type StructureId } from "../levels.ts";
 import {
@@ -30,8 +31,13 @@ import {
 } from "../schema.ts";
 
 const underground = undergroundJson as unknown as OsmDataset;
+const surface = surfaceJson as unknown as OsmDataset;
+// 兩份資料集都查：機場捷運台北車站（A1）的輪廓只標 layer=-2，擷取時歸入地面資料集。
+// 同一 id 兩邊都有時取地下資料集，與 `scene.ts` 的優先順序一致
 const OSM_POLYGONS = new Map<string, Local[]>(
-  underground.features.flatMap((f) => (f.polygon ? [[f.id, f.polygon] as const] : [])),
+  [...surface.features, ...underground.features].flatMap((f) =>
+    f.polygon ? [[f.id, f.polygon] as const] : [],
+  ),
 );
 
 /** OSM 輪廓多邊形；缺漏時立即失敗，避免靜默產生空場景。 */

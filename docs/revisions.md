@@ -160,3 +160,32 @@ OSM 的 `layer` 是繪圖壓線順序，不是深度：同一條縱貫線正線�
 - `src/render/palette.ts`、`src/render/builders.ts`、`src/render/materials.ts`、`src/app/panels.ts`
 - `scripts/fetch-osm.ts`（高架不再以路名判斷）
 - `docs/architecture.md`、`docs/status-quo.md`、`docs/proposals.md`
+
+## 2026-11-21：涵蓋範圍重畫、裁切改依圖層，擷取分類修正
+
+**變更內容**
+
+- 兩圈涵蓋範圍重畫：西緣自淡水河西岸切口（121.4905）一路正南至莒光路緯度，不再繞出大漢溪河口與新店溪西岸；南緣自莒光路平順接上和平西路二段再轉南海路，去掉原本深入三元街、西藏路的 V 形缺口；地面範圍改繞過景福門圓環，圓環 96 個節點全數在界內；東緣在信義路口至仁愛路口之間取同一條經線 121.53831，兩圈不再於路口凸出；地下範圍的西北角外推至機場捷運過河隧道末端以西 120 公尺。
+- 裁切改依圖層選範圍（`coverageRingFor(layer)` 與 `UNDERGROUND_LAYERS`），不再依底面高程。
+- 兩端高程不同的斜帶量體改為真正裁切，切出的各段以 `fractionAlong()` 依弧長內插自己那一段的兩端高程。
+- 擷取階段的分類改以 `location` 與 `level` 判深度（`isUnderground()`），`underground.overpassql` 移除 `way["building"]["layer"~"^-"]`；停車場僅在 `parking=underground` 時歸入地下街。台北地下街連通層（`way/646262272`）於 `overrides.ts` 補上 `kind`。
+- `convert()` 改為兩輪，外環整圈由已自成圖徵的成員 way 串成的多重多邊形環於擷取階段捨棄；`relation/7684913` 與 `relation/7875303` 與成員重合的外環因此不再輸出。
+- 正投影相機加上縮放上下限 0.15 至 40，永久連結的 `cam` 改以三位小數記錄縮放。
+- 擷取範圍縮為新兩圈的外接矩形加 100 公尺餘裕：25.0294–25.0594° N、121.4895–121.5395° E。
+- 淡水河西岸的機場捷運引道（`way/865642192`–`way/865642195`）與高架段（`way/209147242`、`way/209147243`）、與台北雙星 D1 塔基重疊的機場捷運台北車站地面輪廓（`relation/7684913`）以覆寫排除；`station-complex.ts` 的 OSM 輪廓改由地下、地面兩份資料集查詢，機場捷運台北車站的輪廓只標 `layer=-2`，新分類下歸入地面資料集。
+
+**理由**
+
+前一版上線後出現九項缺陷，成因分為四類。其一，OSM 的 `layer` 是繪圖壓線順序而非深度：市區建物為了壓在高架橋下常標 `layer=-1`，27 棟地面建物（台北凱撒大飯店、金融中心、中正紀念堂等）因此被判為地下街、埋入 B1，再以地下範圍裁切後浮在地面界線之外。其二，依底面高程選範圍對面狀地物不成立：水域底面為 −9.5 與 −1.2 公尺，卻隨地下範圍裁切，淡水河關聯面長達 18 公里，北端一路延伸到民生西路界線而未與地塊切齊。其三，折線的有向面積趨近於零，形心公式失真（實測 `way/137195204` 偏離 1,735 公尺且內外判定翻轉），以形心決定斜帶量體的留去會將界內的上橋引道整條捨棄，只剩橋墩。其四，`OrbitControls` 的 `minZoom` 預設為 0，空拍模式的滾輪可將縮放壓到 0.005 以下，畫面只剩背景，而每格只乘 1.05，縮回原尺度要花上百格。
+
+界線本身的缺失另有三處：地面範圍的頂點落在景福門圓環正中、南緣在中華路二段南伸形成深入三元街與西藏路的缺口、地下範圍的西緣壓在淡水河中段而截斷機場捷運過河隧道。
+
+**受影響的資料檔**
+
+- `src/data/coverage.ts`（兩圈頂點、`coverageRingFor()`、`clipToCoverage()`、新增 `fractionAlong()`）
+- `scripts/fetch-osm.ts`（`isUnderground()`、`classify()`、`convert()`）、`data/queries/*.overpassql`
+- `src/data/osm/underground.json`、`src/data/osm/surface.json`（重新擷取）
+- `src/data/overrides.ts`、`src/data/structures/station-complex.ts`
+- `src/render/scene.ts`、`src/app/permalink.ts`
+- `tests/coverage.test.ts`
+- `docs/architecture.md`、`docs/status-quo.md`

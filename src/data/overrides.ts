@@ -225,9 +225,14 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   // 兩者的單一 OSM 輪廓改由 `structures/station-complex.ts` 的分層量體取代。
   "way/366766273": { exclude: true },
   "way/1226069619": { exclude: true },
+  // 機場捷運台北車站多重多邊形剩下的外環（成員 `way/463218475`）：
+  // 地面輪廓與台北雙星 D1 的塔基重疊，站體本身已由分層量體呈現
+  "relation/7684913": { exclude: true },
   "way/646262272": {
-    // 名稱標為「台北車站」，位置卻在市民大道下方的台北地下街西段，故歸入台北地下街
+    // 名稱標為「台北車站」，位置卻在市民大道下方的台北地下街西段，故歸入台北地下街。
+    // 面上只有 building=transportation 與 layer=-1，擷取階段會判為地面建物，故在此指定類型
     name: "台北地下街連通層",
+    kind: "underground-mall",
     layer: "mall",
     level: "B1",
     structure: "mall-y",
@@ -315,6 +320,20 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
     confidence: "sourced",
     sourceNote: `${DORTS}：A1 車站 B3 為捷運月台層。OSM 原圖徵無 level 標籤。`,
   }),
+  // 淡水河西岸的機場捷運引道（`865642*`）與高架段（`209147242`、`209147243`）：
+  // 地下涵蓋範圍向西擴只為保全過河隧道，這兩段既非地下結構也不在本模型的研究範圍，
+  // 留著會在河西以 B3 深度畫出一條不存在的隧道
+  ...assign(
+    [
+      "way/865642192",
+      "way/865642193",
+      "way/865642194",
+      "way/865642195",
+      "way/209147242",
+      "way/209147243",
+    ],
+    { exclude: true },
+  ),
 
   // ── 臺鐵、高鐵月台 ────────────────────────────────────
   ...assign(["way/584167409", "way/584167411"], {

@@ -103,7 +103,18 @@ const FOOT_HIGHWAY: Record<string, true> = {
   cycleway: true,
 };
 
-export function classify(tags: Record<string, string>, level: number | undefined): OsmKind {
+/**
+ * 是否真的在地下。OSM 的 `layer` 僅表示繪圖壓線順序：市區建物為了壓在高架橋下
+ * 常標 `layer=-1`，照此判定會把整棟地面建物埋入地下。深度一律看 `location` 與 `level`。
+ */
+function isUnderground(tags: Record<string, string>): boolean {
+  if (tags.location === "underground") return true;
+  if (tags.location === "surface") return false;
+  const level = Number((tags.level ?? "").split(/[;,]/)[0]);
+  return Number.isFinite(level) && level < 0;
+}
+
+export function classify(tags: Record<string, string>): OsmKind {
   const name = tags.name ?? "";
   if (tags.railway === "platform") return "platform";
   if (tags.railway === "rail") {
@@ -113,7 +124,7 @@ export function classify(tags: Record<string, string>, level: number | undefined
   }
   if (tags.railway === "subway") return "track-metro";
   if (name.includes("地下街")) return "underground-mall";
-  if ((tags.building !== undefined || tags.shop === "mall") && level !== undefined && level < 0) {
+  if ((tags.building !== undefined || tags.shop === "mall") && isUnderground(tags)) {
     return "underground-mall";
   }
   // building=train_station、public_transport=station 也出現在一般建物上
@@ -138,7 +149,7 @@ export function classify(tags: Record<string, string>, level: number | undefined
     if (!FOOT_HIGHWAY[tags.highway]) return "road";
     return tags.bridge !== undefined || tags.tunnel !== undefined ? "footway" : "other";
   }
-  if (tags.amenity === "parking") return "underground-mall";
+  if (tags.amenity === "parking") return tags.parking === "underground" ? "underground-mall" : "other";
   return "other";
 }
 
@@ -218,37 +229,43 @@ const RING_TOLERANCE = 0.5;
 const near = (a: Local, b: Local): boolean =>
   Math.abs(a[0] - b[0]) <= RING_TOLERANCE && Math.abs(a[1] - b[1]) <= RING_TOLERANCE;
 
+type RingPart = { ref: number; points: Local[] };
+type AssembledRing = { points: Local[]; refs: number[] };
+
 /**
- * 以端點相接把多重多邊形的 `outer` 成員串成封閉環。
+ * 以端點相接將多重多邊形的 `outer` 成員串成封閉環，並記下組成各環的成員 way。
  * 串不成封閉環的成員捨棄並回報，不以未封閉的折線矇混成面。
  */
-function assembleRings(parts: Local[][]): { rings: Local[][]; dropped: number } {
-  const pool = parts.filter((p) => p.length >= 2);
+function assembleRings(parts: RingPart[]): { rings: AssembledRing[]; dropped: number } {
+  const pool = parts.filter((p) => p.points.length >= 2);
   const used = new Array<boolean>(pool.length).fill(false);
-  const rings: Local[][] = [];
+  const rings: AssembledRing[] = [];
   let dropped = 0;
   for (let i = 0; i < pool.length; i++) {
     if (used[i]) continue;
     used[i] = true;
-    const chain = [...pool[i]];
+    const chain = [...pool[i].points];
+    const refs = [pool[i].ref];
     for (;;) {
       if (near(chain[0], chain[chain.length - 1])) break;
       let extended = false;
       for (let j = 0; j < pool.length; j++) {
         if (used[j]) continue;
-        const part = pool[j];
+        const part = pool[j].points;
         const end = chain[chain.length - 1];
         if (near(end, part[0])) chain.push(...part.slice(1));
         else if (near(end, part[part.length - 1])) chain.push(...part.slice(0, -1).reverse());
         else continue;
         used[j] = true;
+        refs.push(pool[j].ref);
         extended = true;
         break;
       }
       if (!extended) break;
     }
-    if (chain.length >= 4 && near(chain[0], chain[chain.length - 1])) rings.push(chain.slice(0, -1));
-    else dropped += 1;
+    if (chain.length >= 4 && near(chain[0], chain[chain.length - 1])) {
+      rings.push({ points: chain.slice(0, -1), refs });
+    } else dropped += 1;
   }
   return { rings, dropped };
 }
@@ -270,8 +287,17 @@ function convert(
   coverage: { ring: Local[]; boundary: Local[] },
 ): OsmDataset {
   const features: OsmFeature[] = [];
-  const add = (id: string, tags: Record<string, string>, kind: OsmKind, points: Local[], asPolygon: boolean) => {
-    if (!withinCoverage(points, coverage.ring, coverage.boundary)) return;
+  const wayFeatures: OsmFeature[] = [];
+  /** 建成圖徵並推入 `into`；落在涵蓋範圍外時不推入並回傳 false。 */
+  const add = (
+    into: OsmFeature[],
+    id: string,
+    tags: Record<string, string>,
+    kind: OsmKind,
+    points: Local[],
+    asPolygon: boolean,
+  ): boolean => {
+    if (!withinCoverage(points, coverage.ring, coverage.boundary)) return false;
     const kept: Record<string, string> = {};
     for (const key of KEPT_TAGS) if (tags[key] !== undefined) kept[key] = tags[key];
     const level = parseLevel(tags);
@@ -280,29 +306,17 @@ function convert(
     if (level !== undefined) feature.level = level;
     if (asPolygon) feature.polygon = points;
     else feature.polyline = points;
-    features.push(feature);
+    into.push(feature);
+    return true;
   };
 
-  let brokenRings = 0;
+  // 第一輪只取 way，記下成為圖徵者
+  const emitted = new Set<number>();
   for (const el of json.elements) {
-    const tags = el.tags ?? {};
-    const kind = classify(tags, parseLevel(tags));
-    if (kind === "other") continue;
-
-    if (el.type === "relation") {
-      // 內環（沙洲）捨棄：Feature 不支援孔洞，沙洲另由 natural=sand 的面取得
-      const outer = (el.members ?? [])
-        .filter((m) => m.type === "way" && (m.role ?? "") === "outer" && m.geometry)
-        .map((m) => toPoints(m.geometry as OverpassNode[]));
-      if (outer.length === 0) continue;
-      const { rings, dropped } = assembleRings(outer);
-      brokenRings += dropped;
-      rings.forEach((ring, n) => {
-        add(`relation/${el.id}${rings.length > 1 ? `/${n}` : ""}`, tags, kind, ring, true);
-      });
-      continue;
-    }
     if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
+    const tags = el.tags ?? {};
+    const kind = classify(tags);
+    if (kind === "other") continue;
 
     const pts = toPoints(el.geometry);
     const first = pts[0];
@@ -310,9 +324,38 @@ function convert(
     const closed =
       pts.length > 3 && Math.abs(first[0] - last[0]) < 0.02 && Math.abs(first[1] - last[1]) < 0.02;
     const asPolygon = closed || tags.area === "yes";
-    add(`way/${el.id}`, tags, kind, asPolygon && closed ? pts.slice(0, -1) : pts, asPolygon);
+    const points = asPolygon && closed ? pts.slice(0, -1) : pts;
+    if (add(wayFeatures, `way/${el.id}`, tags, kind, points, asPolygon)) emitted.add(el.id);
+  }
+
+  // 第二輪的多重多邊形：外環若整圈由已自成圖徵的成員 way 串成，兩者幾何完全重合、
+  // 渲染時共面互閃，捨棄該環只留成員
+  let brokenRings = 0;
+  for (const el of json.elements) {
+    if (el.type !== "relation") continue;
+    const tags = el.tags ?? {};
+    const kind = classify(tags);
+    if (kind === "other") continue;
+
+    // 內環（沙洲）捨棄：Feature 不支援孔洞，沙洲另由 natural=sand 的面取得
+    const outer = (el.members ?? []).filter(
+      (m) => m.type === "way" && (m.role ?? "") === "outer" && m.geometry,
+    );
+    if (outer.length === 0) continue;
+    const { rings, dropped } = assembleRings(
+      outer.map((m) => ({ ref: m.ref, points: toPoints(m.geometry as OverpassNode[]) })),
+    );
+    brokenRings += dropped;
+    const kept = rings.filter((ring) => !ring.refs.every((ref) => emitted.has(ref)));
+    if (kept.length < rings.length) {
+      console.error(`relation/${el.id}：${rings.length - kept.length} 個外環與成員 way 重複，已捨棄`);
+    }
+    kept.forEach((ring, n) => {
+      add(features, `relation/${el.id}${kept.length > 1 ? `/${n}` : ""}`, tags, kind, ring.points, true);
+    });
   }
   if (brokenRings > 0) console.error(`${brokenRings} 個多重多邊形的外環串不成封閉環，已捨棄`);
+  for (const feature of wayFeatures) features.push(feature);
 
   features.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
