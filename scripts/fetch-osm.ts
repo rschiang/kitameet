@@ -60,6 +60,7 @@ const KEPT_TAGS = [
   "natural",
   "water",
   "place",
+  "surface",
   "waterway",
   "historic",
 ];
@@ -137,6 +138,10 @@ export function classify(tags: Record<string, string>): OsmKind {
   // 面狀地物：水域、沙洲、綠地與廣場，一律在道路之前判定
   if (tags.natural === "water" || tags.waterway === "riverbank") return "water";
   if (tags.natural === "sand" || tags.natural === "beach") return "sand";
+  // 淡水河的沙洲（中興新洲）在 OSM 標 place=islet；橋墩所在的混凝土小洲不算
+  if ((tags.place === "islet" || tags.place === "island") && tags.surface !== "concrete") {
+    return "sand";
+  }
   if (GREEN_LEISURE[tags.leisure ?? ""]) return "green";
   if (GREEN_LANDUSE[tags.landuse ?? ""]) return "green";
   if (tags.natural === "wood" || tags.natural === "scrub") return "green";

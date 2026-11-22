@@ -115,32 +115,44 @@ function lineOf(
 /** 以幾何判定所屬路線時，容許的頂點距離中位數上限（公尺）。 */
 const LINE_MATCH_DISTANCE = 25;
 
-let osmTracks: { line: MetroLineId; points: Local[] }[] | null = null;
+let osmTracks: { line: MetroLineId; lines: Local[][] }[] | null = null;
 
-/** OSM 中有 `ref` 的捷運正線，供公告圖量體比對路線。 */
-function metroRefTracks(): { line: MetroLineId; points: Local[] }[] {
+/**
+ * OSM 中有 `ref` 的捷運正線，依路線分組。
+ * 必須整條路線一起比對：同一條路線在 OSM 被切成數十條 way，
+ * 逐條取中位數會讓橫跨全線的長 way 勝過近在咫尺的短 way。
+ */
+function metroRefTracks(): { line: MetroLineId; lines: Local[][] }[] {
   if (osmTracks) return osmTracks;
   const byRef: Record<string, MetroLineId> = { BL: "bl", R: "r", G: "g", O: "o", A: "a" };
-  osmTracks = [];
+  const grouped = new Map<MetroLineId, Local[][]>();
   for (const feature of underground.features) {
     if (feature.kind !== "track-metro") continue;
     const line = byRef[feature.tags.ref ?? ""];
     const points = feature.polyline ?? [];
     if (line === undefined || points.length < 2) continue;
-    osmTracks.push({ line, points });
+    const group = grouped.get(line);
+    if (group) group.push(points);
+    else grouped.set(line, [points]);
   }
+  osmTracks = [...grouped].map(([line, lines]) => ({ line, lines }));
   return osmTracks;
 }
 
-/** 公告圖量體的所屬路線：頂點到 OSM 正線的距離中位數最小且不超過上限者。 */
+/** 各頂點到該路線最近一條正線的距離，取中位數。 */
+export function medianDistanceToLines(points: Local[], lines: Local[][]): number {
+  const distances = points
+    .map((p) => Math.min(...lines.map((line) => nearestOnPolyline(p, line).distance)))
+    .sort((a, b) => a - b);
+  return distances[Math.floor(distances.length / 2)];
+}
+
+/** 公告圖量體的所屬路線：頂點到該路線的距離中位數最小且不超過上限者。 */
 export function dortsLineOf(points: Local[]): MetroLineId | undefined {
   if (points.length === 0) return undefined;
   let best: { line: MetroLineId; distance: number } | undefined;
   for (const track of metroRefTracks()) {
-    const distances = points
-      .map((p) => nearestOnPolyline(p, track.points).distance)
-      .sort((a, b) => a - b);
-    const median = distances[Math.floor(distances.length / 2)];
+    const median = medianDistanceToLines(points, track.lines);
     if (best === undefined || median < best.distance) best = { line: track.line, distance: median };
   }
   if (best === undefined || best.distance > LINE_MATCH_DISTANCE) return undefined;

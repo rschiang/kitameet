@@ -1,12 +1,12 @@
 {
- "generatedAt": "2026-11-21T16:57:39.568Z",
+ "generatedAt": "2026-11-22T17:22:02.418Z",
  "queryBbox": {
   "south": 25.0294,
   "west": 121.4895,
   "north": 25.0594,
   "east": 121.5395
  },
- "overpassTimestamp": "2026-11-21T16:56:34Z",
+ "overpassTimestamp": "2026-11-22T17:20:19Z",
  "originLatLon": {
   "lat": 25.0478,
   "lon": 121.5172
@@ -12939,7 +12939,8 @@
     "location": "underground",
     "shop": "mall",
     "ref": "K",
-    "name": "東森廣場K區地下街"
+    "name": "東森廣場K區地下街",
+    "surface": "paving_stones"
    },
    "name": "東森廣場K區地下街",
    "level": -2,
@@ -15417,7 +15418,8 @@
     "tunnel": "yes",
     "location": "underground",
     "highway": "steps",
-    "name": "轉乘通道"
+    "name": "轉乘通道",
+    "surface": "concrete"
    },
    "name": "轉乘通道",
    "level": -2,
@@ -15754,7 +15756,8 @@
     "amenity": "parking",
     "parking": "underground",
     "operator": "臺北市停車管理工程處",
-    "name": "中山堂地下停車場"
+    "name": "中山堂地下停車場",
+    "surface": "asphalt"
    },
    "name": "中山堂地下停車場",
    "level": -1,

@@ -83,6 +83,15 @@ describe("公告圖量體", () => {
     }
   });
 
+  it("量體的路線以整條路線比對，不被橫跨全線的長 way 搶走", () => {
+    // 中華路下的箱涵屬小南門線：松山新店線在 OSM 被切成多條短 way，
+    // 逐條取中位數會讓貫穿全線的板南線 way/198199171 勝出
+    const box = features.find((f) => f.id === "dorts/N/box/1");
+    expect(box?.line).toBe("g");
+    expect(box!.base!).toBeCloseTo(METRO_LINES.g.rail - 1.5, 6);
+    expect(features.find((f) => f.id === "dorts/N/box/7")?.line).toBe("o");
+  });
+
   it("潛盾隧道與軌道中心線沒有重複畫法", () => {
     const duplicated = (items: Local[][]) =>
       items.some((a) =>

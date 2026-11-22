@@ -1,28 +1,33 @@
 /**
- * 市民大道高架的橋墩。
+ * 高架道路的橋墩。
  *
  * OSM 只有橋面中心線，沒有橋墩圖徵；位置與尺寸一律為推估：
- * 沿橋面每 {@link PIER_SPACING} 公尺一柱，兩幅橋面之間以單柱呈現。
+ * 沿各橋面中心線每 {@link PIER_SPACING} 公尺一柱，柱頂接該處的橋面底面。
  */
-import { nearestOnPolyline } from "../../geo/measure.ts";
+import { pointInPolygon } from "../../geo/measure.ts";
 import { polylineLength, truncatePolyline } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
-import { LEVELS, type Feature } from "../schema.ts";
+import { type Feature } from "../schema.ts";
 
 /** 主線橋面的梁深（公尺）：橋面頂維持 {@link LEVELS}.elevated 的 8.0 公尺。 */
 export const VIADUCT_GIRDER = 1.8;
 /** 匝道橋面的梁深（公尺）；單車道橋面較主線淺。 */
 export const RAMP_GIRDER = 1.0;
 
-/** 橋墩間距與斷面邊長（公尺）。 */
-const PIER_SPACING = 30;
-const PIER_SIZE = 1.6;
-/** 另一幅橋面納入同一根橋墩的距離上限（公尺）。 */
-const PAIR_DISTANCE = 30;
-/** 兩根橋墩視為同一根的距離（公尺）。 */
-const PIER_MERGE_DISTANCE = 5;
+/**
+ * 橋墩間距與斷面邊長（公尺）。間距取《中華技術》〈都市高架快速道路之設計與施工〉
+ * 所載市民大道跨徑（環河南路—金山街段 30～62 公尺、其餘路段 40～85 公尺）的下限。
+ */
+const PIER_SPACING = 40;
+const PIER_SIZE = 2.0;
+/** 兩根橋墩視為同一根的距離（公尺）：雙幅並行的橋面共用一柱。 */
+const PIER_MERGE_DISTANCE = 8;
+/** 共用一柱的柱頂高差上限（公尺）；超過即為不同層的高架，各自立柱。 */
+const PIER_MERGE_RISE = 1.0;
 
-const NOTE = "橋墩位置與尺寸為推估：沿橋面中心線每 30 公尺一柱，兩幅橋面間以單柱呈現。";
+const NOTE =
+  `橋墩位置與尺寸為推估：沿各高架橋面中心線每 ${PIER_SPACING} 公尺一柱，` +
+  "柱頂接該處橋面底面，柱底落在河道內者伸至河床。";
 
 /** 以中心點與邊長產生正方形輪廓。 */
 function square(centre: Local, size: number): Local[] {
@@ -36,51 +41,58 @@ function square(centre: Local, size: number): Local[] {
 }
 
 /**
- * 高架主線橋面的橋墩。`decks` 須為高架主線量體（匝道不立柱，由主線橋墩支撐）。
+ * 高架橋面的橋墩。`decks` 為高架主線量體（匝道不立柱，由主線橋墩支撐），
+ * `waters` 為河道多邊形，柱底落在其中者伸至 `channelBed`。
  * 量體依 id 排序後處理，使結果可重現。
  */
-export function buildViaduct(decks: Feature[]): Feature[] {
+export function buildViaduct(decks: Feature[], waters: Local[][], channelBed: number): Feature[] {
   const lines = decks
     .flatMap((deck) => {
       const points = deck.geometry.polyline;
-      return points && points.length >= 2 ? [{ id: deck.id, points }] : [];
+      if (!points || points.length < 2) return [];
+      return [
+        {
+          id: deck.id,
+          name: deck.name,
+          points,
+          base: deck.base ?? 0,
+          baseEnd: deck.baseEnd ?? deck.base ?? 0,
+        },
+      ];
     })
     .sort((a, b) => (a.id < b.id ? -1 : 1));
 
-  const top = LEVELS.elevated.floor - VIADUCT_GIRDER;
-  const placed: Local[] = [];
+  const placed: { centre: Local; top: number }[] = [];
   const piers: Feature[] = [];
   for (const deck of lines) {
     const length = polylineLength(deck.points);
     let index = 0;
     for (let along = PIER_SPACING / 2; along < length; along += PIER_SPACING) {
       const walked = truncatePolyline(deck.points, along);
-      const point = walked[walked.length - 1];
-      // 兩幅橋面之間立單柱：取另一幅橋面上的最近點，以兩點中點為柱心
-      let centre = point;
-      let best = Infinity;
-      for (const other of lines) {
-        if (other.id === deck.id) continue;
-        const near = nearestOnPolyline(point, other.points);
-        if (near.distance < best && near.distance <= PAIR_DISTANCE) {
-          best = near.distance;
-          centre = [(point[0] + near.point[0]) / 2, (point[1] + near.point[1]) / 2];
-        }
-      }
+      const centre = walked[walked.length - 1];
+      // 柱頂即該處的橋面底面：兩端高程沿弧長內插
+      const top = deck.base + (deck.baseEnd - deck.base) * (along / length);
       index += 1;
-      if (placed.some((p) => Math.hypot(p[0] - centre[0], p[1] - centre[1]) < PIER_MERGE_DISTANCE)) {
+      if (
+        placed.some(
+          (p) =>
+            Math.hypot(p.centre[0] - centre[0], p.centre[1] - centre[1]) < PIER_MERGE_DISTANCE &&
+            Math.abs(p.top - top) < PIER_MERGE_RISE,
+        )
+      ) {
         continue;
       }
-      placed.push(centre);
+      placed.push({ centre, top });
+      const bottom = waters.some((water) => pointInPolygon(centre, water)) ? channelBed : 0;
       piers.push({
         id: `${deck.id}/pier/${index}`,
         kind: "elevated-road",
-        name: "市民大道高架橋墩",
+        name: `${deck.name ?? "高架橋"}橋墩`,
         level: "G",
         layer: "elevated-road",
         geometry: { polygon: square(centre, PIER_SIZE) },
-        base: 0,
-        height: top,
+        base: bottom,
+        height: top - bottom,
         confidence: "estimated",
         sourceNote: NOTE,
         status: "existing",

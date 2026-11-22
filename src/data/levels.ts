@@ -17,6 +17,8 @@ export type StructureId =
   | "mall-y"
   | "mall-r"
   | "mall-ximen"
+  | "metro-station-ximen"
+  | "metro-station-cks"
   | "parking-east"
   | "metro-line-bl"
   | "metro-line-r"
@@ -67,6 +69,10 @@ const METRO_NOTE =
   "捷運台北車站官方車站配置圖：B1 臺鐵高鐵大廳與停車場、B2 板南線大廳層、B3 板南線月台層與淡水信義線大廳層、B4 淡水信義線月台層；各層高程為推估。";
 
 const MALL_NOTE = "地下街層數依臺北市市場處與營運單位資料，各層高程為推估。";
+
+export const STACKED_STATION_NOTE =
+  "中文維基百科〈西門站 (臺北市)〉〈中正紀念堂站〉：地下三層車站，島式疊式月台，" +
+  "地下二層為上行、地下三層為下行，為跨月台轉乘站；各層高程沿用預設樓層表，為推估值。";
 
 const estimated = (floor: number, height: number, note?: string): StructureLevel =>
   note === undefined
@@ -176,6 +182,26 @@ export const STRUCTURES: Record<StructureId, StructureInfo> = {
     levels: { B1: estimated(-6.0, 5.5) },
     bottom: -9.5,
     sourceNote: MALL_NOTE,
+  },
+  "metro-station-ximen": {
+    label: "捷運西門站",
+    levels: {
+      B1: estimated(-5.5, 5.0, "穿堂層"),
+      B2: estimated(-14.5, 7.5, "上行月台層：板南線（西側）與松山新店線（東側）"),
+      B3: estimated(-22.0, 7.5, "下行月台層：板南線（西側）與松山新店線（東側）"),
+    },
+    bottom: -26.0,
+    sourceNote: STACKED_STATION_NOTE,
+  },
+  "metro-station-cks": {
+    label: "捷運中正紀念堂站",
+    levels: {
+      B1: estimated(-5.5, 5.0, "穿堂層"),
+      B2: estimated(-14.5, 7.5, "上行月台層：淡水信義線與松山新店線"),
+      B3: estimated(-22.0, 7.5, "下行月台層：淡水信義線與松山新店線"),
+    },
+    bottom: -26.0,
+    sourceNote: STACKED_STATION_NOTE,
   },
   "parking-east": {
     label: "臺北車站東地下停車場",

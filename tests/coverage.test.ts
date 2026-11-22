@@ -10,7 +10,13 @@ import {
   insideRing,
 } from "../src/data/coverage.ts";
 import { clipPolygonToRing, clipPolylineToRing } from "../src/geo/clip.ts";
-import { nearestOnPolyline, polygonArea, polygonCentroid } from "../src/geo/measure.ts";
+import {
+  nearestOnPolyline,
+  pointInPolygon,
+  polygonArea,
+  polygonCentroid,
+} from "../src/geo/measure.ts";
+import { featureColor } from "../src/render/palette.ts";
 import { polylineLength } from "../src/geo/offset.ts";
 import { buildBaseline } from "../src/data/scene.ts";
 import surfaceJson from "../src/data/osm/surface.json";
@@ -267,6 +273,36 @@ describe("場景的涵蓋裁切", () => {
         if (Math.hypot(a.centroid[0] - b.centroid[0], a.centroid[1] - b.centroid[1]) >= 3) continue;
         if (Math.abs(a.area - b.area) / Math.max(a.area, b.area) >= 0.05) continue;
         expect(a.base > b.top || b.base > a.top, `${a.id} 與 ${b.id} 共面重複`).toBe(true);
+      }
+    }
+  });
+
+  it("重疊量體的頂面不會共面異色", () => {
+    // 台北雙星 C1 塔基下方：A1 站體的分層量體與誤繪的重複輪廓曾頂面共面，旋轉時互閃
+    const probes: Local[] = [
+      [-317, 96],
+      [-420, 140],
+    ];
+    expect(features.find((f) => f.id === "way/646262272")).toBeUndefined();
+    for (const probe of probes) {
+      const stack = features
+        .filter((f) => {
+          const polygon = f.geometry.polygon;
+          return polygon !== undefined && polygon.length >= 3 && pointInPolygon(probe, polygon);
+        })
+        .map((f) => ({
+          id: f.id,
+          color: featureColor(f.kind, f.layer, f.status, f.line),
+          top: (f.base ?? 0) + (f.height ?? 0),
+        }));
+      for (let i = 0; i < stack.length; i++) {
+        for (let j = i + 1; j < stack.length; j++) {
+          const [a, b] = [stack[i], stack[j]];
+          if (a.color === b.color) continue;
+          expect(Math.abs(a.top - b.top) > 0.05, `${a.id} 與 ${b.id} 在 ${probe} 頂面共面異色`).toBe(
+            true,
+          );
+        }
       }
     }
   });

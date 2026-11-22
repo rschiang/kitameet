@@ -13,6 +13,7 @@
   way["leisure"~"^(park|garden|pitch|playground)$"];
   way["landuse"~"^(grass|forest|cemetery|recreation_ground)$"];
   way["natural"~"^(water|sand|wood|scrub|beach)$"];
+  way["place"~"^(island|islet)$"];
   way["waterway"="riverbank"];
   relation["natural"="water"];
   relation["leisure"~"^(park|garden)$"];

@@ -16,6 +16,8 @@ graph TD
     overrides["src/data/overrides.ts<br/>文獻覆寫"] --> scene
     levels["src/data/levels.ts<br/>構造物樓層表"] --> scene
     structures["src/data/structures/station-complex.ts<br/>分層地下構造"] --> scene
+    stacked["src/data/structures/stacked-station.ts<br/>疊式月台車站的正線縱斷面"] --> scene
+    elevated["src/data/structures/elevated.ts<br/>高架分層"] --> scene
     landmarks["src/data/structures/landmarks/<br/>地標細部量體"] --> scene
     scene --> scenario["src/app/scenario.ts<br/>方案疊圖"]
     proposal["src/data/scenarios/proposal-b.ts"] --> scenario
@@ -23,7 +25,7 @@ graph TD
     builders --> viewer["src/render/scene.ts<br/>three.js 場景"]
 ```
 
-擷取與渲染完全分離：`npm run fetch:osm` 與 `npm run fetch:dorts` 僅在需要更新圖資時執行，網站執行期不連外。產出的 `src/data/osm/underground.json` 與 `surface.json` 進版控，目前分別為 242 與 8963 項量體；`src/data/dorts/structures.json` 與 `basemap.json` 亦進版控，PDF 快取則留在 `data/cache/dorts/`，不進版控。
+擷取與渲染完全分離：`npm run fetch:osm` 與 `npm run fetch:dorts` 僅在需要更新圖資時執行，網站執行期不連外。產出的 `src/data/osm/underground.json` 與 `surface.json` 進版控，目前分別為 242 與 8974 項量體；`src/data/dorts/structures.json` 與 `basemap.json` 亦進版控，PDF 快取則留在 `data/cache/dorts/`，不進版控。
 
 `classify()` 判深度只看 `location` 與 `level`（`isUnderground()`），不看 `layer`：市區建物為了壓在高架橋下常標 `layer=-1`，照此判定會將台北凱撒大飯店、金融中心、中正紀念堂等整棟地面建物當成地下街埋入 B1，再以地下範圍裁切後浮在地面界線之外。停車場也僅在 `parking=underground` 時歸入地下街。
 
@@ -151,7 +153,15 @@ OSM 的道路為中心線，逐條依等級推估路寬後外擴成帶，路口�
 
 兩端高程不同的匝道與引道不合併，維持逐條呈現，否則坡度會被壓平。合併後的量體 id 為 `road/merged/<組別>/<序號>`，不再帶路名。
 
-`buildViaduct()` 必須在合併之前呼叫：橋墩定位依賴逐條高架主線的幾何。
+`buildViaduct()` 必須在合併之前呼叫，且取未裁切的橋面：橋墩定位依賴逐條高架主線的幾何，柱距才不會在涵蓋範圍的切口重新起算。
+
+## 高架分層
+
+高架橋面的高程不是單一常數，否則忠孝橋、市民大道、環河快速道路在塔城街口會等高互穿。`src/data/structures/elevated.ts` 以實際交叉關係定層：兩條車行橋面在平面上相交、不共用節點、且 OSM `layer` 不同時，`layer` 大者在上；層級自 0 起逐層疊加 6.4 公尺（市區道路車道淨高 4.6 公尺加主線梁深 1.8 公尺），最低層的橋面頂沿用 `LEVELS.elevated` 的 8.0 公尺。各橋面端點的高程取相接橋面中的最高者，再以不超過 6% 的縱坡沿橋面放坡，層級變化因此由鄰接橋面吸收。絕對高程仍為推估值，但何者在上為可信。
+
+橋面的判定只看 `bridge` 標籤是否存在且 `layer` 為正，不限 `bridge=yes`：環河南路快速道路、新北環河快速道路與中山高架均標為 `bridge=viaduct`。匝道鏈除 `*_link` 外另含無 `bridge` 標籤的 `trunk` 落地段（忠孝橋西端、環河快速道路的連接段在 OSM 本身即無標籤），其節點高程沿橋面端與地面端的鏈長內插；兩端都已落地者仍為地面道路。
+
+橋墩沿各橋面中心線每 40 公尺一柱（跨徑取《中華技術》〈都市高架快速道路之設計與施工〉所載市民大道跨徑的下限），柱心即中心線上的點，柱頂接該處以兩端高程內插的橋面底面，柱底落在河道多邊形內者伸至河床 −9.5 公尺。雙幅並行的橋面在 8 公尺內且柱頂高差小於 1 公尺者共用一柱，不同層的交疊處則各自立柱。
 
 ## 視圖模式
 

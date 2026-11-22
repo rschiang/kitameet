@@ -6,7 +6,14 @@
  * 因此在此逐項覆寫並註明依據。取得臺北市都發局或鐵道局圖資後，
  * 僅需修改本檔與 `levels.ts` 的 `STRUCTURES`，渲染端不受影響。
  */
-import { METRO_LINES, railLevelOf, type StructureId } from "./levels.ts";
+import {
+  METRO_LINES,
+  STACKED_STATION_NOTE,
+  STRUCTURES,
+  levelOf,
+  railLevelOf,
+  type StructureId,
+} from "./levels.ts";
 import type { Confidence, FeatureKind, LayerId, LevelId } from "./schema.ts";
 
 export interface FeatureOverride {
@@ -59,7 +66,7 @@ const METRO_MAP = "捷運台北車站官方車站配置圖";
  */
 const STACKED_SPACING = 7.0;
 /** 疊式段下層的軌道面高程（公尺）。 */
-const STACKED_LOWER_RAIL = METRO_LINES.g.rail - STACKED_SPACING;
+export const STACKED_LOWER_RAIL = METRO_LINES.g.rail - STACKED_SPACING;
 const STACKED_NOTE =
   "捷運松山線北門—西門段為上下疊式潛盾隧道；下層軌道面取上層減一組隧道間距 " +
   `${STACKED_SPACING} 公尺（公告圖潛盾外半徑 2.97 公尺 × 2 加淨距約 1 公尺），為推估值。`;
@@ -229,15 +236,54 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   // 地面輪廓與台北雙星 D1 的塔基重疊，站體本身已由分層量體呈現
   "relation/7684913": { exclude: true },
   "way/646262272": {
-    // 名稱標為「台北車站」，位置卻在市民大道下方的台北地下街西段，故歸入台北地下街。
-    // 面上只有 building=transportation 與 layer=-1，擷取階段會判為地面建物，故在此指定類型
-    name: "台北地下街連通層",
-    kind: "underground-mall",
-    layer: "mall",
-    level: "B1",
-    structure: "mall-y",
+    exclude: true,
+    sourceNote:
+      "OSM 名稱為「台北車站」，輪廓完全落在機場捷運台北車站站體輪廓（way/1226069619）之內，" +
+      "為 A1 站體的重複量體，與站體各層頂面共面而互閃；站體已由 structures/station-complex.ts 的分層量體呈現。",
+  },
+
+  // ── 疊式月台車站 ──────────────────────────────────────
+  // 西門站與中正紀念堂站為地下三層的跨月台轉乘站，正線深度見 `structures/stacked-station.ts`。
+  "relation/16748280": {
+    exclude: true,
+    sourceNote:
+      "站體箱涵改由禁限建公告圖的 dorts/N/box/1 呈現；" +
+      "OSM 輪廓只有 building=transportation 與 layer=-1，會被當成 B1 地下街。",
+  },
+  "way/1061978434": {
+    name: "捷運中正紀念堂站",
+    kind: "station-box",
+    layer: "station-box",
+    level: "B3",
+    structure: "metro-station-cks",
+    base: STRUCTURES["metro-station-cks"].bottom,
+    height: levelOf("metro-station-cks", "B1").floor - STRUCTURES["metro-station-cks"].bottom,
     confidence: "estimated",
-    sourceNote: "OSM 名稱為「台北車站」，但輪廓位於市民大道下方、台北地下街西段，依位置歸入台北地下街。",
+    sourceNote: `${STACKED_STATION_NOTE}公告圖無本站範圍，箱涵自 B1 樓板面至結構底。`,
+  },
+  "way/877532225": {
+    name: "捷運西門站上層月台",
+    layer: "platform",
+    level: "B2",
+    structure: "metro-station-ximen",
+    confidence: "estimated",
+    sourceNote: STACKED_STATION_NOTE,
+  },
+  "way/194618311": {
+    name: "捷運中正紀念堂站上層月台",
+    layer: "platform",
+    level: "B2",
+    structure: "metro-station-cks",
+    confidence: "estimated",
+    sourceNote: STACKED_STATION_NOTE,
+  },
+  "way/194618330": {
+    name: "捷運中正紀念堂站下層月台",
+    layer: "platform",
+    level: "B3",
+    structure: "metro-station-cks",
+    confidence: "estimated",
+    sourceNote: STACKED_STATION_NOTE,
   },
 
   // ── 捷運月台 ──────────────────────────────────────────
@@ -260,15 +306,8 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
 
   // ── 捷運正線 ──────────────────────────────────────────
   // 深度一律由 `levels.ts` 的 METRO_LINES 依 OSM `ref` 給出；以下只列線上無法推得者。
-  // 松山新店線北門—西門段為上下疊式潛盾，OSM 以 layer 表示上下關係，下層另行覆寫。
-  ...assign(["way/194585049", "way/194585053"], {
-    layer: "metro",
-    level: "B4",
-    structure: "metro-line-g",
-    base: STACKED_LOWER_RAIL,
-    confidence: "estimated",
-    sourceNote: STACKED_NOTE,
-  }),
+  // 松山新店線北門—西門段為上下疊式潛盾；下層自西門站北端降至下管高程，
+  // 西門站區內的深度由 `structures/stacked-station.ts` 的縱斷面決定。
   "way/194585061": {
     layer: "metro",
     level: "B4",
@@ -348,6 +387,25 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
     confidence: "sourced",
     sourceNote: `${WIKI}：地下二樓為月台層，北側第 3、4 月台為窄軌（臺鐵）。`,
   }),
+  // 只標 location=underground 而無 level 的月台：擷取階段的 parseLevel() 只看
+  // level／layer，兩者皆無即判為地面，月台板因此浮在路面上。
+  ...assign(["way/978708478", "way/978708479"], {
+    name: "臺鐵萬華站月台",
+    level: "B2",
+    structure: "tra-hsr-station",
+    confidence: "estimated",
+    sourceNote:
+      "萬板專案後萬華站全段地下化；OSM 僅標 location=underground 而無 level。" +
+      "深度取本模型臺鐵股道所在的 B2 月台層。",
+  }),
+  "way/1228832765": {
+    name: "捷運小南門站月台",
+    layer: "platform",
+    level: "B3",
+    structure: "metro-line-g",
+    confidence: "estimated",
+    sourceNote: "OSM 無 level 標籤，擷取階段判為地面；深度取松山新店線軌道面所在層。",
+  },
 };
 
 /**
