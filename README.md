@@ -38,9 +38,9 @@ npm run fetch:osm
 |---|---|
 | [`docs/status-quo.md`](docs/status-quo.md) | 臺北車站地下結構現況與資料來源分級 |
 | [`docs/proposals.md`](docs/proposals.md) | 方案內容、幾何參數與建模限制 |
-| [`docs/revisions.md`](docs/revisions.md) | 提案與模型的變更紀錄 |
+| [`docs/revisions.md`](docs/revisions.md) | 方案內容與幾何參數的變更紀錄 |
 | [`docs/architecture.md`](docs/architecture.md) | 資料流、座標系統、資料結構與算繪方式 |
-| [`docs/references.md`](docs/references.md) | 參考資料與授權 |
+| [`docs/references.md`](docs/references.md) | 外部資料來源與授權 |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 協作守則與修改規範 |
 
 ## 資料來源與授權
