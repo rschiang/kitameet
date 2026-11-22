@@ -148,6 +148,21 @@ export function polylineCrossingAtX(pts: Local[], x: number): Local | null {
   return null;
 }
 
+/** 折線第一次穿越 x 界線之處的方位（度，一律取 x 遞增方向）；未穿越回傳 null。 */
+export function polylineBearingAtX(pts: Local[], x: number): number | null {
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    if (!crossingAt(a, b, x)) continue;
+    let deg = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+    if (b[0] < a[0]) deg += 180;
+    if (deg > 180) deg -= 360;
+    if (deg <= -180) deg += 360;
+    return deg;
+  }
+  return null;
+}
+
 /**
  * 以垂直於 x 軸的界線切割折線，回傳界線兩側的折線（含交點）。
  * 多段穿越界線時以第一個交點為準；完全落在同側時另一側回傳空陣列。

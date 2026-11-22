@@ -189,3 +189,24 @@ OSM 的 `layer` 是繪圖壓線順序，不是深度：同一條縱貫線正線�
 - `src/render/scene.ts`、`src/app/permalink.ts`
 - `tests/coverage.test.ts`
 - `docs/architecture.md`、`docs/status-quo.md`
+
+## 2026-11-22：方案 B 西側改為與既有喉道相切銜接
+
+**變更內容**
+
+- 新增 `tangentConnector()`：自既有線形上的接軌點（位置與方位皆固定）以兩段同半徑、轉向相反的曲線接到月台股道的切線，兩端方位連續；半徑自標稱值每 1 公尺往下試至下限，取第一個可行解。
+- 新增 `polylineBearingAtX()`：取折線穿越 x 界線處的方位，一律取 x 遞增方向。南側既有股道 `way/323105864` 由東往西數化，需經此步才得到 +18.67 度而非 −161.35 度。
+- 改建區間西界由 x −589 西移至 x −606（北門北側），西側四條股道改用相切連接器，實際半徑為甲-北 103、甲-南 98、乙-北 98、乙-南 93 公尺；`MIN_RADIUS` 由 100 降為 90。東側接軌與月台位置、長度、位移量皆未變動。
+- 開挖範圍隨股道幾何重算：站前地下街的拆除面積由 273 平方公尺降為 236 平方公尺（三處出入口中的一處由 60.3 縮為 46.0、另一處由 191.0 縮為 168.5），通道段 `way/1174010644` 不再落入開挖範圍。
+
+**理由**
+
+既有高鐵隧道在 x −589 處的方位為 +15.34 度，與新建股道的 −10.53 度相差 25.87 度，原先的反向曲線加直線接法會在接軌點留下折角，列車無法通過。改以相切條件決定西界後折角消失，代價是西側半徑由標稱 122 公尺降為實際 93–103 公尺。研究小組要求捷運松山新店線與北門不受影響，使用者另確認臺鐵縱貫線隧道亦不得變更；在此三項邊界條件下實算，西側無法放緩至 230 公尺，各接軌點的試算與三項硬限制記於 `docs/proposals.md`。
+
+**受影響的資料檔**
+
+- `src/geo/alignment.ts`（`tangentConnector()`）
+- `src/geo/offset.ts`（`polylineBearingAtX()`）
+- `src/data/scenarios/proposal-b.ts`（`REBUILD_ZONE`、`MIN_RADIUS`、`WEST_RADIUS`、`tieInBearing()`、`trackFeature()`）
+- `tests/proposal.test.ts`
+- `docs/proposals.md`

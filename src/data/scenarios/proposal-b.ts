@@ -7,9 +7,19 @@
  * 數值量自研究小組《臺北車站方案 B′ 軌道配置構想》疊圖，
  * 月台寬度與曲線半徑則依本專案的裁示調整（見 docs/proposals.md）。
  */
-import { reverseCurveElements, sampleAlignment, type Alignment } from "../../geo/alignment.ts";
+import {
+  reverseCurveElements,
+  sampleAlignment,
+  tangentConnector,
+  type Alignment,
+} from "../../geo/alignment.ts";
 import { advance, decompose, polygonAxis } from "../../geo/measure.ts";
-import { corridorPolygon, offsetPolyline, polylineCrossingAtX } from "../../geo/offset.ts";
+import {
+  corridorPolygon,
+  offsetPolyline,
+  polylineBearingAtX,
+  polylineCrossingAtX,
+} from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
 import { baselineById } from "../scene.ts";
 import { levelOf, railLevelOf } from "../levels.ts";
@@ -49,16 +59,18 @@ export const PLATFORM_OFFSETS: Record<string, number> = { 甲: 51.0, 乙: 72.0 }
  */
 export const EAST_RADIUS = 122;
 /**
- * 西側反向曲線的標稱最小半徑（公尺）；同樣可為收攏而縮小，下限 {@link MIN_RADIUS}。
- * 正本 B′ 西側量得 81.5–94.5 公尺，本專案為維持 R ≥ 100 而放緩，接軌點不變。
+ * 西側相切連接器的標稱半徑上限（公尺）；自此往下試到 {@link MIN_RADIUS}，
+ * 取第一個能與既有喉道曲線相切銜接的解（實際為 93–103）。
+ * 正本 B′ 西側量得 81.5–94.5 公尺。
  */
 export const WEST_RADIUS = 122;
 /**
  * 改建區間的東西界（局部座標 x，公尺）。
- * 西界為正本 B′ 新建股道的西端（延平北路一帶），最西約 55 公尺與既有線形幾乎重合；
+ * 西界取北門北側（局部座標 x −606）既有喉道曲線上的相切接軌點；
+ * 原依 B′ 疊圖取 −589，但該處相切銜接只能做到 R 86–98。
  * 東界為正本的東端接軌點（中山北路一段下方、既有東喉管起點附近）。
  */
-export const REBUILD_ZONE = { westX: -589, eastX: 316 } as const;
+export const REBUILD_ZONE = { westX: -606, eastX: 316 } as const;
 /** 轉乘通道寬度（公尺）。 */
 export const PASSAGE_WIDTH = 12;
 /** K 區地下街輪廓；新月台東端對齊其東端（正本 B′ 的配置）。 */
@@ -70,8 +82,11 @@ const TIE_IN_IDS: Record<string, { west: string; east: string }> = {
   甲: { west: "way/13991375", east: "way/381111230" },
   乙: { west: "way/323105864", east: "way/593866771" },
 };
-/** 反向曲線為配合界線而縮小半徑時的下限（公尺）；低於此值即視為線形不可行。 */
-const MIN_RADIUS = 100;
+/**
+ * 反向曲線為配合界線而縮小半徑時的下限（公尺）；低於此值即視為線形不可行。
+ * 西側改為相切銜接後，最小半徑降至 93。
+ */
+const MIN_RADIUS = 90;
 /** 新建工程平面包絡：外側股道中心各外放的距離（公尺，隧道壁厚與淨空）。 */
 export const WORKS_CLEARANCE = 4.5;
 /** 受開挖侵入檢查的站前地下街 OSM 圖徵。 */
@@ -122,9 +137,19 @@ function tieIn(id: string, limitX: number): Local {
   return point;
 }
 
+/** 既有高鐵股道在改建界線上的方位（度，往東為正）。 */
+function tieInBearing(id: string, limitX: number): number {
+  const line = baselineById(id)?.geometry.polyline;
+  if (!line) throw new Error(`找不到既有高鐵股道 ${id}`);
+  const bearing = polylineBearingAtX(line, limitX);
+  if (bearing === null) throw new Error(`既有高鐵股道 ${id} 未通過 x=${limitX} 的改建界線`);
+  return bearing;
+}
+
 /**
  * 新建股道接回既有路廊：自端點以反向曲線橫移至接軌點的橫向位置，再直線延伸至界線。
  * `radius` 為標稱最小半徑；曲線在界線前收不攏時縮小半徑（下限 {@link MIN_RADIUS}）。
+ * 僅供東側使用；西側改用 {@link tangentConnector}。
  */
 function connector(
   start: Local,
@@ -184,16 +209,21 @@ function trackFeature(name: string, side: "北" | "南", centre: Local[]): Featu
   const bearing = (Math.atan2(east[1] - west[1], east[0] - west[0]) * 180) / Math.PI;
   const tie = TIE_IN_IDS[name];
 
+  const tangentStart = advance(west, bearing + 180, WEST_TANGENT);
+  const joined = tangentConnector(
+    tieIn(tie.west, REBUILD_ZONE.westX),
+    tieInBearing(tie.west, REBUILD_ZONE.westX),
+    tangentStart,
+    bearing,
+    WEST_RADIUS,
+    MIN_RADIUS,
+  );
+  if (!joined) {
+    throw new Error(`新建股道 ${name}-${side} 西側無法以不低於 ${MIN_RADIUS} 公尺的半徑相切接回既有線形`);
+  }
+
   const line: Local[] = [
-    ...connector(
-      advance(west, bearing + 180, WEST_TANGENT),
-      bearing + 180,
-      WEST_RADIUS,
-      tieIn(tie.west, REBUILD_ZONE.westX),
-      REBUILD_ZONE.westX,
-    )
-      .slice()
-      .reverse(),
+    ...joined.points,
     ...trackLine.slice(1, -1),
     ...connector(east, bearing, EAST_RADIUS, tieIn(tie.east, REBUILD_ZONE.eastX), REBUILD_ZONE.eastX),
   ];
@@ -210,7 +240,7 @@ function trackFeature(name: string, side: "北" | "南", centre: Local[]): Featu
     height: 0.3,
     width: 3,
     confidence: "estimated",
-    sourceNote: `${SOURCE_NOTE} 東、西兩側反向曲線標稱最小半徑 ${EAST_RADIUS} 公尺，外側股道為配合接軌點縮至 115 公尺；全線最小半徑不低於 ${MIN_RADIUS} 公尺。`,
+    sourceNote: `${SOURCE_NOTE} 東側反向曲線標稱最小半徑 ${EAST_RADIUS} 公尺，外側股道為配合接軌點縮至 115 公尺；西側與既有喉道曲線相切銜接，各股道實際半徑 甲-北 103、甲-南 98、乙-北 98、乙-南 93 公尺，全線最小半徑不低於 ${MIN_RADIUS} 公尺。`,
     status: "added",
   };
 }
@@ -262,7 +292,7 @@ function excavationSouthEdge(): Local[] {
 
 let added: Feature[] | null = null;
 
-const HSR_NOTE = "方案 B 改建區間（延平北路至中山北路）內之既有高鐵隧道。";
+const HSR_NOTE = "方案 B 改建區間（北門至中山北路）內之既有高鐵隧道。";
 
 export const proposalB: Scenario = {
   id: "proposal-b",
