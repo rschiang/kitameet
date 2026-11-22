@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { splitRuns, type Measured } from "../scripts/dorts/structures.ts";
 import { buildBaseline } from "../src/data/scene.ts";
-import { buildDorts, dortsBuildingPolygons } from "../src/data/dorts.ts";
+import {
+  buildDorts,
+  dortsBuildingPolygons,
+  DEMOLISHED_FACES,
+  DEMOLISHED_TOLERANCE,
+} from "../src/data/dorts.ts";
+import basemapJson from "../src/data/dorts/basemap.json";
 import { METRO_LINES, type MetroLineId } from "../src/data/levels.ts";
 import { nearestOnPolyline, pointInPolygon, polygonArea, polygonCentroid } from "../src/geo/measure.ts";
 import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "../src/data/overrides.ts";
@@ -175,6 +181,47 @@ describe("公告圖取代 OSM 平面", () => {
         if (face.height <= DEFAULT_HEIGHT) continue;
         expect(face.area / largest, source).toBeGreaterThanOrEqual(0.4);
       }
+    }
+  });
+});
+
+describe("公告圖地形底圖的已拆除房屋面", () => {
+  const rawFaces = basemapJson.buildings.map((b) => polygonCentroid(b.polygon as Local[]));
+  const near = (a: Local, b: Local): boolean =>
+    Math.hypot(a[0] - b[0], a[1] - b[1]) <= DEMOLISHED_TOLERANCE;
+
+  it("每筆拆除紀錄只對應一塊原始房屋面", () => {
+    for (const face of DEMOLISHED_FACES) {
+      const hits = rawFaces.filter((centre) => near(centre, face.at));
+      expect(hits.length, face.note).toBe(1);
+    }
+  });
+
+  it("已拆除的房屋面不再輸出", () => {
+    expect(dortsBuildingPolygons()).toHaveLength(
+      basemapJson.buildings.length - DEMOLISHED_FACES.length,
+    );
+    const volumes = buildDorts().filter((f) => f.geometry.polygon !== undefined);
+    for (const face of DEMOLISHED_FACES) {
+      const hit = volumes.find((f) => near(polygonCentroid(f.geometry.polygon!), face.at));
+      expect(hit?.id, face.note).toBeUndefined();
+    }
+  });
+
+  it("現地不再有建物量體", () => {
+    const features = buildBaseline();
+    const sites: Local[] = [
+      [-356, -33],
+      [-425, 13],
+      [-520, -4],
+    ];
+    const solids = features.filter(
+      (f) =>
+        (f.kind === "building" || f.kind === "landmark") && f.geometry.polygon !== undefined,
+    );
+    for (const site of sites) {
+      const hit = solids.find((f) => pointInPolygon(site, f.geometry.polygon!));
+      expect(hit?.id, site.join(",")).toBeUndefined();
     }
   });
 });

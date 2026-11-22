@@ -25,6 +25,51 @@ const structures = structuresJson as unknown as DortsStructures;
 const basemap = basemapJson as unknown as DortsBasemap;
 const underground = undergroundJson as unknown as OsmDataset;
 
+/**
+ * 公告圖地形底圖已拆除的房屋面：形心座標（局部公尺）與現況。
+ *
+ * 底圖的製圖年代早於北門周邊 2016 年以後的改建，忠孝西路拓寬、交通八號廣場與
+ * 臺北行旅廣場闢建、公車彎啟用與台北雙星整地後拆除的房屋仍留在圖上；
+ * 這些面沒有對應的 OSM 建物，`buildDorts()` 會以預設樓層數把它們拉成實心方塊，
+ * 立在廣場與車道上。現況一律以國土測繪中心 2024 年版正射影像
+ * （WMS `https://wms.nlsc.gov.tw/wms`，`LAYERS=PHOTO2`）逐塊套圖確認。
+ * 不以公園面或路廊自動判定：OSM 的公園面常涵蓋既有房屋，會誤刪實際存在的建物。
+ */
+export const DEMOLISHED_FACES: { at: Local; note: string }[] = [
+  { at: [-534.33, 1.58], note: "忠孝西路一段車道，北門東側（dorts/building/523）" },
+  { at: [-519.85, -4.26], note: "忠孝西路一段車道，北門東側（dorts/building/540）" },
+  { at: [-524.26, 6.15], note: "忠孝西路一段車道，北門東側（dorts/building/553）" },
+  { at: [-509.92, 21.53], note: "交通八號廣場西段（dorts/building/532）" },
+  { at: [-517.44, 9.96], note: "交通八號廣場西段（dorts/building/558）" },
+  { at: [-473.61, 17.86], note: "交通八號廣場（dorts/building/647）" },
+  { at: [-459.5, 16.27], note: "交通八號廣場（dorts/building/669）" },
+  { at: [-440.61, 10.88], note: "交通八號廣場（dorts/building/715）" },
+  { at: [-425.11, 12.69], note: "交通八號廣場東段（dorts/building/722）" },
+  { at: [-419.17, 9.09], note: "交通八號廣場東段（dorts/building/757）" },
+  { at: [-516.57, 64.19], note: "台北雙星 C1、D1 工地（dorts/building/545）" },
+  { at: [-355.76, -33.33], note: "忠孝西路一段北側公車彎（dorts/building/872）" },
+  { at: [-368.2, -15.5], note: "忠孝西路一段北側公車彎西端（dorts/building/873）" },
+  { at: [-342.67, -62.14], note: "忠孝西路一段車道（dorts/building/923）" },
+  { at: [-305.47, -64.02], note: "忠孝西路一段車道（dorts/building/955）" },
+  { at: [-293.27, -75.14], note: "忠孝西路一段車道（dorts/building/965）" },
+  { at: [-275.23, -69.71], note: "臺北行旅廣場南緣人行道與車道（dorts/building/957）" },
+];
+
+/** 形心比對容差（公尺）：清單各點與其餘房屋面形心最近相距 6.9 公尺，1.5 公尺足以唯一命中。 */
+export const DEMOLISHED_TOLERANCE = 1.5;
+
+/**
+ * 扣除已拆除者的房屋面。本檔與地標取面一律以此清單為準，
+ * 其索引即 {@link BuildingAttributes} 的鍵；比對與輸出共用同一份陣列才不會錯位。
+ * 以形心座標而非 `id` 指定：`id` 由 `scripts/fetch-dorts.ts` 依空間排序逐一編號，重新擷取會位移。
+ */
+const buildingFaces = basemap.buildings.filter((building) => {
+  const centre = polygonCentroid(building.polygon);
+  return !DEMOLISHED_FACES.some(
+    (face) => Math.hypot(centre[0] - face.at[0], centre[1] - face.at[1]) <= DEMOLISHED_TOLERANCE,
+  );
+});
+
 /** 圖幅線路代號對應路線；未列出者直接擲出，不以預設值矇混。 */
 const LINE_BY_CODE: Record<DortsLineCode, MetroLineId> = {
   N: "bl",
@@ -141,7 +186,7 @@ function dedupePolylines<T>(
 
 /** 1/1000 地形圖的建物面；供場景比對與測試使用。 */
 export function dortsBuildingPolygons(): Local[][] {
-  return basemap.buildings.map((b) => b.polygon);
+  return buildingFaces.map((b) => b.polygon);
 }
 
 /** 車站箱涵的平面（寬度達 {@link STATION_WIDTH} 者）；站區分層構造以此為樓板平面。 */
@@ -200,7 +245,7 @@ export function matchDortsBuildings(osm: OsmBuildingRef[]): {
   attributes: Map<number, BuildingAttributes>;
 } {
   const cell = 25;
-  const faces = basemap.buildings.map((b) => ({
+  const faces = buildingFaces.map((b) => ({
     polygon: b.polygon,
     centre: polygonCentroid(b.polygon),
   }));
@@ -414,7 +459,7 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
     });
   }
 
-  basemap.buildings.forEach((building, index) => {
+  buildingFaces.forEach((building, index) => {
     const attrs = attributes?.get(index) ?? null;
     features.push({
       id: building.id,
