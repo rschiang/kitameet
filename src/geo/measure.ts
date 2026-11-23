@@ -152,6 +152,33 @@ export function polygonCentroid(ring: Local[]): Local {
   return [cx / (3 * area), cy / (3 * area)];
 }
 
+/**
+ * 必定落在多邊形內的代表點：形心在內即取形心；凹多邊形（如彎曲的長條路面）的形心
+ * 可能落在自身之外，此時改取通過形心的水平掃描線上、最寬一段內部區間的中點。
+ */
+export function interiorPoint(ring: Local[]): Local {
+  const centre = polygonCentroid(ring);
+  if (pointInPolygon(centre, ring)) return centre;
+  const y = centre[1];
+  const xs: number[] = [];
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y) xs.push(((xj - xi) * (y - yi)) / (yj - yi) + xi);
+  }
+  xs.sort((a, b) => a - b);
+  let best = centre;
+  let widest = 0;
+  for (let k = 0; k + 1 < xs.length; k += 2) {
+    const width = xs[k + 1] - xs[k];
+    if (width > widest) {
+      widest = width;
+      best = [(xs[k] + xs[k + 1]) / 2, y];
+    }
+  }
+  return best;
+}
+
 /** 點是否落在多邊形內（射線法）。 */
 export function pointInPolygon(point: Local, ring: Local[]): boolean {
   let inside = false;

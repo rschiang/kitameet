@@ -13,7 +13,8 @@ import {
   deckProfiles,
 } from "../src/data/structures/elevated.ts";
 import { STACKED_TRACK_IDS } from "../src/data/structures/stacked-station.ts";
-import { nearestOnPolyline } from "../src/geo/measure.ts";
+import { nearestOnPolyline, pointInPolygon } from "../src/geo/measure.ts";
+import { OVERGROUND_RING } from "../src/data/coverage.ts";
 import { PARKING_FLOOR_THICKNESS, PLATFORM_RISE } from "../src/data/schema.ts";
 import { featureColor } from "../src/render/palette.ts";
 
@@ -214,6 +215,32 @@ describe("現況場景", () => {
       // 河道內的柱底伸至河床，陸上的自地面起算
       expect([0, -9.5], pier.id).toContain(pier.base);
     }
+  });
+
+  it("等高的高架主線在涵蓋範圍內皆有橋面", () => {
+    const profiles = deckProfiles();
+    const decks = features.filter((f) => f.id.startsWith("road/merged/elevated-road|"));
+    const missing: string[] = [];
+    for (const { id, points } of deckCentrelines()) {
+      const profile = profiles.get(id);
+      if (!profile || Math.abs(profile.base - profile.baseEnd) > 1e-6) continue;
+      const own = decks.filter((f) => Math.abs((f.base as number) - profile.base) < 1e-6);
+      let total = 0;
+      let missed = 0;
+      for (let i = 0; i + 1 < points.length; i++) {
+        const [a, b] = [points[i], points[i + 1]];
+        const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 5));
+        for (let k = 0; k < steps; k++) {
+          const t = (k + 0.5) / steps;
+          const q: [number, number] = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+          if (!pointInPolygon(q, OVERGROUND_RING)) continue;
+          total++;
+          if (!own.some((f) => pointInPolygon(q, f.geometry.polygon!))) missed++;
+        }
+      }
+      if (missed > 0) missing.push(`${id} ${missed}/${total}`);
+    }
+    expect(missing).toEqual([]);
   });
 
   it("高架依實際交叉關係分層，交會處不等高", () => {

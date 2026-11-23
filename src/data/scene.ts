@@ -19,7 +19,7 @@ import {
   medianDistanceToLines,
   type OsmBuildingRef,
 } from "./dorts.ts";
-import { pointInPolygon, polygonArea, polygonCentroid } from "../geo/measure.ts";
+import { interiorPoint, pointInPolygon, polygonArea, polygonCentroid } from "../geo/measure.ts";
 import { corridorPolygon, polylineLength } from "../geo/offset.ts";
 import { polygonize } from "../geo/polygonize.ts";
 import { TERRAIN_DEPTH, OVERGROUND_RING, clipToCoverage } from "./coverage.ts";
@@ -678,7 +678,8 @@ const cellAt = (index: Map<string, number[]>, p: Local, cell: number): number[] 
  * 重疊的路面帶合併為互不重疊的單一路面網格。
  *
  * 各帶的邊展開為線段集合後交給 {@link polygonize} 求面，重疊處因此被分割為小面；
- * 再保留形心落在任一路面帶內的面，街廓與圓環中央等被道路圍住的面即被捨棄。
+ * 再保留內點（{@link interiorPoint}）落在任一路面帶內的面，街廓與圓環中央等被道路圍住的面即被捨棄；
+ * 彎曲長條面的形心常落在自身之外，不可用形心判定。
  * 合併後不再帶路名，面板沒有逐量體資訊，無使用者可見的損失。
  */
 export function mergeRoadSurfaces(features: Feature[]): Feature[] {
@@ -709,18 +710,18 @@ export function mergeRoadSurfaces(features: Feature[]): Feature[] {
     const cell = 50;
     const bandLookup = polygonIndex(bands, cell);
     const covered = faces.filter((face) => {
-      const centre = polygonCentroid(face);
-      return cellAt(bandLookup, centre, cell).some((i) => pointInPolygon(centre, bands[i]));
+      const inside = interiorPoint(face);
+      return cellAt(bandLookup, inside, cell).some((i) => pointInPolygon(inside, bands[i]));
     });
 
     // `polygonize` 不處理孔洞：完全包在另一條路面帶裡的短路段會另成一面，
-    // 與包住它的面重疊。包住者已覆蓋同一塊路面，被包者直接捨棄。
+    // 與包住它的面重疊。包住者已覆蓋同一塊路面，被包者直接捨棄（同以內點判定）。
     const areas = covered.map((face) => Math.abs(polygonArea(face)));
     const faceLookup = polygonIndex(covered, cell);
     const kept = covered.filter((face, i) => {
-      const centre = polygonCentroid(face);
-      return !cellAt(faceLookup, centre, cell).some(
-        (j) => j !== i && areas[j] > areas[i] && pointInPolygon(centre, covered[j]),
+      const inside = interiorPoint(face);
+      return !cellAt(faceLookup, inside, cell).some(
+        (j) => j !== i && areas[j] > areas[i] && pointInPolygon(inside, covered[j]),
       );
     });
 

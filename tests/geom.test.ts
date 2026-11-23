@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ORIGIN, toLocal, toLonLat, localToScene } from "../src/geo/project.ts";
 import { sampleAlignment, alignmentLength } from "../src/geo/alignment.ts";
+import { interiorPoint, pointInPolygon, polygonCentroid } from "../src/geo/measure.ts";
 import { offsetPolyline, polylineLength, truncatePolyline } from "../src/geo/offset.ts";
 
 /** OSM way/584167409「1月台 (高鐵)」長軸兩端節點，實測長度 331 公尺。 */
@@ -136,5 +137,22 @@ describe("折線平移與截取", () => {
     ];
     expect(polylineLength(truncatePolyline(line, 410))).toBeCloseTo(410, 6);
     expect(polylineLength(truncatePolyline(line, 1000))).toBeCloseTo(600, 6);
+  });
+});
+
+describe("多邊形內點", () => {
+  it("凹多邊形的形心落在自身之外時改取內部掃描線中點", () => {
+    const ring: [number, number][] = [
+      [0, 0],
+      [30, 0],
+      [30, 30],
+      [20, 30],
+      [20, 5],
+      [10, 5],
+      [10, 30],
+      [0, 30],
+    ];
+    expect(pointInPolygon(polygonCentroid(ring), ring)).toBe(false);
+    expect(pointInPolygon(interiorPoint(ring), ring)).toBe(true);
   });
 });
