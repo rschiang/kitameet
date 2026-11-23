@@ -14,7 +14,7 @@ import {
 } from "../src/data/structures/elevated.ts";
 import { STACKED_TRACK_IDS } from "../src/data/structures/stacked-station.ts";
 import { nearestOnPolyline } from "../src/geo/measure.ts";
-import { PLATFORM_RISE } from "../src/data/schema.ts";
+import { PARKING_FLOOR_THICKNESS, PLATFORM_RISE } from "../src/data/schema.ts";
 
 const features = buildBaseline();
 
@@ -67,6 +67,15 @@ describe("現況場景", () => {
     expect(k?.level).toBe("B1");
     expect(k?.layer).toBe("mall");
     expect(k?.confidence).toBe("estimated");
+  });
+
+  it("K 區地下停車場只畫一層樓面", () => {
+    const k = baselineById("way/204711163");
+    expect(k?.kind).toBe("parking");
+    expect(k?.layer).toBe("mall");
+    expect(k?.level).toBe("B2");
+    expect(k?.height).toBe(PARKING_FLOOR_THICKNESS);
+    expect(k?.base).toBe(levelOf("mall-k", "B2").floor);
   });
 
   it("每個量體都有幾何、圖層與可信度", () => {

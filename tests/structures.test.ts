@@ -37,41 +37,25 @@ describe("構造物樓層表", () => {
     const station = levelOf("tra-hsr-station", "B2").floor;
     const metro = levelOf("metro-station", "B2").floor;
     expect(station).toBe(-14.5);
-    expect(metro).toBe(-11.0);
-    expect(Math.abs(station - metro)).toBeGreaterThan(3);
+    expect(metro).toBe(-12.5);
   });
 });
 
 describe("分層地下構造", () => {
-  it("站體 B1 有 5 條南北通道與 2 條迴廊，通道南端穿出站體", () => {
-    const passages = features.filter((f) => f.id.startsWith("station/passage/"));
-    const corridors = features.filter((f) => f.id.startsWith("station/corridor/"));
-    expect(passages).toHaveLength(5);
-    expect(corridors).toHaveLength(2);
-
-    // 站體平面取自 OSM 輪廓，地上量體改為細部模型後由樓板沿用
-    const outline = baselineById("station/slab/B1")!.geometry.polygon!;
-    const stationSouth = Math.min(...outline.map(([, y]) => y));
-    for (const passage of passages) {
-      expect(passage.level, passage.id).toBe("B1");
-      const south = Math.min(...passage.geometry.polygon!.map(([, y]) => y));
-      // 通道垂直於傾斜 15.8 度的主軸，南端的 y 超出量隨位置而異，最小約 37 公尺
-      expect(stationSouth - south, passage.id).toBeGreaterThan(35);
-    }
-  });
-
-  it("捷運站四層皆有量體，兩線月台深度相差超過 5 公尺", () => {
-    for (const level of DEPTHS) {
-      const atLevel = features.filter(
-        (f) => f.structure === "metro-station" && f.level === level,
-      );
-      expect(atLevel.length, level).toBeGreaterThan(0);
-    }
+  it("兩線站體各層皆有量體，兩線月台深度相差超過 5 公尺", () => {
+    const present = (structure: "metro-station" | "metro-station-r", levels: LevelId[]): void => {
+      for (const level of levels) {
+        const atLevel = features.filter((f) => f.structure === structure && f.level === level);
+        expect(atLevel.length, `${structure} ${level}`).toBeGreaterThan(0);
+      }
+    };
+    present("metro-station", ["B1", "B2", "B3"]);
+    present("metro-station-r", ["B1", "B3", "B4"]);
 
     const bannan = baselineById("way/741259904")!;
     const tamsui = baselineById("way/741259905")!;
     expect(bannan.base).toBeCloseTo(railLevelOf("metro-station", "B3"), 6);
-    expect(tamsui.base).toBeCloseTo(railLevelOf("metro-station", "B4"), 6);
+    expect(tamsui.base).toBeCloseTo(railLevelOf("metro-station-r", "B4"), 6);
     expect(bannan.base! - tamsui.base!).toBeGreaterThan(5);
   });
 
@@ -109,10 +93,10 @@ describe("深度放大", () => {
   };
 
   it("地下量體的高程放大 1.2 倍，地面建物不變", () => {
-    const core = baselineById("metro/core/1")!;
-    const bounds = boundsY(core.id);
-    expect(bounds.min).toBeCloseTo(core.base! * DEPTH_EXAGGERATION, 2);
-    expect(bounds.max).toBeCloseTo((core.base! + core.height!) * DEPTH_EXAGGERATION, 2);
+    const underground = baselineById("a1/concourse/B1")!;
+    const bounds = boundsY(underground.id);
+    expect(bounds.min).toBeCloseTo(underground.base! * DEPTH_EXAGGERATION, 2);
+    expect(bounds.max).toBeCloseTo((underground.base! + underground.height!) * DEPTH_EXAGGERATION, 2);
 
     // 地面建物不受放大影響；輪廓可能來自 OSM 或公告圖地形底圖，故不綁定單一 id
     const ground = features.find(

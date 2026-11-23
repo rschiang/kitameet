@@ -17,7 +17,14 @@ import {
   UNDERGROUND_RING,
   insideRing,
 } from "../src/data/coverage.ts";
-import type { OsmDataset, OsmFeature, OsmKind } from "../src/data/osm-types.ts";
+import type {
+  IndoorDataset,
+  IndoorFeature,
+  IndoorKind,
+  OsmDataset,
+  OsmFeature,
+  OsmKind,
+} from "../src/data/osm-types.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ENDPOINTS = [
@@ -65,6 +72,23 @@ const KEPT_TAGS = [
   "historic",
 ];
 
+/** 室內動線資料集保留的標籤。 */
+const INDOOR_TAGS = [
+  "highway",
+  "level",
+  "incline",
+  "conveying",
+  "indoor",
+  "name",
+  "ref",
+  "railway",
+  "entrance",
+  "amenity",
+];
+
+/** 西側地面停車場；輪廓供西地下停車場沿用。 */
+const WEST_PARKING_WAY = 204616541;
+
 type OverpassNode = { lat: number; lon: number };
 type OverpassMember = { type: string; ref: number; role?: string; geometry?: OverpassNode[] };
 type OverpassWay = {
@@ -73,6 +97,8 @@ type OverpassWay = {
   tags?: Record<string, string>;
   geometry?: OverpassNode[];
   members?: OverpassMember[];
+  lat?: number;
+  lon?: number;
 };
 
 function parseLevel(tags: Record<string, string>): number | undefined {
@@ -373,19 +399,91 @@ function convert(
   };
 }
 
+function classifyIndoor(el: OverpassWay): IndoorKind | null {
+  const tags = el.tags ?? {};
+  if (el.type === "node") {
+    if (tags.highway === "elevator") return "elevator";
+    if (tags.railway === "subway_entrance") return "entrance";
+    if (tags.entrance === "staircase" && tags.ref !== undefined) return "entrance";
+    return null;
+  }
+  if (el.type !== "way") return null;
+  if (el.id === WEST_PARKING_WAY) return "parking";
+  if (tags.highway === "steps") return "steps";
+  if (tags.highway === "pedestrian" && tags.conveying !== undefined) return "steps";
+  if (tags.highway === "corridor" || tags.highway === "footway") return "corridor";
+  if (tags.indoor === "room") return "room";
+  return null;
+}
+
+/** 室內動線：way 之外另收 node（電梯、出入口），標籤與樓層字串原樣保留。 */
+function convertIndoor(
+  json: { elements: OverpassWay[]; osm3s?: { timestamp_osm_base?: string } },
+  bbox: OsmDataset["queryBbox"],
+): IndoorDataset {
+  const features: IndoorFeature[] = [];
+  for (const el of json.elements) {
+    const kind = classifyIndoor(el);
+    if (kind === null) continue;
+    const tags: Record<string, string> = {};
+    for (const key of INDOOR_TAGS) {
+      const value = el.tags?.[key];
+      if (value !== undefined) tags[key] = value;
+    }
+    const feature: IndoorFeature = { id: `${el.type}/${el.id}`, kind, tags };
+
+    let points: Local[];
+    if (el.type === "node") {
+      if (el.lat === undefined || el.lon === undefined) continue;
+      points = toPoints([{ lat: el.lat, lon: el.lon }]);
+      feature.point = points[0];
+    } else {
+      if (!el.geometry || el.geometry.length < 2) continue;
+      points = toPoints(el.geometry);
+      if (kind === "room" || kind === "parking") {
+        const first = points[0];
+        const last = points[points.length - 1];
+        const closed =
+          points.length > 3 &&
+          Math.abs(first[0] - last[0]) < 0.02 &&
+          Math.abs(first[1] - last[1]) < 0.02;
+        if (!closed) continue;
+        points = points.slice(0, -1);
+        feature.polygon = points;
+      } else feature.polyline = points;
+    }
+    if (!withinCoverage(points, UNDERGROUND_RING, UNDERGROUND_BOUNDARY)) continue;
+    features.push(feature);
+  }
+  features.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    queryBbox: bbox,
+    overpassTimestamp: json.osm3s?.timestamp_osm_base ?? null,
+    originLatLon: { lat: ORIGIN.lat, lon: ORIGIN.lon },
+    features,
+  };
+}
+
 async function run(name: string) {
   const query = await readFile(join(ROOT, `data/queries/${name}.overpassql`), "utf8");
   const bbox = readBbox(query);
-  const coverage =
-    name === "underground"
-      ? { ring: UNDERGROUND_RING, boundary: UNDERGROUND_BOUNDARY }
-      : { ring: OVERGROUND_RING, boundary: OVERGROUND_BOUNDARY };
   const json = (await queryOverpass(query)) as Parameters<typeof convert>[0];
 
   await mkdir(join(ROOT, "data/cache"), { recursive: true });
   await writeFile(join(ROOT, `data/cache/${name}.json`), JSON.stringify(json), "utf8");
 
-  const dataset = convert(json, bbox, coverage);
+  const dataset =
+    name === "indoor"
+      ? convertIndoor(json, bbox)
+      : convert(
+          json,
+          bbox,
+          name === "underground"
+            ? { ring: UNDERGROUND_RING, boundary: UNDERGROUND_BOUNDARY }
+            : { ring: OVERGROUND_RING, boundary: OVERGROUND_BOUNDARY },
+        );
   const outDir = join(ROOT, "src/data/osm");
   await mkdir(outDir, { recursive: true });
   const tmp = join(outDir, `.${name}.json.tmp`);
@@ -401,6 +499,11 @@ async function run(name: string) {
   );
 }
 
-for (const name of ["underground", "surface"]) {
+const ALL = ["underground", "surface", "indoor"];
+const names = process.argv.slice(2);
+for (const name of names) {
+  if (!ALL.includes(name)) throw new Error(`未知的資料集 ${name}`);
+}
+for (const name of names.length > 0 ? names : ALL) {
   await run(name);
 }

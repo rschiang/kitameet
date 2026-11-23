@@ -92,22 +92,6 @@ export function advance(origin: Local, bearing: number, distance: number): Local
   return [origin[0] + Math.cos(rad) * distance, origin[1] + Math.sin(rad) * distance];
 }
 
-/**
- * 兩組點之間距離最短的一對點，供產生連通道。
- * 兩組皆須至少有一點。
- */
-export function nearestPair(a: Local[], b: Local[]): { a: Local; b: Local; distance: number } {
-  if (a.length === 0 || b.length === 0) throw new Error("nearestPair 需要非空的兩組點");
-  let best = { a: a[0], b: b[0], distance: Infinity };
-  for (const p of a) {
-    for (const q of b) {
-      const distance = Math.hypot(p[0] - q[0], p[1] - q[1]);
-      if (distance < best.distance) best = { a: p, b: q, distance };
-    }
-  }
-  return best;
-}
-
 /** 點到折線的最近點與距離（公尺）；折線不足兩點時回傳距第一點的距離。 */
 export function nearestOnPolyline(
   point: Local,
@@ -183,7 +167,7 @@ export function pointInPolygon(point: Local, ring: Local[]): boolean {
 }
 
 /** 凸包（Andrew monotone chain），逆時針；重複點已去除。 */
-function convexHull(points: Local[]): Local[] {
+export function convexHull(points: Local[]): Local[] {
   const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   if (sorted.length < 3) return sorted;
   const cross = (o: Local, a: Local, b: Local): number =>

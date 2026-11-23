@@ -34,6 +34,7 @@ import {
 } from "./levels.ts";
 import { deckNodeElevations, deckProfiles, isElevatedTags } from "./structures/elevated.ts";
 import { buildLandmarks, landmarkClaims } from "./structures/landmarks/index.ts";
+import { buildExitSheds } from "./structures/exit-shed.ts";
 import { buildStationComplex } from "./structures/station-complex.ts";
 import {
   inStackedZone,
@@ -44,6 +45,7 @@ import {
 import { RAMP_GIRDER, VIADUCT_GIRDER, buildViaduct } from "./structures/viaduct.ts";
 import {
   LEVELS,
+  PARKING_FLOOR_THICKNESS,
   PLATFORM_RISE,
   SLAB_THICKNESS,
   TRACK_BAND_THICKNESS,
@@ -70,6 +72,7 @@ const LAYER_BY_KIND: Record<string, LayerId> = {
   "track-tra": "track",
   "track-metro": "metro",
   "underground-mall": "mall",
+  parking: "mall",
   station: "station-box",
   building: "building",
   "elevated-road": "elevated-road",
@@ -451,6 +454,10 @@ function volumeOf(
       const info = levelOf(structure, level);
       return { base: info.floor, height: info.height, confidence: info.confidence };
     }
+    case "parking": {
+      const info = levelOf(structure, level);
+      return { base: info.floor, height: PARKING_FLOOR_THICKNESS, confidence: info.confidence };
+    }
     case "passage":
       return { base: levelOf(structure, level).floor, height: 4.0, confidence: "estimated" };
     case "slab":
@@ -540,7 +547,10 @@ function convert(osm: OsmFeature): Feature | null {
   const overridden =
     override.kind !== undefined || override.level !== undefined || override.structure !== undefined;
   const road = roadKind && !overridden ? roadOf(osm.id, osm.tags, osm.polyline ?? []) : undefined;
-  const kind: FeatureKind = (override.kind ?? road?.kind ?? osm.kind) as FeatureKind;
+  const parking = osm.kind === "underground-mall" && osm.tags.amenity === "parking";
+  const kind: FeatureKind = (override.kind ??
+    road?.kind ??
+    (parking ? "parking" : osm.kind)) as FeatureKind;
 
   // 軌道的深度一律由系統或路線決定，不看 OSM 的 level／layer；其餘類型照 OSM 標籤。
   let level: LevelId;
@@ -828,7 +838,18 @@ export function buildBaseline(): Feature[] {
         .concat(buildLandmarks())
         .flatMap(clipToCoverage),
     );
-  features.push({
+
+  // 出地面動線的雨棚：OSM 的雨棚面落在頂棚範圍內者改由雨棚量體呈現，地標不認領
+  const { sheds, claims: shedClaims } = buildExitSheds(features);
+  const underShed = (f: Feature): boolean => {
+    const polygon = f.geometry.polygon;
+    if (f.kind !== "building" || !polygon) return false;
+    const centre = polygonCentroid(polygon);
+    return shedClaims.some((claim) => pointInPolygon(centre, claim));
+  };
+  const scene = features.filter((f) => !underShed(f)).concat(sheds.flatMap(clipToCoverage));
+
+  scene.push({
     id: "terrain/overground",
     kind: "terrain",
     name: "涵蓋範圍地塊",
@@ -841,8 +862,8 @@ export function buildBaseline(): Feature[] {
     sourceNote: `地面涵蓋範圍的土方量體，厚度 ${TERRAIN_DEPTH} 公尺為呈現用的設定值，非地質資料。`,
     status: "existing",
   });
-  cached = features;
-  return features;
+  cached = scene;
+  return scene;
 }
 
 /** 以 id 取得現況量體，供方案資料引用既有幾何。 */

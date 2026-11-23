@@ -232,29 +232,60 @@ export function clipPolygonToRing(polygon: Local[], ring: Local[]): Local[][] {
   return out;
 }
 
-/** 折線裁切至逆時針封閉環內；回傳界內的各段。 */
-export function clipPolylineToRing(line: Local[], ring: Local[]): Local[][] {
-  if (line.length < 2 || ring.length < 3) return [];
-  const inside = line.map((p) => pointInPolygon(p, ring));
-  if (inside.every((s) => s)) return [line.map((p) => [...p] as Local)];
+/** 線段 a→b 與環的所有交點，依線段參數由近而遠排序；重合的交點只留一個。 */
+function ringCrossings(ring: Local[], a: Local, b: Local): Local[] {
+  const rx = b[0] - a[0];
+  const ry = b[1] - a[1];
+  const hits: { s: number; point: Local }[] = [];
+  for (let i = 0; i < ring.length; i++) {
+    const c = ring[i];
+    const d = ring[(i + 1) % ring.length];
+    const sx = d[0] - c[0];
+    const sy = d[1] - c[1];
+    const denom = rx * sy - ry * sx;
+    if (Math.abs(denom) < 1e-12) continue;
+    const qx = c[0] - a[0];
+    const qy = c[1] - a[1];
+    const s = (qx * sy - qy * sx) / denom;
+    const t = (qx * ry - qy * rx) / denom;
+    if (s <= 1e-9 || s >= 1 - 1e-9 || t < -1e-9 || t > 1 + 1e-9) continue;
+    hits.push({ s, point: [a[0] + rx * s, a[1] + ry * s] });
+  }
+  hits.sort((p, q) => p.s - q.s);
+  return hits.filter((hit, i) => i === 0 || hit.s - hits[i - 1].s > 1e-9).map((hit) => hit.point);
+}
 
-  const parts: Local[][] = [];
-  let part: Local[] = inside[0] ? [[...line[0]] as Local] : [];
+/**
+ * 折線以逆時針封閉環為界切開，回傳界內與界外的各段。
+ * 單一線段可能數次進出凹形的環，因此逐段求出所有交點，再以子線段的中點判定側別。
+ */
+export function splitPolylineByRing(
+  line: Local[],
+  ring: Local[],
+): { inside: Local[][]; outside: Local[][] } {
+  const parts: { inside: Local[][]; outside: Local[][] } = { inside: [], outside: [] };
+  if (line.length < 2 || ring.length < 3) return parts;
+
+  let state: boolean | null = null;
+  let part: Local[] = [];
+  const flush = (): void => {
+    if (part.length >= 2 && state !== null) (state ? parts.inside : parts.outside).push(part);
+  };
+
   for (let i = 0; i + 1 < line.length; i++) {
-    if (inside[i] === inside[i + 1]) {
-      if (inside[i + 1]) part.push([...line[i + 1]] as Local);
-      continue;
-    }
-    const cut = firstRingCrossing(ring, line[i], line[i + 1]);
-    if (cut === null) continue;
-    if (inside[i]) {
-      part.push(cut.point);
-      parts.push(part);
-      part = [];
-    } else {
-      part = [cut.point, [...line[i + 1]] as Local];
+    const nodes = [line[i], ...ringCrossings(ring, line[i], line[i + 1]), line[i + 1]];
+    for (let n = 0; n + 1 < nodes.length; n++) {
+      const [p, q] = [nodes[n], nodes[n + 1]];
+      if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-9) continue;
+      const inside = pointInPolygon([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], ring);
+      if (state === null || inside !== state) {
+        flush();
+        state = inside;
+        part = [[p[0], p[1]]];
+      }
+      part.push([q[0], q[1]]);
     }
   }
-  if (part.length >= 2) parts.push(part);
-  return parts.filter((p) => p.length >= 2);
+  flush();
+  return parts;
 }

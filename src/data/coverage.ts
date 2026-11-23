@@ -5,7 +5,7 @@
  * 地下結構可以伸出地塊之外。兩圈的頂點以 WGS84 宣告、載入時換算為局部公尺座標，
  * 擷取腳本（`scripts/fetch-osm.ts`）與網站共用同一份定義。
  */
-import { clipPolygonToRing, clipPolylineToRing } from "../geo/clip.ts";
+import { clipPolygonToRing, splitPolylineByRing } from "../geo/clip.ts";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geo/measure.ts";
 import { toLocal, type Local } from "../geo/project.ts";
 import type { Feature, LayerId } from "./schema.ts";
@@ -218,7 +218,7 @@ export function clipToCoverage(feature: Feature): Feature[] {
   }
   if (polyline && polyline.length >= 2) {
     if (outsideBounds(polyline, ring)) return [];
-    const parts = clipPolylineToRing(polyline, ring);
+    const parts = splitPolylineByRing(polyline, ring).inside;
     if (feature.baseEnd === undefined) return pieces(feature, parts, "polyline");
     // 兩端高程依弧長線性內插，切出的各段各自保留自己那一段的坡度
     const base = feature.base ?? 0;
@@ -233,7 +233,7 @@ export function clipToCoverage(feature: Feature): Feature[] {
   }
   if (tube && tube.length >= 2) {
     if (outsideBounds(tube, ring)) return [];
-    const parts = clipPolylineToRing(tube, ring);
+    const parts = splitPolylineByRing(tube, ring).inside;
     return parts.map((part, n) => ({
       ...feature,
       id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,

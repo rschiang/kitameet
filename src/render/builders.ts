@@ -18,7 +18,7 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { corridorPolygon, offsetPolyline } from "../geo/offset.ts";
+import { corridorPolygon, offsetPolyline, polylineLength, slicePolyline } from "../geo/offset.ts";
 import { exaggerate } from "./depth.ts";
 import type { Local } from "../geo/project.ts";
 import type { Feature } from "../data/schema.ts";
@@ -186,9 +186,39 @@ function slopedBand(
   return geometry;
 }
 
+/** 階梯每一級的高差（公尺）與最少級數：低面數的示意階，不是實際踏階。 */
+const TREAD_RISE = 0.6;
+const MIN_TREADS = 3;
+
+/**
+ * 階梯：沿線等分為數級，每級是一塊頂面水平的量體，自較低一端的板底長到較高一端的踏面。
+ * 各級高程先求得再放大，與 {@link slopedBand} 的兩端對齊。
+ */
+function steppedBand(
+  points: Local[],
+  width: number,
+  thickness: number,
+  baseStart: number,
+  baseEnd: number,
+): BufferGeometry {
+  const treads = Math.max(MIN_TREADS, Math.round(Math.abs(baseEnd - baseStart) / TREAD_RISE));
+  const total = polylineLength(points);
+  const elevation = (k: number): number => baseStart + ((baseEnd - baseStart) * k) / treads;
+  const parts: BufferGeometry[] = [];
+  for (let i = 0; i < treads; i++) {
+    const run = slicePolyline(points, (total * i) / treads, (total * (i + 1)) / treads);
+    if (run.length < 2) continue;
+    const top = exaggerate(Math.max(elevation(i), elevation(i + 1)));
+    const bottom = exaggerate(Math.min(elevation(i), elevation(i + 1)) - thickness);
+    parts.push(extrude(corridorPolygon(run, width), top - bottom, bottom));
+  }
+  return mergeGeometries(parts, false);
+}
+
 /**
  * 極淡填色的量體：路面、公園水域與地塊皆為半透明色塊，其下的量體仍看得見；
  * 未列出者為實心。地塊幾乎全透明，只負責界定涵蓋範圍與承接陰影。
+ * 停車場只是一層樓面；電梯井道半透明，表示其為中空井道。
  */
 const FILL_OPACITY: Partial<Record<Feature["kind"], number>> = {
   road: 0.35,
@@ -197,6 +227,8 @@ const FILL_OPACITY: Partial<Record<Feature["kind"], number>> = {
   green: 0.3,
   sand: 0.35,
   plaza: 0.25,
+  parking: 0.45,
+  elevator: 0.55,
 };
 
 /** 由 {@link Feature} 建立可直接加入場景的 mesh；幾何不足時回傳 null。 */
@@ -220,7 +252,8 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
         : extrude(polygon, height, base);
   } else if (feature.geometry.polyline && feature.geometry.polyline.length >= 2) {
     if (feature.baseEnd !== undefined && feature.baseEnd !== trueBase) {
-      geometry = slopedBand(
+      const band = feature.kind === "stairs" ? steppedBand : slopedBand;
+      geometry = band(
         feature.geometry.polyline,
         feature.width ?? 3,
         feature.height ?? 1,

@@ -122,64 +122,13 @@ export function alignmentEnd(a: Alignment): { point: Local; bearing: number } {
 }
 
 /**
- * 反向曲線（S 形）：兩段同半徑、轉向相反的圓曲線各配一組緩和曲線，
- * 把線形橫移 `lateralShift` 公尺後回到原方位；`lateralShift` 正值為往左。
- *
- * 橫移量大於「圓心角為零時」的最小值時，以二分法求圓心角；
- * 小於該值時改為縮短緩和曲線長度，避免小橫移被緩和曲線本身撐開。
- */
-export function reverseCurveElements(radius: number, lateralShift: number): AlignmentElement[] {
-  const side = lateralShift >= 0 ? 1 : -1;
-  const r = Math.abs(radius);
-  const fullTransition = transitionLength(r);
-  const target = Math.abs(lateralShift);
-
-  const build = (angle: number, length: number): AlignmentElement[] =>
-    length > 0
-      ? [
-          { kind: "transition", radius: side * r, length },
-          { kind: "arc", radius: side * r, angle },
-          { kind: "transition", radius: side * r, length },
-          { kind: "transition", radius: -side * r, length },
-          { kind: "arc", radius: -side * r, angle },
-          { kind: "transition", radius: -side * r, length },
-        ]
-      : [
-          { kind: "arc", radius: side * r, angle },
-          { kind: "arc", radius: -side * r, angle },
-        ];
-
-  const lateralAt = (angle: number, length: number): number => {
-    const pts = sampleAlignment({ start: [0, 0], bearing: 0, elements: build(angle, length) }, 4);
-    return Math.abs(pts[pts.length - 1][1]);
-  };
-
-  const bisect = (measure: (value: number) => number, lo: number, hi: number): number => {
-    for (let i = 0; i < 48; i++) {
-      const mid = (lo + hi) / 2;
-      if (measure(mid) < target) lo = mid;
-      else hi = mid;
-    }
-    return (lo + hi) / 2;
-  };
-
-  const minLateral = lateralAt(0, fullTransition);
-  if (target < minLateral) {
-    const length = bisect((value) => lateralAt(0, value), 0, fullTransition);
-    return build(0, length);
-  }
-
-  const maxAngle = 85;
-  if (lateralAt(maxAngle, fullTransition) < target) return build(maxAngle, fullTransition);
-  const angle = bisect((value) => lateralAt(value, fullTransition), 0, maxAngle);
-  return build(angle, fullTransition);
-}
-
-/**
  * 相切連接器：自既有線形上的接軌點（位置與方位皆固定）以一組反向曲線接到
  * 目標切線（`target` 點、`targetBearing` 方位），兩端方位皆連續。
  * 兩段曲線同半徑、各配一組長 0.5R 的緩和曲線；半徑自 `radius` 起每 1 公尺往下
  * 試到 `minRadius`，取第一個可行解。無解回傳 null。
+ *
+ * 第一段曲線一律朝目標點所在的一側轉，反向曲線整組的淨轉角因而可正可負
+ * （目標切線與接軌點切線的轉向相反時即是如此）。
  */
 export function tangentConnector(
   tie: Local,
@@ -190,8 +139,11 @@ export function tangentConnector(
   minRadius: number,
 ): { points: Local[]; radius: number } | null {
   const turn = normalizeAngle(targetBearing - tieBearing);
-  const first = Math.sign(turn) || 1;
-  const sweep = Math.abs(turn);
+  // 第一段曲線的轉向：接軌點切線與「接軌點→目標點」的外積符號，即目標點所在的一側
+  const cross =
+    Math.cos(tieBearing * DEG) * (target[1] - tie[1]) -
+    Math.sin(tieBearing * DEG) * (target[0] - tie[0]);
+  const first = Math.sign(cross) || 1;
   // 目標切線的單位切向量與法向量
   const tx = Math.cos(targetBearing * DEG);
   const ty = Math.sin(targetBearing * DEG);
@@ -201,7 +153,7 @@ export function tangentConnector(
   const build = (r: number, a1: number): AlignmentElement[] => {
     const length = transitionLength(r);
     // 兩段圓曲線的淨轉角差即為所需轉向量；緩和曲線一正一反自動抵銷
-    const a2 = a1 - sweep;
+    const a2 = a1 - first * turn;
     return [
       { kind: "transition", radius: first * r, length },
       { kind: "arc", radius: first * r, angle: a1 },
@@ -222,10 +174,12 @@ export function tangentConnector(
     return (ex - target[0]) * nx + (ey - target[1]) * ny;
   };
 
+  // 第二段圓曲線的角度不得為負，搜尋自 a1 = max(0, first × turn) 起算
+  const start = Math.max(0, first * turn);
   for (let r = radius; r >= minRadius; r -= 1) {
-    let prevAngle = sweep;
+    let prevAngle = start;
     let prevPerp = perpOf(r, prevAngle);
-    for (let a1 = sweep + 0.25; a1 <= 150; a1 += 0.25) {
+    for (let a1 = start + 0.25; a1 <= 150; a1 += 0.25) {
       const perp = perpOf(r, a1);
       if (prevPerp === 0 || prevPerp * perp < 0) {
         let lo = prevAngle;
@@ -249,4 +203,98 @@ export function tangentConnector(
     }
   }
   return null;
+}
+
+/**
+ * 轉向連接器：自月台側切線上的起點（`start`、`startBearing`）以單一半徑的主曲線
+ * 轉入既有線形上的接軌點（`tie`、`tieBearing`，兩個方位皆為同一行進方向）。
+ *
+ * 與 {@link tangentConnector} 的曲線順序相反：先朝主曲線的反方向小角度偏轉，
+ * 再以主曲線完成整個轉向，主曲線末端沿接軌點切線直線延伸到接軌點。
+ * 反向偏角是解出來的結果，使主曲線末點恰落在接軌點切線上；
+ * 偏角小於兩段緩和曲線的轉角時，反向段縮短緩和曲線、不設圓曲線。
+ * 兩段曲線同半徑、主曲線各配一組長 0.5R 的緩和曲線。無解回傳 null。
+ */
+export function turnConnector(
+  start: Local,
+  startBearing: number,
+  tie: Local,
+  tieBearing: number,
+  radius: number,
+): { points: Local[]; counter: number } | null {
+  /** 反向曲線偏角上限（度）。 */
+  const MAX_COUNTER = 60;
+  /** 曲線末端到接軌點容許的直線長度（公尺）。 */
+  const MAX_STRAIGHT = 500;
+
+  const turn = normalizeAngle(tieBearing - startBearing);
+  const main = Math.sign(turn) || 1;
+  const sweep = Math.abs(turn);
+  const length = transitionLength(radius);
+  // 三次拋物線末端切線角，與 sampleAlignment 一致
+  const spiral = (Math.atan(length / (2 * radius)) * 180) / Math.PI;
+  // 接軌點切線的單位切向量與法向量
+  const tx = Math.cos(tieBearing * DEG);
+  const ty = Math.sin(tieBearing * DEG);
+  const nx = -ty;
+  const ny = tx;
+
+  const build = (counter: number): AlignmentElement[] | null => {
+    const angle = sweep + counter - 2 * spiral;
+    if (angle < 0) return null;
+    const elements: AlignmentElement[] = [];
+    if (counter > 2 * spiral) {
+      elements.push(
+        { kind: "transition", radius: -main * radius, length },
+        { kind: "arc", radius: -main * radius, angle: counter - 2 * spiral },
+        { kind: "transition", radius: -main * radius, length },
+      );
+    } else if (counter > 0) {
+      const short = 2 * radius * Math.tan((counter / 2) * DEG);
+      elements.push(
+        { kind: "transition", radius: -main * radius, length: short },
+        { kind: "transition", radius: -main * radius, length: short },
+      );
+    }
+    elements.push(
+      { kind: "transition", radius: main * radius, length },
+      { kind: "arc", radius: main * radius, angle },
+      { kind: "transition", radius: main * radius, length },
+    );
+    return elements;
+  };
+
+  const sample = (counter: number): Local[] | null => {
+    const elements = build(counter);
+    return elements && sampleAlignment({ start, bearing: startBearing, elements }, 4);
+  };
+  /** 末點對接軌點切線的垂距；為零即落在切線上。 */
+  const perpOf = (counter: number): number | null => {
+    const pts = sample(counter);
+    if (!pts) return null;
+    const [ex, ey] = pts[pts.length - 1];
+    return (ex - tie[0]) * nx + (ey - tie[1]) * ny;
+  };
+
+  const first = perpOf(0);
+  const last = perpOf(MAX_COUNTER);
+  if (first === null || last === null || first * last > 0) return null;
+
+  let lo = 0;
+  let hi = MAX_COUNTER;
+  for (let i = 0; i < 48; i++) {
+    const mid = (lo + hi) / 2;
+    const perp = perpOf(mid);
+    if (perp === null) return null;
+    if (perp * first > 0) lo = mid;
+    else hi = mid;
+  }
+  const counter = (lo + hi) / 2;
+  const pts = sample(counter);
+  if (!pts) return null;
+
+  const end = pts[pts.length - 1];
+  const straight = -((end[0] - tie[0]) * tx + (end[1] - tie[1]) * ty);
+  if (straight < -0.5 || straight > MAX_STRAIGHT) return null;
+  return { points: [...pts, tie], counter };
 }

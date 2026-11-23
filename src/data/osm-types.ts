@@ -36,3 +36,23 @@ export interface OsmDataset {
   originLatLon: { lat: number; lon: number };
   features: OsmFeature[];
 }
+
+/** `indoor.json` 的圖徵種類：站內動線的 way 與 node。 */
+export type IndoorKind = "corridor" | "steps" | "elevator" | "entrance" | "room" | "parking";
+
+export interface IndoorFeature {
+  /** `way/123` 或 `node/456`。 */
+  id: string;
+  kind: IndoorKind;
+  tags: Record<string, string>;
+  /** 通道與階梯的中心線。 */
+  polyline?: Local[];
+  /** 付費區與停車場的輪廓，不含閉合頂點。 */
+  polygon?: Local[];
+  /** 電梯與出入口的點位。 */
+  point?: Local;
+}
+
+export interface IndoorDataset extends Omit<OsmDataset, "features"> {
+  features: IndoorFeature[];
+}

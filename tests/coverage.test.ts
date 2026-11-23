@@ -9,7 +9,7 @@ import {
   coverageRingFor,
   insideRing,
 } from "../src/data/coverage.ts";
-import { clipPolygonToRing, clipPolylineToRing } from "../src/geo/clip.ts";
+import { clipPolygonToRing, splitPolylineByRing } from "../src/geo/clip.ts";
 import {
   nearestOnPolyline,
   pointInPolygon,
@@ -200,7 +200,7 @@ describe("涵蓋範圍", () => {
       ),
     ).toEqual([]);
 
-    const line = clipPolylineToRing(
+    const split = splitPolylineByRing(
       [
         [-20, 50],
         [50, 50],
@@ -208,9 +208,18 @@ describe("涵蓋範圍", () => {
       ],
       ring,
     );
-    expect(line).toHaveLength(1);
-    expect(line[0][0]).toEqual([0, 50]);
-    expect(line[0][line[0].length - 1]).toEqual([100, 50]);
+    expect(split.inside).toHaveLength(1);
+    expect(split.inside[0][0]).toEqual([0, 50]);
+    expect(split.inside[0][split.inside[0].length - 1]).toEqual([100, 50]);
+    expect(split.outside).toHaveLength(2);
+    expect(split.outside[0]).toEqual([
+      [-20, 50],
+      [0, 50],
+    ]);
+    expect(split.outside[1]).toEqual([
+      [100, 50],
+      [120, 50],
+    ]);
   });
 });
 

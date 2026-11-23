@@ -15,7 +15,7 @@
 
 ## OSM 資料
 
-`src/data/osm/underground.json` 與 `surface.json` 由 `npm run fetch:osm` 產生，不應手動編輯。需要調整擷取範圍或分類規則時，改 `data/queries/*.overpassql` 或 `scripts/fetch-osm.ts` 後重新產生。
+`src/data/osm/underground.json`、`surface.json` 與 `indoor.json` 由 `npm run fetch:osm` 產生，不應手動編輯。需要調整擷取範圍或分類規則時，改 `data/queries/*.overpassql` 或 `scripts/fetch-osm.ts` 後重新產生；只更新其中一份時於指令後加上資料集名稱，例如 `npm run fetch:osm -- indoor`。
 
 產出檔的 `generatedAt` 與 `overpassTimestamp` 會隨每次擷取變動，其餘內容在相同查詢下應完全相同；若座標或分類出現差異，代表上游資料或轉換規則有變，應於提交訊息中說明。
 

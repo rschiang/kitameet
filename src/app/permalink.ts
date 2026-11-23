@@ -58,7 +58,7 @@ export function decodeState(hash: string): AppState {
   if (mode === "3d" || mode === "aerial") state.mode = mode as ViewMode;
 
   const scenario = params.get("s");
-  if (scenario === "status-quo" || scenario === "proposal-b") {
+  if (scenario === "status-quo" || scenario === "proposal-b" || scenario === "proposal-c") {
     state.scenario = scenario as ScenarioId;
   }
 

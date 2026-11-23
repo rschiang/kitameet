@@ -2,7 +2,7 @@
  * 介面元件：品牌卡、分段切換，以及工具列各彈出面板的內容。
  * 全部以原生 DOM 建立，不引入 UI 框架。
  */
-import { LAYER_COLORS, LINE_COLORS, STATUS_COLORS } from "../render/palette.ts";
+import { KIND_COLORS, LAYER_COLORS, LINE_COLORS, STATUS_COLORS } from "../render/palette.ts";
 import { LAYER_GROUPS, LAYER_GROUP_IDS, type LayerGroupId } from "./layerGroups.ts";
 import { defaultState, type AppState, type ScenarioId } from "./state.ts";
 import type { ViewMode } from "./viewMode.ts";
@@ -76,6 +76,7 @@ export function createScenarioPanel(
     [
       { value: "status-quo", label: "現況" },
       { value: "proposal-b", label: "方案 B" },
+      { value: "proposal-c", label: "方案 C" },
     ],
     onSelect,
   );
@@ -169,7 +170,13 @@ const LEGEND_SECTIONS: { title: string; rows: { color: string; label: string }[]
     rows: [
       { color: LAYER_COLORS.platform, label: "月台" },
       { color: LAYER_COLORS.mall, label: "地下街" },
+      { color: KIND_COLORS.parking!, label: "停車場" },
       { color: LAYER_COLORS["station-box"], label: "車站量體" },
+      { color: LAYER_COLORS.passage, label: "通道" },
+      { color: KIND_COLORS.stairs!, label: "階梯" },
+      { color: KIND_COLORS.escalator!, label: "電扶梯" },
+      { color: KIND_COLORS.elevator!, label: "電梯" },
+      { color: KIND_COLORS["exit-shed"]!, label: "出入口雨棚" },
     ],
   },
   {

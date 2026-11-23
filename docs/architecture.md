@@ -16,18 +16,21 @@ graph TD
     overrides["src/data/overrides.ts<br/>文獻覆寫"] --> scene
     levels["src/data/levels.ts<br/>構造物樓層表"] --> scene
     structures["src/data/structures/station-complex.ts<br/>分層地下構造"] --> scene
+    concourse["src/data/structures/concourse.ts<br/>B1 站內動線"] --> structures
     stacked["src/data/structures/stacked-station.ts<br/>疊式月台車站的正線縱斷面"] --> scene
     elevated["src/data/structures/elevated.ts<br/>高架分層"] --> scene
     landmarks["src/data/structures/landmarks/<br/>地標細部量體"] --> scene
     scene --> scenario["src/app/scenario.ts<br/>方案疊圖"]
-    proposal["src/data/scenarios/proposal-b.ts"] --> scenario
+    proposal["src/data/scenarios/<br/>shared.ts、proposal-b.ts、proposal-c.ts"] --> scenario
     scenario --> builders["src/render/builders.ts<br/>量體建模"]
     builders --> viewer["src/render/scene.ts<br/>three.js 場景"]
 ```
 
-擷取與渲染完全分離：`npm run fetch:osm` 與 `npm run fetch:dorts` 僅在需要更新圖資時執行，網站執行期不連外。產出的 `src/data/osm/underground.json` 與 `surface.json` 進版控，目前分別為 242 與 8974 項量體；`src/data/dorts/structures.json` 與 `basemap.json` 亦進版控，PDF 快取則留在 `data/cache/dorts/`，不進版控。
+擷取與渲染完全分離：`npm run fetch:osm` 與 `npm run fetch:dorts` 僅在需要更新圖資時執行，網站執行期不連外。產出的 `src/data/osm/underground.json`、`surface.json` 與 `indoor.json` 進版控，目前分別為 242、8974 與 249 項；`src/data/dorts/structures.json` 與 `basemap.json` 亦進版控，PDF 快取則留在 `data/cache/dorts/`，不進版控。`npm run fetch:osm -- indoor` 可只更新指定的資料集。
 
-`classify()` 判深度只看 `location` 與 `level`（`isUnderground()`），不看 `layer`：市區建物為了壓在高架橋下常標 `layer=-1`，照此判定會將台北凱撒大飯店、金融中心、中正紀念堂等整棟地面建物當成地下街埋入 B1，再以地下範圍裁切後浮在地面界線之外。停車場也僅在 `parking=underground` 時歸入地下街。
+`indoor.json` 為站內動線的室內圖資，格式與另外兩份不同：除了通道、階梯與付費區的 way，另收電梯與出入口的 node，`level`、`incline`、`conveying` 等標籤原樣保留，由 `concourse.ts` 解讀。
+
+`classify()` 判深度只看 `location` 與 `level`（`isUnderground()`），不看 `layer`：市區建物為了壓在高架橋下常標 `layer=-1`，照此判定會將台北凱撒大飯店、金融中心、中正紀念堂等整棟地面建物當成地下街埋入 B1，再以地下範圍裁切後浮在地面界線之外。停車場也僅在 `parking=underground` 時歸入地下街；其中帶 `amenity=parking` 者於 `convert()` 改列 `parking` 類型，圖層仍為地下街，但只畫 0.2 公尺厚的樓面，不長成實心量體。
 
 `convert()` 分兩輪：先走 `way`、記下成為圖徵者，再走 `relation`；多重多邊形的外環若整圈由已自成圖徵的成員 way 串成，關聯與成員的幾何完全重合，捨棄該環只留成員並回報。桃園機場捷運台北車站（`relation/7684913`）與國立台灣藝術教育館（`relation/7875303`）即為此例，原本兩份共面量體在畫面上互閃。
 
@@ -49,7 +52,7 @@ graph TD
 | 地面（`OVERGROUND_RING`） | 北緣南京東西路、西緣淡水河西岸、南緣莒光路—和平西路二段—南海路—仁愛路、東緣建國南北路 |
 | 地下（`UNDERGROUND_RING`） | 北緣推至民生東西路、西緣再外推至機場捷運過河隧道末端以西、南緣推至信義路，另含捷運中正紀念堂站的凸出段；西緣的莒光路緯度以南與整段南緣、東緣與地面範圍共用 |
 
-`clipToCoverage(feature)` 依量體所屬圖層選範圍（`UNDERGROUND_LAYERS` 列的車站量體、月台、股道、地下街、捷運、通道與禁限建範圍取地下，其餘取地面），因此地下結構可以伸出地面範圍之外。不以底面高程判定：水域與人行地下道的底面為負值，卻該隨地面範圍裁切。多邊形交給 `clipPolygonToRing()`、折線與隧道軸心交給 `clipPolylineToRing()`，切出多塊時 id 加上 `#n` 後綴；兩端高程不同的斜帶量體照切，各段的 `base`、`baseEnd` 由 `fractionAlong()` 依弧長內插。只有上緣輪廓（`polygonTop`）做形心判定留去：其頂點需與 `polygon` 一一對應，切開會失真。
+`clipToCoverage(feature)` 依量體所屬圖層選範圍（`UNDERGROUND_LAYERS` 列的車站量體、月台、股道、地下街、捷運、通道與禁限建範圍取地下，其餘取地面），因此地下結構可以伸出地面範圍之外。不以底面高程判定：水域與人行地下道的底面為負值，卻該隨地面範圍裁切。多邊形交給 `clipPolygonToRing()`、折線與隧道軸心交給 `splitPolylineByRing()`：後者回傳界內與界外兩組子線段，裁切只取界內。單一線段可能數次進出凹形的環，實作因此逐段求出所有交點，再以各子線段的中點判定側別。切出多塊時 id 加上 `#n` 後綴；兩端高程不同的斜帶量體照切，各段的 `base`、`baseEnd` 由 `fractionAlong()` 依弧長內插。只有上緣輪廓（`polygonTop`）做形心判定留去：其頂點需與 `polygon` 一一對應，切開會失真。
 
 兩支裁切函式的內外一律以 `pointInPolygon()` 判定，不走 `sideOfPolyline()`：涵蓋範圍帶有凸出段，其凹角背後有一整片扇形區域的最近線段是同一個頂點，取最近線段判側會在該處得到相反的答案。離開界內後沿環的行進方向補回轉角頂點，跨越範圍轉角的大面才不會被弦切掉一角。
 
@@ -59,9 +62,9 @@ graph TD
 
 ## 樓層標籤與構造物深度
 
-`LevelId`（`elevated`、`G`、`B1`–`B4`）只是樓層標籤，不代表深度：臺鐵高鐵站體的 B2 為月台層、深度 −14.5 公尺，捷運台北車站的 B2 為板南線大廳層、深度 −11.0 公尺。
+`LevelId`（`elevated`、`G`、`B1`–`B4`）只是樓層標籤，不代表深度：臺鐵高鐵站體的 B2 為月台層、深度 −14.5 公尺，捷運台北車站的 B2 為板南線大廳層、深度 −12.5 公尺。
 
-實際深度由 `src/data/levels.ts` 的 `STRUCTURES` 決定，每個構造物各有一份 `floor`（樓板高程）與 `height`（淨高）的樓層表，另記結構底高程。`levelOf(structure, level)` 為唯一查詢入口；構造物未指定、或該構造物沒有這一層時回退 `src/data/schema.ts` 的預設樓層表，不拋出例外。
+實際深度由 `src/data/levels.ts` 的 `STRUCTURES` 決定，每個構造物各有一份 `floor`（樓板高程）與 `height`（淨高）的樓層表，另記結構底高程。`levelOf(structure, level)` 為唯一查詢入口；構造物未指定、或該構造物沒有這一層時回退 `src/data/schema.ts` 的預設樓層表，不拋出例外。捷運台北車站分為板南線站體（`metro-station`）與淡水信義線站體（`metro-station-r`）兩份樓層表：兩線站體各自獨立興建、深度不同，同標為 B3 的樓層一為板南線月台層、一為淡水信義線大廳層。
 
 | 代號 | 名稱 | 預設樓板高程 | 預設層高 |
 |---|---|---|---|
@@ -76,9 +79,19 @@ graph TD
 
 ## 分層地下構造
 
-OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一巨大多邊形。兩者於覆寫表標為 `exclude`，改由 `src/data/structures/station-complex.ts` 的 `buildStationComplex()` 產生分層量體，於 `buildBaseline()` 併入場景：站體的逐層樓板、B1 的五條南北向通道與南北迴廊、捷運兩線的樓板與大廳、垂直動線核心、A1 的樓板、大廳與地下量體，以及地下街之間的連通道。
+OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一巨大多邊形。兩者於覆寫表標為 `exclude`，改由 `src/data/structures/station-complex.ts` 的 `buildStationComplex()` 產生分層量體，於 `buildBaseline()` 併入場景：站體的逐層樓板、捷運兩線的樓板與大廳、A1 的樓板、大廳與地下量體，以及 B1 的站內動線、B3 共用穿堂與捷運站內的梯組。
 
-臺鐵高鐵站體與 A1 的平面由 OSM 輪廓推算（`polygonAxis`、`advance`、`offsetPolyline`、`corridorPolygon`、`nearestPair`）；捷運兩線的平面則取自公告圖的車站箱涵——以含 OSM 月台形心者為準，找不到即擲出例外。深度一律取該構造物的樓層表，不新增座標常數。
+B1 的站內動線由 `src/data/structures/concourse.ts` 的 `buildConcourse()` 依 `indoor.json` 產生：通道依 `level` 標籤與連通關係分為站體、捷運、地下街三階，階梯與電扶梯依 `incline` 標籤與兩端所接的通道決定起訖高程，電梯取鄰近通道的樓層為停靠層。站體 B1 的樓板範圍隨環廊擴大，取站體輪廓、西停車場與站體層通道的凸包（`stationConcourseFootprint()`）。分階規則與各類量體的數量見 `docs/status-quo.md` 的〈站內動線〉。已由 OSM 基礎流程畫出的地下街通道只用於判定樓層，不重複產生量體。
+
+月台層下方的 B3 共用穿堂另由同一模組的 `buildB3Concourse()` 產生，由 `buildStationComplex()` 併入場景。穿堂 `station/concourse/B3` 的平面取四座月台電扶梯（OSM 標 `highway=pedestrian`、`conveying` 與 `level=-3`，每座月台下方一座）各 8 公尺寬的帶狀，連同各座沿自身方向延伸到公告圖淡水信義線車站箱涵的交點後求凸包，樓板 −19.0 公尺、淨高 3.0 公尺；四座月台電扶梯自該樓板通到月台面。
+
+捷運站內的梯組依臺北捷運〈台北車站資訊圖〉配置，OSM 沒有對應的圖徵，由同一模組的兩支函式沿 OSM 月台主軸產生。`buildMetroTransfer()` 產生板南線大廳層的北側延伸段 `metro/bannan/concourse/B2/north`（淡水信義線箱涵在月台南端以南的部分），以及延伸段中段通往淡水信義線月台的 `metro/transfer/B4`、北端通往淡水信義線大廳層的 `metro/transfer/B3/west` 與 `metro/transfer/B3/east` 三組梯組；`buildBannanPlatformAccess()` 產生板南線大廳層通往島式月台的四組梯組 `metro/bannan/platform/1` 至 `4`。每組梯組由並排的電扶梯與階梯組成，各道的 id 為 `<梯組 id>/<kind>/<同類序號>`，坡度 30 度。地下街輪廓內標到 `level` −3 的電梯以該地下街的停車場層為底。
+
+方案拆除地下街時，`src/app/scenario.ts` 的 `clearMall()` 以該地下街輪廓為界清除站內動線，只套用在 `layer === "passage"` 且樓層為 B1 或 G 的量體，B3 的穿堂與捷運站內的梯組不在其列。`kind === "passage"` 的通道以 `splitPolylineByRing()` 切開：界內段另立 `<id>/cleared`（第二段起 `<id>/cleared/n`）並標為拆除，界外段沿用原 id（第二段起 `<id>/kept/n`）。階梯、電扶梯、電梯與出入口雨棚不切開，只要有一個頂點落在輪廓內即整座標為拆除。
+
+出地面的階梯與電扶梯另由 `src/data/structures/exit-shed.ts` 的 `buildExitSheds()` 產生出入口雨棚：自地面端沿折線取最多 10 公尺的區段，於兩側與後端立 1.1 公尺高的矮牆、四角立柱撐起底面 3.6 公尺的頂棚，正面不封。地面端落在 2 公尺以上建物輪廓內者視為開在建物內的出入口，不產生雨棚；頂棚平面內的 OSM 建物面（多為 `building=roof` 的雨棚）改由雨棚量體呈現，地標不在此列。雨棚與階梯同樣依地下街輪廓判定，頂點落在拆除的地下街範圍內即一併標為拆除。
+
+臺鐵高鐵站體與 A1 的平面取自 OSM 輪廓；捷運兩線的平面則取自公告圖的車站箱涵——以含 OSM 月台形心者為準，找不到即擲出例外。深度一律取該構造物的樓層表，不新增座標常數。
 
 ## 地標細部量體
 
@@ -131,7 +144,7 @@ OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一�
 
 ## 渲染
 
-多邊形以 `ExtrudeGeometry` 長出高度，折線先由中心線往兩側平移成封閉帶狀再長出厚度，圓形隧道則以 `CatmullRomCurve3` 搭配 `TubeGeometry` 沿軸心掃出，三者都在建模時將高程烘焙進頂點。
+多邊形以 `ExtrudeGeometry` 長出高度，折線先由中心線往兩側平移成封閉帶狀再長出厚度，圓形隧道則以 `CatmullRomCurve3` 搭配 `TubeGeometry` 沿軸心掃出，三者都在建模時將高程烘焙進頂點。兩端高程不同的折線量體為斜板（`slopedBand()`）；階梯則沿線等分為數級（`steppedBand()`，每級高差約 0.6 公尺、至少 3 級），每級各是一塊頂面水平的量體，級數為示意，不等於實際階數。
 
 多邊形量體另可指定 `geometry.polygonTop`：頂點數與 `polygon` 相同時改以 `loft()` 放樣，側面逐段四邊形相連、上下面各自封口。屋頂斜面、塔冠收分與外傾的翹角都靠這一支產生；上緣輪廓由 `insetRing()`（正值內縮、負值出挑）或框架矩形給出。放樣的各面不共用頂點，法線才逐面平直，屋面與塔冠不致被平滑成圓弧。
 
@@ -141,9 +154,11 @@ OSM 只有 2D 輪廓，捷運台北車站與機場捷運 A1 站各只有單一�
 
 圓形隧道的放大只作用於軸心高程，半徑維持真實值，否則隧道會被壓成與斷面不符的扁管。
 
-紙模型色調以 `MeshStandardMaterial` 為底（`roughness` 0.95、`metalness` 0），於 `onBeforeCompile` 注入菲涅耳邊緣提亮與極淡的垂直漸層，不加描邊。著色優先序為方案狀態、所屬路線（`LINE_COLORS`，取自維基百科 Template:台北捷運色彩並與底色混色降彩度）、量體類型、圖層。車站量體與樓板以半透明呈現，外殼僅繪製背面，使內部的月台與股道不致遭到遮蔽；樓板、外殼與地塊另設 `polygonOffset` 退讓給貼在其上的量體，避免共面造成閃爍。光照為半球光加單一平行光，色調映射採 ACES Filmic。
+紙模型色調以 `MeshStandardMaterial` 為底（`roughness` 0.95、`metalness` 0），於 `onBeforeCompile` 注入菲涅耳邊緣提亮與極淡的垂直漸層，不加描邊。著色優先序為方案狀態、量體類型的中性色，最後才是圖層；只有股道與隧道再混入所屬路線色（`LINE_TINT`，股道 0.6、隧道 0.2），站體、樓板、大廳與月台一律維持中性暖灰，路線色因此只出現在線形上。路線色見 `LINE_COLORS`：捷運各線取自維基百科 Template:台北捷運色彩並與底色混色降彩度，臺鐵與高鐵無對應的捷運色，另取鐵灰與橘，與板南線藍、淡水信義線紅拉開距離。車站量體與樓板以半透明呈現，外殼僅繪製背面，使內部的月台與股道不致遭到遮蔽；樓板、外殼與地塊另設 `polygonOffset` 退讓給貼在其上的量體，避免共面造成閃爍。光照為半球光加單一平行光，色調映射採 ACES Filmic。
 
-面狀地物一律為極淡的半透明色塊、無邊框：地塊 0.08、路面與水域 0.35、綠地 0.3、廣場 0.25。公園、綠地與廣場只長 0.15 公尺的薄層，水域則長出實際水深，採用值見 `docs/status-quo.md`。
+著色量體與中性量體的相交由 `tests/collisions.test.ts` 逐點取樣檢查：股道與隧道的中心線、兩側邊線與箱涵格點逐一比對其他量體的柱體，垂直重疊超過 0.05 公尺即記為相交。現況資料既有的 28 組相交列於 `KNOWN_COLLISIONS`，新增或消失都會使測試失敗。該測試只回報，不影響算繪。
+
+面狀地物一律為極淡的半透明色塊、無邊框：地塊 0.08、路面與水域 0.35、綠地 0.3、廣場 0.25、停車場樓面 0.45、電梯井道 0.55。公園、綠地與廣場只長 0.15 公尺的薄層，水域則長出實際水深，採用值見 `docs/status-quo.md`。
 
 涵蓋範圍內有上萬項量體，逐項一個 mesh 時繪製呼叫的數量本身就使畫面低於 30 fps。`Viewer.setFeatures()` 因此把外觀與擺放方式相同的量體以 `BufferGeometryUtils.mergeGeometries()` 併為單一 mesh，分組鍵涵蓋圖層、樓層、類型、方案狀態、顏色、不透明度、底面高程與繪製旗標，即 `applyMorph()` 與材質會用到的每一項，分組因此不改變任何呈現行為。幾何先統一為無索引、只留位置與法線：`ExtrudeGeometry` 帶 uv 而不帶索引、放樣與斜帶量體帶索引而不帶 uv，屬性組合不一致時無法合併。場景不做量體挑選，合併後也不影響互動。
 
@@ -184,7 +199,7 @@ OSM 的道路為中心線，逐條依等級推估路寬後外擴成帶，路口�
 |---|---|
 | `v` | 格式版本，目前為 `1` |
 | `m` | 視圖模式，`3d` 或 `aerial` |
-| `s` | 方案，`status-quo` 或 `proposal-b` |
+| `s` | 方案，`status-quo`、`proposal-b` 或 `proposal-c` |
 | `loff` | 關閉的圖層代號，以逗號分隔（僅記錄預設開啟者） |
 | `lon` | 開啟的圖層代號，以逗號分隔（僅記錄預設關閉者，目前為禁限建範圍） |
 | `voff` | 關閉的樓層代號，以逗號分隔 |

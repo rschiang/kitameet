@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { featuresFor } from "../src/app/scenario.ts";
 import { baselineById } from "../src/data/scene.ts";
+import { REBUILD_ZONE, proposalB } from "../src/data/scenarios/proposal-b.ts";
 import {
   NEW_PLATFORM_LENGTH,
   PLATFORM_OFFSETS,
-  REBUILD_ZONE,
   WORKS_CLEARANCE,
-  proposalB,
-} from "../src/data/scenarios/proposal-b.ts";
+} from "../src/data/scenarios/shared.ts";
 import { sideOfPolyline } from "../src/geo/clip.ts";
-import { decompose, polygonAxis } from "../src/geo/measure.ts";
+import { decompose, nearestOnPolyline, polygonAxis } from "../src/geo/measure.ts";
 import { offsetPolyline, polylineBearingAtX } from "../src/geo/offset.ts";
 import type { Local } from "../src/geo/project.ts";
 import { PLATFORM_WIDTH } from "../src/data/schema.ts";
@@ -23,6 +22,8 @@ const MALL_Z = "way/328691510";
 const BANNAN_PLATFORM = "way/741259904";
 /** 西側接軌對象：甲接北線、乙接南線。 */
 const WEST_TIE_IN_IDS: Record<string, string> = { 甲: "way/13991375", 乙: "way/323105864" };
+/** 東側接軌對象：甲接北線、乙接南線。 */
+const EAST_TIE_IN_IDS: Record<string, string> = { 甲: "way/381111230", 乙: "way/593866771" };
 
 /** 兩組點之間的最短距離（公尺）。 */
 function minDistance(a: Local[], b: Local[]): number {
@@ -64,6 +65,15 @@ function bandOf(points: Local[]): { along: number[]; lateral: number[] } {
   const axis = polygonAxis(baselineById(PLATFORM1)!.geometry.polygon!);
   const parts = points.map((p) => decompose(axis.center, axis.bearing, p));
   return { along: parts.map((v) => v.along), lateral: parts.map((v) => v.lateral) };
+}
+
+/** 股道的東段：月台段（全線唯一超過 400 公尺的線段）終點到接軌點。 */
+function eastSection(line: Local[]): Local[] {
+  const start = line.findIndex(
+    (p, i) => i > 0 && Math.hypot(p[0] - line[i - 1][0], p[1] - line[i - 1][1]) > 400,
+  );
+  expect(start, "找不到月台段").toBeGreaterThan(0);
+  return line.slice(start);
 }
 
 const names = Object.keys(PLATFORM_OFFSETS);
@@ -111,7 +121,7 @@ describe("方案 B 幾何", () => {
     }
   });
 
-  it("新建股道西至北門、東至中山北路", () => {
+  it("新建股道西至北門、東至北平東路", () => {
     for (const id of trackIds) {
       const track = byId.get(id);
       expect(track, id).toBeDefined();
@@ -134,6 +144,42 @@ describe("方案 B 幾何", () => {
   it("新建股道全線最小曲率半徑不低於 90 公尺", () => {
     for (const id of trackIds) {
       expect(minRadius(byId.get(id)!.geometry.polyline!), id).toBeGreaterThan(90);
+    }
+  });
+
+  it("新建股道東段最小曲率半徑不低於 115 公尺", () => {
+    for (const id of trackIds) {
+      expect(minRadius(eastSection(byId.get(id)!.geometry.polyline!)), `${id} 東段`).toBeGreaterThan(
+        115,
+      );
+    }
+  });
+
+  it("新建股道東段由北而南的順序不變，互不交叉", () => {
+    const sections = trackIds.map((id) => eastSection(byId.get(id)!.geometry.polyline!));
+    for (let i = 1; i < sections.length; i++) {
+      for (const p of sections[i - 1]) {
+        expect(sideOfPolyline(sections[i], p), `${trackIds[i - 1]} 越過 ${trackIds[i]}`).toBeGreaterThan(
+          -0.05,
+        );
+      }
+    }
+    // 兩座月台之間的甲-南與乙-北接往不同的既有股道，全程保持股道間距
+    const gap = Math.min(...sections[1].map((p) => nearestOnPolyline(p, sections[2]).distance));
+    expect(gap).toBeGreaterThan(3.4);
+  });
+
+  it("新建股道東側接軌點與既有線形切線連續", () => {
+    for (const name of names) {
+      const existing = baselineById(EAST_TIE_IN_IDS[name])!.geometry.polyline!;
+      const bearing = polylineBearingAtX(existing, REBUILD_ZONE.eastX);
+      expect(bearing, name).not.toBeNull();
+      for (const side of ["北", "南"]) {
+        const line = byId.get(`proposal-b/track/${name}-${side}`)!.geometry.polyline!;
+        const [a, b] = [line[line.length - 2], line[line.length - 1]];
+        const end = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+        expect(Math.abs(end - bearing!), `${name}-${side} 接軌點折角`).toBeLessThan(1);
+      }
     }
   });
 

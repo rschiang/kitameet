@@ -2,7 +2,7 @@ import { DEFAULT_CAMERA, type CameraState } from "../render/scene.ts";
 import { LAYER_GROUP_IDS, type LayerGroupId } from "./layerGroups.ts";
 import type { ViewMode } from "./viewMode.ts";
 
-export type ScenarioId = "status-quo" | "proposal-b";
+export type ScenarioId = "status-quo" | "proposal-b" | "proposal-c";
 
 export interface SectionState {
   enabled: boolean;

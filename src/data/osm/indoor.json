@@ -1,0 +1,5401 @@
+{
+ "generatedAt": "2026-11-23T17:08:13.242Z",
+ "queryBbox": {
+  "south": 25.0452,
+  "west": 121.5104,
+  "north": 25.0512,
+  "east": 121.5212
+ },
+ "overpassTimestamp": "2026-11-23T17:06:55Z",
+ "originLatLon": {
+  "lat": 25.0478,
+  "lon": 121.5172
+ },
+ "features": [
+  {
+   "id": "node/11262183532",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-2;0",
+    "ref": "Y4",
+    "entrance": "yes"
+   },
+   "point": [
+    67.05,
+    47.63
+   ]
+  },
+  {
+   "id": "node/12087421735",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-3;-2;-1;0"
+   },
+   "point": [
+    19.88,
+    -95.88
+   ]
+  },
+  {
+   "id": "node/12087421748",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-3;-2;0"
+   },
+   "point": [
+    -65.99,
+    -71.85
+   ]
+  },
+  {
+   "id": "node/12088561598",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-2;-1"
+   },
+   "point": [
+    -95.86,
+    -135.82
+   ]
+  },
+  {
+   "id": "node/12088561600",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-2;0"
+   },
+   "point": [
+    -156.42,
+    -98.84
+   ]
+  },
+  {
+   "id": "node/12416217860",
+   "kind": "entrance",
+   "tags": {
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -589.27,
+    -113.56
+   ]
+  },
+  {
+   "id": "node/12416217878",
+   "kind": "entrance",
+   "tags": {
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -593.24,
+    -74.29
+   ]
+  },
+  {
+   "id": "node/12416217892",
+   "kind": "entrance",
+   "tags": {
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -591.04,
+    -85.75
+   ]
+  },
+  {
+   "id": "node/12433935207",
+   "kind": "entrance",
+   "tags": {
+    "name": "Y22",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -443.83,
+    174.12
+   ]
+  },
+  {
+   "id": "node/14239586686",
+   "kind": "entrance",
+   "tags": {
+    "ref": "2",
+    "entrance": "staircase",
+    "amenity": "parking_entrance"
+   },
+   "point": [
+    -646.41,
+    345.1
+   ]
+  },
+  {
+   "id": "node/14239586692",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "ref": "1",
+    "amenity": "parking_entrance"
+   },
+   "point": [
+    -655.36,
+    309.86
+   ]
+  },
+  {
+   "id": "node/14254267473",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "0;-1",
+    "ref": "捷運台北車站M4出入口"
+   },
+   "point": [
+    -4.62,
+    -145.01
+   ]
+  },
+  {
+   "id": "node/14254320847",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "name": "M4",
+    "ref": "M4",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    13.97,
+    -145.64
+   ]
+  },
+  {
+   "id": "node/2793285506",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "M8",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    31.42,
+    -223.25
+   ]
+  },
+  {
+   "id": "node/2793285507",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "name": "M1",
+    "ref": "M1",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    97.65,
+    50.55
+   ]
+  },
+  {
+   "id": "node/2793285508",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "name": "M2",
+    "ref": "M2",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    182.45,
+    33
+   ]
+  },
+  {
+   "id": "node/3186011786",
+   "kind": "entrance",
+   "tags": {
+    "ref": "2",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -669.13,
+    171.23
+   ]
+  },
+  {
+   "id": "node/3192472090",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "R1",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    183.31,
+    97.1
+   ]
+  },
+  {
+   "id": "node/3262986269",
+   "kind": "entrance",
+   "tags": {
+    "name": "延平北路緊急出口",
+    "ref": "5",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -526.2,
+    69.67
+   ]
+  },
+  {
+   "id": "node/3355241657",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "name": "Z7出口",
+    "ref": "Z7",
+    "entrance": "staircase"
+   },
+   "point": [
+    -376.67,
+    -31.4
+   ]
+  },
+  {
+   "id": "node/3505143496",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "Y7",
+    "railway": "subway_entrance",
+    "entrance": "yes"
+   },
+   "point": [
+    -107.17,
+    130.33
+   ]
+  },
+  {
+   "id": "node/3505143594",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "M7",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    147.6,
+    -192.06
+   ]
+  },
+  {
+   "id": "node/3505143596",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y21",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -500.95,
+    239.19
+   ]
+  },
+  {
+   "id": "node/3505143793",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "M3",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    60.61,
+    -166.69
+   ]
+  },
+  {
+   "id": "node/3505143993",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "M5",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -104.69,
+    -113.44
+   ]
+  },
+  {
+   "id": "node/3505143998",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y9",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -141.39,
+    136.68
+   ]
+  },
+  {
+   "id": "node/3505144000",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y26",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -568.97,
+    214.65
+   ]
+  },
+  {
+   "id": "node/3505144002",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y27",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -660.65,
+    274.82
+   ]
+  },
+  {
+   "id": "node/3505144196",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y17",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -352.97,
+    185.81
+   ]
+  },
+  {
+   "id": "node/3505144197",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y19",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -430.02,
+    210.25
+   ]
+  },
+  {
+   "id": "node/3505145593",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y10",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -104.02,
+    91.56
+   ]
+  },
+  {
+   "id": "node/3505145993",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y12",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -160.85,
+    101.41
+   ]
+  },
+  {
+   "id": "node/3505145996",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y23",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -557.57,
+    254.34
+   ]
+  },
+  {
+   "id": "node/3505146395",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y25",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -595.87,
+    262.19
+   ]
+  },
+  {
+   "id": "node/3699813329",
+   "kind": "entrance",
+   "tags": {
+    "ref": "Y28",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -646.08,
+    231.75
+   ]
+  },
+  {
+   "id": "node/3707479441",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "M6",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -39.02,
+    -186.88
+   ]
+  },
+  {
+   "id": "node/4406419433",
+   "kind": "entrance",
+   "tags": {
+    "name": "Y11",
+    "railway": "subway_entrance",
+    "entrance": "staircase"
+   },
+   "point": [
+    -163.87,
+    140.47
+   ]
+  },
+  {
+   "id": "node/4406419435",
+   "kind": "entrance",
+   "tags": {
+    "name": "Y13",
+    "railway": "subway_entrance",
+    "entrance": "staircase"
+   },
+   "point": [
+    -238.36,
+    182.51
+   ]
+  },
+  {
+   "id": "node/4406419436",
+   "kind": "entrance",
+   "tags": {
+    "name": "Y14",
+    "railway": "subway_entrance",
+    "entrance": "staircase"
+   },
+   "point": [
+    -226.32,
+    117.03
+   ]
+  },
+  {
+   "id": "node/4406419437",
+   "kind": "entrance",
+   "tags": {
+    "name": "Y15",
+    "railway": "subway_entrance",
+    "entrance": "staircase"
+   },
+   "point": [
+    -286.07,
+    168.53
+   ]
+  },
+  {
+   "id": "node/4406419438",
+   "kind": "entrance",
+   "tags": {
+    "name": "Y16",
+    "railway": "subway_entrance",
+    "entrance": "staircase"
+   },
+   "point": [
+    -258.73,
+    124.78
+   ]
+  },
+  {
+   "id": "node/4406419440",
+   "kind": "entrance",
+   "tags": {
+    "name": "Y18",
+    "railway": "subway_entrance",
+    "entrance": "staircase"
+   },
+   "point": [
+    -319.94,
+    138.89
+   ]
+  },
+  {
+   "id": "node/4476417055",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "name": "Z10出口",
+    "ref": "Z10",
+    "entrance": "staircase"
+   },
+   "point": [
+    -416.73,
+    -88.6
+   ]
+  },
+  {
+   "id": "node/4476417057",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "name": "Z6出口(館前路)",
+    "ref": "Z6",
+    "entrance": "staircase"
+   },
+   "point": [
+    -254.45,
+    -118.16
+   ]
+  },
+  {
+   "id": "node/4476417058",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "name": "Z8出口(懷寧街)",
+    "ref": "Z8",
+    "entrance": "staircase"
+   },
+   "point": [
+    -344.87,
+    -93.85
+   ]
+  },
+  {
+   "id": "node/4476417059",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "name": "Z9出口",
+    "ref": "Z9",
+    "entrance": "staircase"
+   },
+   "point": [
+    -403.28,
+    -25.94
+   ]
+  },
+  {
+   "id": "node/4899551431",
+   "kind": "entrance",
+   "tags": {
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -581,
+    -50.68
+   ]
+  },
+  {
+   "id": "node/4958026454",
+   "kind": "entrance",
+   "tags": {
+    "railway": "subway_entrance",
+    "entrance": "yes"
+   },
+   "point": [
+    -219.2,
+    89.41
+   ]
+  },
+  {
+   "id": "node/5021873865",
+   "kind": "entrance",
+   "tags": {
+    "name": "1號出入口",
+    "railway": "subway_entrance",
+    "entrance": "yes"
+   },
+   "point": [
+    -225.44,
+    81
+   ]
+  },
+  {
+   "id": "node/5021873866",
+   "kind": "entrance",
+   "tags": {
+    "name": "2號出入口",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -273.3,
+    109.22
+   ]
+  },
+  {
+   "id": "node/5021873867",
+   "kind": "entrance",
+   "tags": {
+    "name": "3號出入口",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -355.36,
+    129.52
+   ]
+  },
+  {
+   "id": "node/5021873868",
+   "kind": "entrance",
+   "tags": {
+    "name": "5號出入口",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -456.75,
+    109.41
+   ]
+  },
+  {
+   "id": "node/5021873869",
+   "kind": "entrance",
+   "tags": {
+    "name": "6號出入口",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -505.74,
+    179.05
+   ]
+  },
+  {
+   "id": "node/5021873870",
+   "kind": "entrance",
+   "tags": {
+    "name": "7號出入口",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -522.93,
+    162.8
+   ]
+  },
+  {
+   "id": "node/5023330234",
+   "kind": "entrance",
+   "tags": {
+    "name": "4號出入口",
+    "railway": "subway_entrance"
+   },
+   "point": [
+    -364.03,
+    86.6
+   ]
+  },
+  {
+   "id": "node/5318551122",
+   "kind": "entrance",
+   "tags": {
+    "name": "Y20",
+    "railway": "subway_entrance",
+    "entrance": "staircase"
+   },
+   "point": [
+    -351.5,
+    155.45
+   ]
+  },
+  {
+   "id": "node/6134454488",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "indoor": "yes"
+   },
+   "point": [
+    -15.63,
+    -215.53
+   ]
+  },
+  {
+   "id": "node/6134454489",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-1;0",
+    "ref": "M4"
+   },
+   "point": [
+    -2.95,
+    -145.23
+   ]
+  },
+  {
+   "id": "node/6224730660",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-2;0",
+    "ref": "Z4"
+   },
+   "point": [
+    -182.24,
+    -137.2
+   ]
+  },
+  {
+   "id": "node/7213500589",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-2;0"
+   },
+   "point": [
+    44.42,
+    -47.29
+   ]
+  },
+  {
+   "id": "node/7213500590",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-2;0"
+   },
+   "point": [
+    47.74,
+    -30.5
+   ]
+  },
+  {
+   "id": "node/7213500591",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-2;0"
+   },
+   "point": [
+    51.71,
+    -8.75
+   ]
+  },
+  {
+   "id": "node/7213500592",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-2;0"
+   },
+   "point": [
+    54.02,
+    7.15
+   ]
+  },
+  {
+   "id": "node/7839379051",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "0;1"
+   },
+   "point": [
+    46.61,
+    -19.98
+   ]
+  },
+  {
+   "id": "node/7839379052",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator"
+   },
+   "point": [
+    -89.97,
+    4.87
+   ]
+  },
+  {
+   "id": "node/9260092527",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-1;0",
+    "ref": "R4",
+    "entrance": "yes"
+   },
+   "point": [
+    297.04,
+    307.53
+   ]
+  },
+  {
+   "id": "node/9263801885",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-1;0",
+    "ref": "R5",
+    "entrance": "yes"
+   },
+   "point": [
+    300.49,
+    334.41
+   ]
+  },
+  {
+   "id": "node/9266255461",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "0;-1;-2",
+    "ref": "R1",
+    "entrance": "yes"
+   },
+   "point": [
+    181.64,
+    89.32
+   ]
+  },
+  {
+   "id": "node/9277546671",
+   "kind": "elevator",
+   "tags": {
+    "highway": "elevator",
+    "level": "-1;0"
+   },
+   "point": [
+    280.31,
+    227.54
+   ]
+  },
+  {
+   "id": "node/9369867438",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "K5",
+    "entrance": "staircase"
+   },
+   "point": [
+    -46.44,
+    -118.76
+   ]
+  },
+  {
+   "id": "node/9369867439",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "K3",
+    "entrance": "staircase"
+   },
+   "point": [
+    -23.97,
+    -111.91
+   ]
+  },
+  {
+   "id": "node/9369867440",
+   "kind": "entrance",
+   "tags": {
+    "level": "0",
+    "ref": "K4",
+    "entrance": "staircase"
+   },
+   "point": [
+    -42.61,
+    -106.8
+   ]
+  },
+  {
+   "id": "way/1004287145",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     186.36,
+     87.24
+    ],
+    [
+     190.56,
+     91.71
+    ]
+   ]
+  },
+  {
+   "id": "way/1004287146",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     172.8,
+     95.76
+    ],
+    [
+     181.17,
+     98.68
+    ]
+   ]
+  },
+  {
+   "id": "way/1043812652",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     78.89,
+     61.51
+    ],
+    [
+     80.26,
+     69.16
+    ],
+    [
+     82.02,
+     79.04
+    ],
+    [
+     83.89,
+     89.57
+    ],
+    [
+     86.02,
+     101.46
+    ],
+    [
+     86.65,
+     104.87
+    ],
+    [
+     87.87,
+     111.49
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881522",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     24.45,
+     -44.49
+    ],
+    [
+     39.02,
+     -47.26
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881523",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "down"
+   },
+   "polyline": [
+    [
+     3.48,
+     -40.64
+    ],
+    [
+     19.75,
+     -43.56
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881524",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     27.56,
+     -28.26
+    ],
+    [
+     42.14,
+     -31.03
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881525",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "down"
+   },
+   "polyline": [
+    [
+     6.79,
+     -24.3
+    ],
+    [
+     23.08,
+     -27.22
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881526",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     30.84,
+     -5.35
+    ],
+    [
+     45.41,
+     -8.11
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881527",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "down"
+   },
+   "polyline": [
+    [
+     9.78,
+     -1.23
+    ],
+    [
+     26.03,
+     -4.32
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881528",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     33.6,
+     10.41
+    ],
+    [
+     48.17,
+     7.64
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881529",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "down"
+   },
+   "polyline": [
+    [
+     12.55,
+     14.54
+    ],
+    [
+     28.79,
+     11.43
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881530",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "down"
+   },
+   "polyline": [
+    [
+     -38.86,
+     -32.44
+    ],
+    [
+     -53.42,
+     -29.6
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881531",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     -64.07,
+     -27.77
+    ],
+    [
+     -80.32,
+     -24.68
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881532",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "down"
+   },
+   "polyline": [
+    [
+     -35.61,
+     -16.01
+    ],
+    [
+     -50.16,
+     -13.17
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881533",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     -60.81,
+     -11.34
+    ],
+    [
+     -77.07,
+     -8.24
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881534",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "down"
+   },
+   "polyline": [
+    [
+     -31.7,
+     6.15
+    ],
+    [
+     -46.26,
+     8.98
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881535",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     -56.91,
+     10.82
+    ],
+    [
+     -73.16,
+     13.91
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881536",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     -55.69,
+     26.56
+    ],
+    [
+     -71.94,
+     29.67
+    ]
+   ]
+  },
+  {
+   "id": "way/1164881537",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "down"
+   },
+   "polyline": [
+    [
+     -30.48,
+     21.89
+    ],
+    [
+     -45.04,
+     24.73
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010640",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "站前地下街"
+   },
+   "polyline": [
+    [
+     -378.25,
+     -61.39
+    ],
+    [
+     -320.56,
+     -76.57
+    ],
+    [
+     -276.06,
+     -88.26
+    ],
+    [
+     -215.74,
+     -104.12
+    ],
+    [
+     -161.54,
+     -118.37
+    ],
+    [
+     -114.45,
+     -130.75
+    ],
+    [
+     -110.02,
+     -131.92
+    ],
+    [
+     -95.86,
+     -135.82
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010641",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "站前地下街"
+   },
+   "polyline": [
+    [
+     -221.67,
+     -127.01
+    ],
+    [
+     -219.01,
+     -116.53
+    ],
+    [
+     -215.74,
+     -104.12
+    ],
+    [
+     -207.35,
+     -72.62
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010642",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "站前地下街"
+   },
+   "polyline": [
+    [
+     -164.74,
+     -130.55
+    ],
+    [
+     -161.54,
+     -118.37
+    ],
+    [
+     -158.77,
+     -107.81
+    ],
+    [
+     -156.42,
+     -98.84
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010643",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "站前地下街"
+   },
+   "polyline": [
+    [
+     -381.69,
+     -74.33
+    ],
+    [
+     -369.95,
+     -77.37
+    ],
+    [
+     -279.25,
+     -100.91
+    ],
+    [
+     -219.01,
+     -116.53
+    ],
+    [
+     -164.74,
+     -130.55
+    ],
+    [
+     -118.47,
+     -143.1
+    ],
+    [
+     -113.36,
+     -144.49
+    ],
+    [
+     -111.68,
+     -138.17
+    ],
+    [
+     -110.02,
+     -131.92
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010644",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "站前地下街"
+   },
+   "polyline": [
+    [
+     -406.84,
+     -45.89
+    ],
+    [
+     -416.58,
+     -43.64
+    ],
+    [
+     -423.14,
+     -69.4
+    ],
+    [
+     -383.18,
+     -79.9
+    ],
+    [
+     -381.69,
+     -74.33
+    ],
+    [
+     -378.25,
+     -61.39
+    ],
+    [
+     -376.48,
+     -54.71
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010661",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "台北地下街"
+   },
+   "polyline": [
+    [
+     -528.02,
+     238.28
+    ],
+    [
+     -534.19,
+     218.96
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010662",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "台北地下街"
+   },
+   "polyline": [
+    [
+     80.26,
+     69.16
+    ],
+    [
+     10.8,
+     80.8
+    ],
+    [
+     -67.46,
+     93.93
+    ],
+    [
+     -159.62,
+     110.15
+    ],
+    [
+     -191.97,
+     116.74
+    ],
+    [
+     -220.6,
+     123.65
+    ],
+    [
+     -319.06,
+     148.72
+    ],
+    [
+     -391.82,
+     169.42
+    ],
+    [
+     -465.29,
+     195.22
+    ],
+    [
+     -519.22,
+     214.34
+    ],
+    [
+     -534.19,
+     218.96
+    ],
+    [
+     -550.96,
+     222.75
+    ],
+    [
+     -638.22,
+     241.12
+    ],
+    [
+     -633.96,
+     260.91
+    ],
+    [
+     -627.86,
+     259.66
+    ],
+    [
+     -548.46,
+     243.4
+    ],
+    [
+     -528.02,
+     238.28
+    ],
+    [
+     -516.65,
+     234.86
+    ],
+    [
+     -510.52,
+     233.01
+    ],
+    [
+     -457.78,
+     214.04
+    ],
+    [
+     -384.96,
+     187.48
+    ],
+    [
+     -313.69,
+     168.4
+    ],
+    [
+     -222,
+     144.24
+    ],
+    [
+     -186.61,
+     135.71
+    ],
+    [
+     -157.23,
+     130.69
+    ],
+    [
+     -64.03,
+     114
+    ],
+    [
+     14.62,
+     101.01
+    ],
+    [
+     83.89,
+     89.57
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010663",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "台北地下街"
+   },
+   "polyline": [
+    [
+     -457.78,
+     214.04
+    ],
+    [
+     -465.29,
+     195.22
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010664",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "台北地下街"
+   },
+   "polyline": [
+    [
+     -313.69,
+     168.4
+    ],
+    [
+     -319.06,
+     148.72
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010665",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -62.63,
+     122.14
+    ],
+    [
+     -64.03,
+     114
+    ],
+    [
+     -67.46,
+     93.93
+    ],
+    [
+     -68.56,
+     87.52
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010666",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes",
+    "name": "台北地下街"
+   },
+   "polyline": [
+    [
+     -186.61,
+     135.71
+    ],
+    [
+     -191.97,
+     116.74
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010667",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes",
+    "name": "中山地下街"
+   },
+   "polyline": [
+    [
+     232.6,
+     161.31
+    ],
+    [
+     237.18,
+     166.52
+    ],
+    [
+     266.46,
+     207.14
+    ],
+    [
+     280.35,
+     233.92
+    ],
+    [
+     286.3,
+     249.56
+    ],
+    [
+     294.84,
+     272.03
+    ],
+    [
+     303.89,
+     308.27
+    ],
+    [
+     307,
+     330.13
+    ],
+    [
+     310.67,
+     396.21
+    ],
+    [
+     315.96,
+     395.74
+    ],
+    [
+     322.21,
+     494.9
+    ],
+    [
+     328.94,
+     594.49
+    ],
+    [
+     330.65,
+     619.86
+    ],
+    [
+     333.72,
+     675.31
+    ],
+    [
+     335.29,
+     703.83
+    ],
+    [
+     329.53,
+     703.8
+    ],
+    [
+     332.54,
+     778.65
+    ],
+    [
+     336.65,
+     778.48
+    ],
+    [
+     338.13,
+     807.64
+    ],
+    [
+     339.2,
+     832.89
+    ],
+    [
+     335.07,
+     833.06
+    ],
+    [
+     337.23,
+     868.97
+    ],
+    [
+     337.45,
+     874.13
+    ],
+    [
+     339.53,
+     921.42
+    ],
+    [
+     339.77,
+     926.78
+    ],
+    [
+     340.36,
+     940.18
+    ],
+    [
+     346.24,
+     939.92
+    ],
+    [
+     350.65,
+     1040.32
+    ]
+   ]
+  },
+  {
+   "id": "way/1174010668",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     145.46,
+     61.78
+    ],
+    [
+     152.38,
+     58.06
+    ],
+    [
+     154.98,
+     56.66
+    ],
+    [
+     162.16,
+     52.8
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999744",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     227.87,
+     165.02
+    ],
+    [
+     251.12,
+     195.23
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999745",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     307,
+     330.13
+    ],
+    [
+     300.29,
+     330.82
+    ],
+    [
+     300.49,
+     334.41
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999746",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     289.03,
+     273.32
+    ],
+    [
+     294.84,
+     272.03
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999747",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     289.03,
+     273.32
+    ],
+    [
+     295.43,
+     301.38
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999748",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     303.89,
+     308.27
+    ],
+    [
+     297.65,
+     309.83
+    ],
+    [
+     297.04,
+     307.53
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999752",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     200.44,
+     131.01
+    ],
+    [
+     212.48,
+     122.4
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999753",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes",
+    "name": "中山地下街"
+   },
+   "polyline": [
+    [
+     227.87,
+     165.02
+    ],
+    [
+     232.6,
+     161.31
+    ],
+    [
+     237.74,
+     157.57
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999754",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     227.87,
+     165.02
+    ],
+    [
+     216.04,
+     150.34
+    ],
+    [
+     227.02,
+     142.64
+    ],
+    [
+     222.01,
+     135.65
+    ],
+    [
+     210.89,
+     143.96
+    ],
+    [
+     205.46,
+     137.23
+    ],
+    [
+     217.01,
+     128.7
+    ],
+    [
+     212.48,
+     122.4
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999755",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     237.74,
+     157.57
+    ],
+    [
+     227.02,
+     142.64
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999756",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     205.46,
+     137.23
+    ],
+    [
+     200.44,
+     131.01
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999757",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     216.04,
+     150.34
+    ],
+    [
+     210.89,
+     143.96
+    ]
+   ]
+  },
+  {
+   "id": "way/1210999758",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     222.01,
+     135.65
+    ],
+    [
+     217.01,
+     128.7
+    ]
+   ]
+  },
+  {
+   "id": "way/1211274421",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     180.56,
+     90.2
+    ],
+    [
+     187.49,
+     100.4
+    ]
+   ]
+  },
+  {
+   "id": "way/1211274422",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up",
+    "conveying": "no",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     187.49,
+     100.4
+    ],
+    [
+     189.96,
+     103.91
+    ],
+    [
+     187.12,
+     105.89
+    ],
+    [
+     184.17,
+     101.69
+    ]
+   ]
+  },
+  {
+   "id": "way/1211274423",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     154.44,
+     67.28
+    ],
+    [
+     157.3,
+     66.82
+    ],
+    [
+     163.6,
+     63.62
+    ],
+    [
+     169.04,
+     72.5
+    ]
+   ]
+  },
+  {
+   "id": "way/1211274424",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up",
+    "conveying": "no",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     169.04,
+     72.5
+    ],
+    [
+     171.4,
+     76.02
+    ],
+    [
+     168.4,
+     78
+    ],
+    [
+     164.98,
+     72.9
+    ]
+   ]
+  },
+  {
+   "id": "way/1211274425",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     154.44,
+     67.28
+    ],
+    [
+     149.89,
+     68.08
+    ]
+   ]
+  },
+  {
+   "id": "way/1211274426",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     157.3,
+     66.82
+    ],
+    [
+     174.28,
+     94.08
+    ],
+    [
+     180.56,
+     90.2
+    ],
+    [
+     181.64,
+     89.32
+    ]
+   ]
+  },
+  {
+   "id": "way/1211274427",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -384.96,
+     187.48
+    ],
+    [
+     -391.82,
+     169.42
+    ]
+   ]
+  },
+  {
+   "id": "way/1211274428",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     149.89,
+     68.08
+    ],
+    [
+     127.8,
+     71.65
+    ],
+    [
+     82.02,
+     79.04
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599704",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     192.6,
+     121.13
+    ],
+    [
+     197.95,
+     117.28
+    ],
+    [
+     205.08,
+     112.17
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599705",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     157.98,
+     77.54
+    ],
+    [
+     164.98,
+     72.9
+    ],
+    [
+     172.89,
+     67.65
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599706",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     179.65,
+     104.82
+    ],
+    [
+     184.17,
+     101.69
+    ],
+    [
+     193.04,
+     95.51
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599707",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     181.64,
+     89.32
+    ],
+    [
+     172.68,
+     96.06
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599710",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0",
+    "incline": "up"
+   },
+   "polyline": [
+    [
+     96.22,
+     50.78
+    ],
+    [
+     97.65,
+     50.55
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599711",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     129.28,
+     35.42
+    ],
+    [
+     125.68,
+     29.04
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599712",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     125.68,
+     29.04
+    ],
+    [
+     122.97,
+     24.34
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599713",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1-0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     121.04,
+     45.82
+    ],
+    [
+     97.65,
+     50.55
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599714",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     159.79,
+     49.25
+    ],
+    [
+     152.62,
+     39.02
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599715",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1-0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     158.68,
+     37.78
+    ],
+    [
+     182.45,
+     33
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599716",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     158.68,
+     37.78
+    ],
+    [
+     152.62,
+     39.02
+    ],
+    [
+     133.37,
+     43.33
+    ],
+    [
+     125.51,
+     44.93
+    ],
+    [
+     121.04,
+     45.82
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599717",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up",
+    "conveying": "no",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     127.8,
+     71.65
+    ],
+    [
+     125.27,
+     59.48
+    ],
+    [
+     133.38,
+     57.89
+    ],
+    [
+     125.51,
+     44.93
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599718",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1-0",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     197.95,
+     117.28
+    ],
+    [
+     183.31,
+     97.1
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599719",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     212.48,
+     122.4
+    ],
+    [
+     205.08,
+     112.17
+    ],
+    [
+     193.04,
+     95.51
+    ],
+    [
+     172.89,
+     67.65
+    ],
+    [
+     162.16,
+     52.8
+    ]
+   ]
+  },
+  {
+   "id": "way/1211599720",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     200.44,
+     131.01
+    ],
+    [
+     192.6,
+     121.13
+    ],
+    [
+     179.65,
+     104.82
+    ],
+    [
+     172.68,
+     96.06
+    ],
+    [
+     157.98,
+     77.54
+    ],
+    [
+     145.46,
+     61.78
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533494",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     3.65,
+     118.58
+    ],
+    [
+     4.5,
+     123.57
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533495",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2;-1",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     17.47,
+     116.26
+    ],
+    [
+     3.65,
+     118.58
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533496",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     9.2,
+     72.29
+    ],
+    [
+     10.8,
+     80.8
+    ],
+    [
+     14.62,
+     101.01
+    ],
+    [
+     17.47,
+     116.26
+    ],
+    [
+     18.53,
+     122.07
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533497",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2-0",
+    "incline": "up",
+    "conveying": "no",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     9.2,
+     72.29
+    ],
+    [
+     33.54,
+     67.74
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533498",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2-0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -62.63,
+     122.14
+    ],
+    [
+     -107.17,
+     130.33
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533499",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -71.78,
+     68.4
+    ],
+    [
+     -72.59,
+     64.29
+    ],
+    [
+     -73.51,
+     59.64
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533500",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -72.59,
+     64.29
+    ],
+    [
+     -68.17,
+     63.69
+    ],
+    [
+     -67.38,
+     67.86
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533501",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1-0",
+    "incline": "up",
+    "conveying": "no",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -67.38,
+     67.86
+    ],
+    [
+     -48.25,
+     64.64
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533503",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2;-1",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     86.65,
+     104.87
+    ],
+    [
+     73.19,
+     107.28
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533504",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     73.19,
+     107.28
+    ],
+    [
+     74.09,
+     112.24
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533505",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     75.47,
+     42.26
+    ],
+    [
+     73.71,
+     32.4
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533506",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     78.89,
+     61.51
+    ],
+    [
+     75.47,
+     42.26
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533507",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1-0",
+    "incline": "up",
+    "conveying": "no",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     75.47,
+     42.26
+    ],
+    [
+     56.11,
+     45.67
+    ]
+   ]
+  },
+  {
+   "id": "way/1215533508",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2-0",
+    "incline": "up",
+    "conveying": "no",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     127.8,
+     71.65
+    ],
+    [
+     131.17,
+     89.64
+    ],
+    [
+     132.61,
+     89.4
+    ],
+    [
+     146.79,
+     87.5
+    ]
+   ]
+  },
+  {
+   "id": "way/1303200030",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0",
+    "indoor": "no"
+   },
+   "polyline": [
+    [
+     -500.95,
+     239.19
+    ],
+    [
+     -502.05,
+     239.51
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073189",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -85.17,
+     -118.28
+    ],
+    [
+     -104.69,
+     -113.44
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073190",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -91.96,
+     -143.34
+    ],
+    [
+     -90.34,
+     -137.35
+    ],
+    [
+     -85.17,
+     -118.28
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073193",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     47.27,
+     -179.01
+    ],
+    [
+     40.76,
+     -203.12
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073194",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     19.88,
+     -95.88
+    ],
+    [
+     -3.67,
+     -89.98
+    ],
+    [
+     -6.6,
+     -101.26
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073195",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2;-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -12.27,
+     -123.01
+    ],
+    [
+     -16.59,
+     -137.69
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073196",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -2.95,
+     -145.23
+    ],
+    [
+     -17.72,
+     -141.58
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073197",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -2.32,
+     -141.58
+    ],
+    [
+     -16.59,
+     -137.69
+    ],
+    [
+     -17.72,
+     -141.58
+    ],
+    [
+     -23.45,
+     -161.1
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073198",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -72.8,
+     -84.16
+    ],
+    [
+     -69.37,
+     -70.92
+    ],
+    [
+     -65.99,
+     -71.85
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073199",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -201.66,
+     -50.88
+    ],
+    [
+     -100.73,
+     -76.95
+    ],
+    [
+     -72.8,
+     -84.16
+    ],
+    [
+     -6.6,
+     -101.26
+    ],
+    [
+     -9.42,
+     -112.1
+    ],
+    [
+     -12.27,
+     -123.01
+    ],
+    [
+     -106.29,
+     -98.72
+    ],
+    [
+     -145.93,
+     -88.48
+    ],
+    [
+     -207.35,
+     -72.62
+    ],
+    [
+     -204.52,
+     -61.83
+    ],
+    [
+     -201.66,
+     -50.88
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073200",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     40.76,
+     -203.12
+    ],
+    [
+     35.06,
+     -224.22
+    ],
+    [
+     31.42,
+     -223.25
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073201",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2;-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -100.73,
+     -76.95
+    ],
+    [
+     -97.68,
+     -63.9
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073202",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -93.06,
+     -42.75
+    ],
+    [
+     -97.68,
+     -63.9
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073203",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -37.35,
+     -157.61
+    ],
+    [
+     -43.53,
+     -180.82
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073204",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -41.16,
+     -195.64
+    ],
+    [
+     -39.02,
+     -186.88
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073205",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2;-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -9.42,
+     -112.1
+    ],
+    [
+     15.45,
+     -118.47
+    ],
+    [
+     22.61,
+     -120.31
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073206",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     29.24,
+     -96.68
+    ],
+    [
+     5.67,
+     -90.14
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073207",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     28.77,
+     -98.35
+    ],
+    [
+     19.88,
+     -95.88
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073208",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     18.07,
+     -136.46
+    ],
+    [
+     7.94,
+     -133.65
+    ],
+    [
+     9.3,
+     -128.8
+    ],
+    [
+     16.26,
+     -130.72
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073209",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     18.07,
+     -136.46
+    ],
+    [
+     22.61,
+     -120.31
+    ],
+    [
+     28.77,
+     -98.35
+    ],
+    [
+     29.24,
+     -96.68
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073210",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -2.32,
+     -141.58
+    ],
+    [
+     13.97,
+     -145.64
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073211",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -91.96,
+     -143.34
+    ],
+    [
+     -37.35,
+     -157.61
+    ],
+    [
+     -23.45,
+     -161.1
+    ],
+    [
+     32.03,
+     -175.08
+    ],
+    [
+     47.27,
+     -179.01
+    ],
+    [
+     123.81,
+     -198.71
+    ],
+    [
+     127.21,
+     -186.59
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073212",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -97.68,
+     -63.9
+    ],
+    [
+     -75.61,
+     -69.2
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073214",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     67.16,
+     -140.37
+    ],
+    [
+     60.61,
+     -166.69
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073215",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     22.61,
+     -120.31
+    ],
+    [
+     52.69,
+     -133.82
+    ],
+    [
+     67.16,
+     -140.37
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073216",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "down",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     81.18,
+     -75.09
+    ],
+    [
+     79.63,
+     -78.25
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073217",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2;-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -204.52,
+     -61.83
+    ],
+    [
+     -227.47,
+     -56.44
+    ]
+   ]
+  },
+  {
+   "id": "way/1305073218",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -234.6,
+     -54.73
+    ],
+    [
+     -237.67,
+     -67.32
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198561",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -95.86,
+     -135.82
+    ],
+    [
+     -90.34,
+     -137.35
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198562",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -273.88,
+     -79.57
+    ],
+    [
+     -251.26,
+     -85.41
+    ],
+    [
+     -250.67,
+     -82.58
+    ],
+    [
+     -259.75,
+     -80.12
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198563",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -281.81,
+     -111.09
+    ],
+    [
+     -254.45,
+     -118.16
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198564",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -273.88,
+     -79.57
+    ],
+    [
+     -276.06,
+     -88.26
+    ],
+    [
+     -279.25,
+     -100.91
+    ],
+    [
+     -281.81,
+     -111.09
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198565",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -372.24,
+     -86.74
+    ],
+    [
+     -344.87,
+     -93.85
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198566",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -369.95,
+     -77.37
+    ],
+    [
+     -372.24,
+     -86.74
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198567",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -406.84,
+     -45.89
+    ],
+    [
+     -403.28,
+     -25.94
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198568",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -423.14,
+     -69.4
+    ],
+    [
+     -427.32,
+     -85.98
+    ],
+    [
+     -416.73,
+     -88.6
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198569",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -317.38,
+     -64.3
+    ],
+    [
+     -320.56,
+     -76.57
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198570",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -317.38,
+     -64.3
+    ],
+    [
+     -365.34,
+     -51.93
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198571",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -376.48,
+     -54.71
+    ],
+    [
+     -376.67,
+     -31.4
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198572",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -147.66,
+     -95.34
+    ],
+    [
+     -195.48,
+     -83.06
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198573",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -145.93,
+     -88.48
+    ],
+    [
+     -147.66,
+     -95.34
+    ],
+    [
+     -151.23,
+     -109.65
+    ],
+    [
+     -158.77,
+     -107.81
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198574",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -100.73,
+     -76.95
+    ],
+    [
+     -106.29,
+     -98.72
+    ],
+    [
+     -109.7,
+     -112.12
+    ],
+    [
+     -114.45,
+     -130.75
+    ]
+   ]
+  },
+  {
+   "id": "way/1305198575",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2;-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -111.68,
+     -138.17
+    ],
+    [
+     -91.96,
+     -143.34
+    ]
+   ]
+  },
+  {
+   "id": "way/1477792954",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     4.5,
+     123.57
+    ],
+    [
+     16.75,
+     121.51
+    ]
+   ]
+  },
+  {
+   "id": "way/1477792956",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     74.09,
+     112.24
+    ],
+    [
+     81.74,
+     110.87
+    ]
+   ]
+  },
+  {
+   "id": "way/1530028350",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -55.98,
+     -186.1
+    ],
+    [
+     -54.02,
+     -179.39
+    ]
+   ]
+  },
+  {
+   "id": "way/204616541",
+   "kind": "parking",
+   "tags": {
+    "name": "臺北車站西側地上停車場",
+    "amenity": "parking"
+   },
+   "polygon": [
+    [
+     -183.79,
+     68.86
+    ],
+    [
+     -181.65,
+     72.38
+    ],
+    [
+     -175.27,
+     76.35
+    ],
+    [
+     -170.88,
+     77.88
+    ],
+    [
+     -158.24,
+     76.31
+    ],
+    [
+     -106.25,
+     67
+    ],
+    [
+     -99.26,
+     64.84
+    ],
+    [
+     -97.33,
+     62.56
+    ],
+    [
+     -95.4,
+     58.66
+    ],
+    [
+     -95.48,
+     52.86
+    ],
+    [
+     -112.62,
+     -38.02
+    ],
+    [
+     -202.83,
+     -20.84
+    ]
+   ]
+  },
+  {
+   "id": "way/366766266",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1"
+   },
+   "polyline": [
+    [
+     -45.92,
+     -188.52
+    ],
+    [
+     -47.28,
+     -194.26
+    ],
+    [
+     -38.2,
+     -196.55
+    ]
+   ]
+  },
+  {
+   "id": "way/366766267",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes",
+    "name": "凱薩飯店美食地下街"
+   },
+   "polyline": [
+    [
+     -96.57,
+     -171.8
+    ],
+    [
+     -96.59,
+     -174.27
+    ],
+    [
+     -96.61,
+     -175.82
+    ],
+    [
+     -94.05,
+     -177.89
+    ],
+    [
+     -55.98,
+     -186.1
+    ],
+    [
+     -45.92,
+     -188.52
+    ]
+   ]
+  },
+  {
+   "id": "way/366766271",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "down",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -102.93,
+     -167.87
+    ],
+    [
+     -96.57,
+     -171.8
+    ]
+   ]
+  },
+  {
+   "id": "way/366766277",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -43.53,
+     -180.82
+    ],
+    [
+     -45.92,
+     -188.52
+    ]
+   ]
+  },
+  {
+   "id": "way/449290514",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "down",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -192.38,
+     -134.95
+    ],
+    [
+     -221.67,
+     -127.01
+    ]
+   ]
+  },
+  {
+   "id": "way/449290516",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2--0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -121.73,
+     -153.95
+    ],
+    [
+     -148.05,
+     -146.58
+    ]
+   ]
+  },
+  {
+   "id": "way/449290517",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-2",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -121.73,
+     -153.95
+    ],
+    [
+     -118.47,
+     -143.1
+    ]
+   ]
+  },
+  {
+   "id": "way/505995048",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -219.2,
+     89.41
+    ],
+    [
+     -193.7,
+     84.82
+    ],
+    [
+     -73.51,
+     59.64
+    ]
+   ]
+  },
+  {
+   "id": "way/505995049",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -73.51,
+     59.64
+    ],
+    [
+     -1.63,
+     45.45
+    ],
+    [
+     73.71,
+     32.4
+    ],
+    [
+     105.95,
+     27.12
+    ],
+    [
+     122.97,
+     24.34
+    ],
+    [
+     148.55,
+     20.55
+    ],
+    [
+     146.11,
+     4.59
+    ]
+   ]
+  },
+  {
+   "id": "way/506236922",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -234.6,
+     -54.73
+    ],
+    [
+     -227.47,
+     -56.44
+    ],
+    [
+     -218.34,
+     -20.02
+    ],
+    [
+     -194.13,
+     82.97
+    ],
+    [
+     -193.7,
+     84.82
+    ],
+    [
+     -193.36,
+     86.35
+    ],
+    [
+     -199.46,
+     111.9
+    ]
+   ]
+  },
+  {
+   "id": "way/506236923",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -218.34,
+     -20.02
+    ],
+    [
+     -93.06,
+     -42.75
+    ]
+   ]
+  },
+  {
+   "id": "way/506236925",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     162.16,
+     52.8
+    ],
+    [
+     159.79,
+     49.25
+    ]
+   ]
+  },
+  {
+   "id": "way/654650822",
+   "kind": "corridor",
+   "tags": {
+    "highway": "footway",
+    "level": "-1"
+   },
+   "polyline": [
+    [
+     -96.59,
+     -174.27
+    ],
+    [
+     -93.86,
+     -174.87
+    ]
+   ]
+  },
+  {
+   "id": "way/654650823",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -38.2,
+     -196.55
+    ],
+    [
+     -20.58,
+     -201.53
+    ],
+    [
+     -14.25,
+     -203.36
+    ],
+    [
+     -4.86,
+     -206.07
+    ],
+    [
+     -12.3,
+     -232.06
+    ],
+    [
+     -27.71,
+     -227.64
+    ],
+    [
+     -20.58,
+     -201.53
+    ]
+   ]
+  },
+  {
+   "id": "way/654650824",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "down",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -11.03,
+     -192.26
+    ],
+    [
+     -14.25,
+     -203.36
+    ]
+   ]
+  },
+  {
+   "id": "way/710688091",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -19.57,
+     -55.91
+    ],
+    [
+     -1.63,
+     45.45
+    ]
+   ]
+  },
+  {
+   "id": "way/710689339",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     129.28,
+     35.42
+    ],
+    [
+     133.37,
+     43.33
+    ],
+    [
+     143.27,
+     58.49
+    ]
+   ]
+  },
+  {
+   "id": "way/710689340",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     79.63,
+     -78.25
+    ],
+    [
+     52.69,
+     -133.82
+    ],
+    [
+     32.03,
+     -175.08
+    ]
+   ]
+  },
+  {
+   "id": "way/710689341",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -73.51,
+     59.64
+    ],
+    [
+     -89.35,
+     -23.29
+    ],
+    [
+     -93.06,
+     -42.75
+    ],
+    [
+     -19.57,
+     -55.91
+    ],
+    [
+     66.15,
+     -71.82
+    ],
+    [
+     81.18,
+     -75.09
+    ],
+    [
+     86.51,
+     -73.77
+    ],
+    [
+     105.95,
+     27.12
+    ]
+   ]
+  },
+  {
+   "id": "way/710689342",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-2;-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -68.56,
+     87.52
+    ],
+    [
+     -69.09,
+     84.34
+    ],
+    [
+     -71.78,
+     68.4
+    ]
+   ]
+  },
+  {
+   "id": "way/747736867",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     73.53,
+     -22.67
+    ],
+    [
+     66.15,
+     -71.82
+    ]
+   ]
+  },
+  {
+   "id": "way/748819888",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "-1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     163.12,
+     103.27
+    ],
+    [
+     172.68,
+     96.06
+    ]
+   ]
+  },
+  {
+   "id": "way/748819889",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     145.46,
+     61.78
+    ],
+    [
+     143.27,
+     58.49
+    ]
+   ]
+  },
+  {
+   "id": "way/748819891",
+   "kind": "steps",
+   "tags": {
+    "highway": "pedestrian",
+    "level": "-3",
+    "incline": "down",
+    "conveying": "reversible"
+   },
+   "polyline": [
+    [
+     74.35,
+     -13.18
+    ],
+    [
+     39.77,
+     -7.17
+    ]
+   ]
+  },
+  {
+   "id": "way/748819892",
+   "kind": "steps",
+   "tags": {
+    "highway": "pedestrian",
+    "level": "-3",
+    "incline": "down",
+    "conveying": "reversible"
+   },
+   "polyline": [
+    [
+     70.95,
+     -32.94
+    ],
+    [
+     35.9,
+     -26.82
+    ]
+   ]
+  },
+  {
+   "id": "way/748819893",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-3--1",
+    "incline": "down",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     154.98,
+     56.66
+    ],
+    [
+     138.54,
+     27.76
+    ]
+   ]
+  },
+  {
+   "id": "way/748819894",
+   "kind": "steps",
+   "tags": {
+    "highway": "pedestrian",
+    "level": "-3",
+    "incline": "down",
+    "conveying": "reversible"
+   },
+   "polyline": [
+    [
+     67.59,
+     -50.59
+    ],
+    [
+     32.16,
+     -44.42
+    ]
+   ]
+  },
+  {
+   "id": "way/748819895",
+   "kind": "steps",
+   "tags": {
+    "highway": "pedestrian",
+    "level": "-3",
+    "incline": "down",
+    "conveying": "reversible"
+   },
+   "polyline": [
+    [
+     77.4,
+     2.52
+    ],
+    [
+     43.26,
+     8.46
+    ]
+   ]
+  },
+  {
+   "id": "way/748819896",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-3--1",
+    "incline": "down",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     152.38,
+     58.06
+    ],
+    [
+     136.16,
+     29.76
+    ]
+   ]
+  },
+  {
+   "id": "way/752973315",
+   "kind": "room",
+   "tags": {
+    "level": "-1",
+    "indoor": "room",
+    "name": "高鐵B1付費區"
+   },
+   "polygon": [
+    [
+     -8.97,
+     34.89
+    ],
+    [
+     -73.85,
+     46.44
+    ],
+    [
+     -76.33,
+     32.68
+    ],
+    [
+     -78.81,
+     18.91
+    ],
+    [
+     -81.29,
+     5.11
+    ],
+    [
+     -16.4,
+     -6.43
+    ],
+    [
+     -13.93,
+     7.32
+    ],
+    [
+     -11.45,
+     21.09
+    ]
+   ]
+  },
+  {
+   "id": "way/752973316",
+   "kind": "room",
+   "tags": {
+    "level": "-1",
+    "indoor": "room",
+    "name": "高鐵B1付費區"
+   },
+   "polygon": [
+    [
+     -16.4,
+     -6.43
+    ],
+    [
+     -81.29,
+     5.11
+    ],
+    [
+     -83.77,
+     -8.69
+    ],
+    [
+     -86.26,
+     -22.52
+    ],
+    [
+     -88.74,
+     -36.28
+    ],
+    [
+     -23.85,
+     -47.82
+    ],
+    [
+     -21.36,
+     -34
+    ],
+    [
+     -18.89,
+     -20.22
+    ]
+   ]
+  },
+  {
+   "id": "way/752973317",
+   "kind": "room",
+   "tags": {
+    "level": "-1",
+    "indoor": "room",
+    "name": "台鐵B1付費區"
+   },
+   "polygon": [
+    [
+     85.98,
+     18.11
+    ],
+    [
+     64.94,
+     21.85
+    ],
+    [
+     4.04,
+     32.67
+    ],
+    [
+     1.52,
+     18.66
+    ],
+    [
+     -0.97,
+     4.78
+    ],
+    [
+     -3.45,
+     -8.99
+    ],
+    [
+     70.34,
+     -22.11
+    ],
+    [
+     73.53,
+     -22.67
+    ],
+    [
+     78.49,
+     -23.55
+    ]
+   ]
+  },
+  {
+   "id": "way/752973318",
+   "kind": "room",
+   "tags": {
+    "level": "-1",
+    "indoor": "room",
+    "name": "高鐵B1付費區"
+   },
+   "polygon": [
+    [
+     70.34,
+     -22.11
+    ],
+    [
+     -3.45,
+     -8.99
+    ],
+    [
+     -5.92,
+     -22.71
+    ],
+    [
+     -8.34,
+     -36.19
+    ],
+    [
+     -10.92,
+     -50.51
+    ],
+    [
+     62.89,
+     -63.63
+    ],
+    [
+     65.45,
+     -49.28
+    ],
+    [
+     68.15,
+     -34.31
+    ]
+   ]
+  },
+  {
+   "id": "way/775603771",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0;1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     44.1,
+     -54.02
+    ],
+    [
+     32.01,
+     -51.83
+    ]
+   ]
+  },
+  {
+   "id": "way/775603772",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0;1",
+    "incline": "down",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -62.61,
+     -35.11
+    ],
+    [
+     -74.34,
+     -32.98
+    ]
+   ]
+  },
+  {
+   "id": "way/775603773",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0;1",
+    "incline": "down",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -34.54,
+     32.75
+    ],
+    [
+     -25.23,
+     31.06
+    ]
+   ]
+  },
+  {
+   "id": "way/775603774",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0;1",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     21.83,
+     21.53
+    ],
+    [
+     30.85,
+     19.89
+    ]
+   ]
+  },
+  {
+   "id": "way/837405276",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1-4",
+    "conveying": "yes"
+   },
+   "polyline": [
+    [
+     124.44,
+     142.18
+    ],
+    [
+     141.5,
+     139.3
+    ]
+   ]
+  },
+  {
+   "id": "way/837405277",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1-4",
+    "conveying": "yes"
+   },
+   "polyline": [
+    [
+     141.82,
+     141.47
+    ],
+    [
+     124.63,
+     144.6
+    ]
+   ]
+  },
+  {
+   "id": "way/840101916",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     45.74,
+     17.2
+    ],
+    [
+     38.17,
+     18.57
+    ],
+    [
+     30.85,
+     19.89
+    ]
+   ]
+  },
+  {
+   "id": "way/840101917",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     37.33,
+     13.97
+    ],
+    [
+     38.17,
+     18.57
+    ]
+   ]
+  },
+  {
+   "id": "way/840101918",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -34.54,
+     32.75
+    ],
+    [
+     -42.22,
+     34.14
+    ],
+    [
+     -50.88,
+     35.71
+    ]
+   ]
+  },
+  {
+   "id": "way/840101919",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -43.24,
+     28.57
+    ],
+    [
+     -42.22,
+     34.14
+    ]
+   ]
+  },
+  {
+   "id": "way/840101920",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -62.61,
+     -35.11
+    ],
+    [
+     -54.77,
+     -36.53
+    ],
+    [
+     -47.26,
+     -37.9
+    ]
+   ]
+  },
+  {
+   "id": "way/840101921",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -53.9,
+     -31.75
+    ],
+    [
+     -54.77,
+     -36.53
+    ]
+   ]
+  },
+  {
+   "id": "way/840101922",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     18.52,
+     -49.39
+    ],
+    [
+     25.56,
+     -50.66
+    ],
+    [
+     32.01,
+     -51.83
+    ]
+   ]
+  },
+  {
+   "id": "way/840101923",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     26.36,
+     -46.3
+    ],
+    [
+     25.56,
+     -50.66
+    ]
+   ]
+  },
+  {
+   "id": "way/840101924",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0;1",
+    "incline": "up",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     5.24,
+     -46.98
+    ],
+    [
+     18.52,
+     -49.39
+    ]
+   ]
+  },
+  {
+   "id": "way/840101925",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0;1",
+    "incline": "down",
+    "conveying": "yes",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -47.26,
+     -37.9
+    ],
+    [
+     -37.34,
+     -39.69
+    ]
+   ]
+  },
+  {
+   "id": "way/840101926",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0;1",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     56.19,
+     15.3
+    ],
+    [
+     45.74,
+     17.2
+    ]
+   ]
+  },
+  {
+   "id": "way/840101927",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "0;1",
+    "incline": "down",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     -50.88,
+     35.71
+    ],
+    [
+     -60.4,
+     37.44
+    ]
+   ]
+  },
+  {
+   "id": "way/840101928",
+   "kind": "corridor",
+   "tags": {
+    "highway": "corridor",
+    "level": "1",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     45.18,
+     12.55
+    ],
+    [
+     34.14,
+     -47.71
+    ],
+    [
+     26.36,
+     -46.3
+    ],
+    [
+     -53.9,
+     -31.75
+    ],
+    [
+     -63.13,
+     -30.08
+    ],
+    [
+     -52.09,
+     30.17
+    ],
+    [
+     -43.24,
+     28.57
+    ],
+    [
+     37.33,
+     13.97
+    ],
+    [
+     45.18,
+     12.55
+    ]
+   ]
+  },
+  {
+   "id": "way/840113720",
+   "kind": "steps",
+   "tags": {
+    "highway": "steps",
+    "level": "-1;0",
+    "incline": "up",
+    "indoor": "yes"
+   },
+   "polyline": [
+    [
+     127.21,
+     -186.59
+    ],
+    [
+     147.6,
+     -192.06
+    ]
+   ]
+  }
+ ]
+}

@@ -147,6 +147,7 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   },
   "way/204616534": {
     name: "K 區地下街停車場車道",
+    kind: "parking",
     layer: "mall",
     level: "B2",
     structure: "mall-k",
@@ -242,6 +243,17 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
       "為 A1 站體的重複量體，與站體各層頂面共面而互閃；站體已由 structures/station-complex.ts 的分層量體呈現。",
   },
 
+  // ── 站內動線 ──────────────────────────────────────────
+  // 以下通道改由 `structures/concourse.ts` 依室內圖資與樓層分階呈現，不重複繪製。
+  "way/366766267": {
+    exclude: true,
+    sourceNote: "凱薩飯店美食地下街通道：改由 structures/concourse.ts 的捷運 B1 通道呈現。",
+  },
+  "way/654650822": {
+    exclude: true,
+    sourceNote: "凱薩飯店美食地下街通道的末段：改由 structures/concourse.ts 的捷運 B1 通道呈現。",
+  },
+
   // ── 疊式月台車站 ──────────────────────────────────────
   // 西門站與中正紀念堂站為地下三層的跨月台轉乘站，正線深度見 `structures/stacked-station.ts`。
   "relation/16748280": {
@@ -299,7 +311,7 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
     name: "捷運淡水信義線月台",
     layer: "metro",
     level: "B4",
-    structure: "metro-station",
+    structure: "metro-station-r",
     confidence: "sourced",
     sourceNote: `${METRO_MAP}：淡水信義線月台位於地下四樓，站體在公園路下方。`,
   },
@@ -410,11 +422,11 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
 
 /**
  * OSM 的 `level`／`layer` 轉本專案樓層代號。
- * 地下街一律歸入 B1（OSM 慣以 -2 表示，與市府稱呼不一致），
+ * 地下街與地下停車場一律歸入 B1（OSM 慣以 -2、-3 表示，與市府稱呼不一致），
  * 其餘以絕對值對應並上限至 B4。
  */
 export function levelFromOsm(kind: FeatureKind, level: number | undefined): LevelId {
-  if (kind === "underground-mall") return "B1";
+  if (kind === "underground-mall" || kind === "parking") return "B1";
   if (level === undefined || level >= 0) return "G";
   const depth = Math.min(4, Math.round(Math.abs(level)));
   return (["G", "B1", "B2", "B3", "B4"] as const)[depth];

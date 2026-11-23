@@ -11,6 +11,7 @@ import { LEVELS, type Confidence, type LevelId } from "./schema.ts";
 export type StructureId =
   | "tra-hsr-station"
   | "metro-station"
+  | "metro-station-r"
   | "airport-mrt-a1"
   | "mall-k"
   | "mall-z"
@@ -20,6 +21,7 @@ export type StructureId =
   | "metro-station-ximen"
   | "metro-station-cks"
   | "parking-east"
+  | "parking-west"
   | "metro-line-bl"
   | "metro-line-r"
   | "metro-line-g"
@@ -63,10 +65,11 @@ const DORTS =
   "B1 車站大廳（含臨停接送、預辦登機）、B2 貨物裝卸與機電設備、B3 捷運月台層與停車場、B4 聯開大樓地下停車場。";
 
 const STATION_NOTE =
-  "中文維基百科「臺北車站」：第四代站體地上 6 層、地下 4 層，B1 為穿堂層、B2 為月台層（4 座島式月台、9 線）；各層高程為依此推估。";
+  "中文維基百科「臺北車站」：第四代站體地上 6 層、地下 4 層，B1 為穿堂層、B2 為月台層（4 座島式月台、9 線）；各層高程為依此推估。B1 的動線版面依站內張貼的兩份地下一層平面圖：環廊圍繞西停車場與兩區付費區，另有三條南北向通道。";
 
 const METRO_NOTE =
-  "捷運台北車站官方車站配置圖：B1 臺鐵高鐵大廳與停車場、B2 板南線大廳層、B3 板南線月台層與淡水信義線大廳層、B4 淡水信義線月台層；各層高程為推估。";
+  "捷運台北車站官方車站配置圖：B1 臺鐵高鐵大廳與停車場、B2 板南線大廳層、B3 板南線月台層與淡水信義線大廳層、B4 淡水信義線月台層；" +
+  "兩線站體各自獨立興建、深度不同，分列兩張樓層表。淡水信義線的 B3 大廳層即臺鐵、高鐵月台層下方與之共用的穿堂；各層高程為推估。";
 
 const MALL_NOTE = "地下街層數依臺北市市場處與營運單位資料，各層高程為推估。";
 
@@ -114,29 +117,52 @@ export function levelLabelFor(elevation: number): LevelId {
   );
 }
 
+/** 實地踏查的階數換算高差：每階 0.15 公尺。 */
+export const STEP_RISE = 0.15;
+
+const down = (from: number, steps: number): number =>
+  Math.round((from - steps * STEP_RISE) * 100) / 100;
+
+/** 站體 B1 最高；捷運 B1 低 17 階；Y、K、Z 區地下街再低 23 階。 */
+const STATION_B1 = -5.5;
+const METRO_B1 = down(STATION_B1, 17);
+const MALL_B1 = down(METRO_B1, 23);
+
+const TIER_NOTE =
+  "樓層高差依實地踏查階數：站體 B1 至捷運 B1 為 17 階、捷運 B1 至站前地下街為 23 階，每階以 0.15 公尺計；絕對高程為推估。";
+
 /** 各構造物的樓層與結構底。除註明外高程皆為推估值。 */
 export const STRUCTURES: Record<StructureId, StructureInfo> = {
   "tra-hsr-station": {
     label: "臺鐵／高鐵站體",
     levels: {
-      B1: estimated(-6.5, 6.0, "穿堂層：5 條南北向通道與南、北迴廊"),
+      B1: estimated(STATION_B1, 5.0, "穿堂層：環廊、三條南北向通道與兩區付費區"),
       B2: estimated(-14.5, 7.5, "月台層：4 座島式月台、9 線"),
-      B3: estimated(-22.5, 7.5),
+      B3: estimated(-19.0, 3.0, "臺鐵、高鐵、捷運共用穿堂層，位於月台層下方"),
       B4: estimated(-29.5, 6.5),
     },
     bottom: -33.5,
-    sourceNote: STATION_NOTE,
+    sourceNote: STATION_NOTE + TIER_NOTE,
   },
   "metro-station": {
-    label: "捷運台北車站",
+    label: "捷運台北車站（板南線站體）",
     levels: {
-      B1: estimated(-5.5, 5.0, "臺鐵高鐵大廳、站區地下商場"),
-      B2: estimated(-11.0, 5.0, "板南線大廳層"),
-      B3: estimated(-16.5, 5.0, "板南線月台層與淡水信義線大廳層"),
-      B4: estimated(-23.5, 6.5, "淡水信義線月台層"),
+      B1: estimated(METRO_B1, 3.0, "捷運地下一層：連通道與出口 M1 至 M8"),
+      B2: estimated(-12.5, 4.0, "板南線大廳層"),
+      B3: estimated(-16.5, 4.0, "板南線月台層"),
+    },
+    bottom: -18.0,
+    sourceNote: METRO_NOTE + TIER_NOTE,
+  },
+  "metro-station-r": {
+    label: "捷運台北車站（淡水信義線站體）",
+    levels: {
+      B1: estimated(METRO_B1, 3.0, "捷運地下一層"),
+      B3: estimated(-19.0, 3.0, "淡水信義線大廳層：臺鐵高鐵月台層下方，與臺鐵、高鐵共用的穿堂"),
+      B4: estimated(-23.5, 4.1, "淡水信義線月台層"),
     },
     bottom: -27.5,
-    sourceNote: METRO_NOTE,
+    sourceNote: METRO_NOTE + TIER_NOTE,
   },
   "airport-mrt-a1": {
     label: "機場捷運台北車站",
@@ -153,29 +179,29 @@ export const STRUCTURES: Record<StructureId, StructureInfo> = {
   "mall-k": {
     label: "東森廣場 K 區地下街",
     levels: {
-      B1: estimated(-6.0, 5.5, "商場"),
-      B2: estimated(-12.0, 5.5, "停車場"),
+      B1: estimated(MALL_B1, 3.0, "商場"),
+      B2: estimated(-15.5, 3.5, "停車場"),
     },
-    bottom: -15.5,
-    sourceNote: MALL_NOTE,
+    bottom: -19.0,
+    sourceNote: MALL_NOTE + TIER_NOTE,
   },
   "mall-z": {
     label: "站前地下街（Z 區）",
-    levels: { B1: estimated(-6.0, 5.5) },
-    bottom: -9.5,
-    sourceNote: MALL_NOTE,
+    levels: { B1: estimated(MALL_B1, 3.0) },
+    bottom: -15.0,
+    sourceNote: MALL_NOTE + TIER_NOTE,
   },
   "mall-y": {
     label: "台北地下街（Y 區）",
-    levels: { B1: estimated(-6.5, 6.0) },
-    bottom: -10.0,
-    sourceNote: MALL_NOTE,
+    levels: { B1: estimated(MALL_B1, 3.0) },
+    bottom: -15.0,
+    sourceNote: MALL_NOTE + TIER_NOTE,
   },
   "mall-r": {
     label: "中山地下街（R 區）",
-    levels: { B1: estimated(-6.0, 5.5) },
-    bottom: -9.5,
-    sourceNote: MALL_NOTE,
+    levels: { B1: estimated(METRO_B1, 3.0) },
+    bottom: -11.55,
+    sourceNote: MALL_NOTE + TIER_NOTE,
   },
   "mall-ximen": {
     label: "西門地下街",
@@ -206,11 +232,17 @@ export const STRUCTURES: Record<StructureId, StructureInfo> = {
   "parking-east": {
     label: "臺北車站東地下停車場",
     levels: {
-      B1: estimated(-6.0, 5.5),
+      B1: estimated(STATION_B1, 5.0),
       B2: estimated(-12.0, 5.5),
     },
     bottom: -15.5,
-    sourceNote: MALL_NOTE,
+    sourceNote: MALL_NOTE + TIER_NOTE,
+  },
+  "parking-west": {
+    label: "臺北車站西地下停車場",
+    levels: { B1: estimated(STATION_B1, 5.0) },
+    bottom: -9.0,
+    sourceNote: MALL_NOTE + TIER_NOTE,
   },
   "metro-line-bl": lineStructure("bl"),
   "metro-line-r": lineStructure("r"),

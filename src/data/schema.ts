@@ -61,7 +61,12 @@ export type FeatureKind =
   | "green"
   | "plaza"
   | "tunnel"
-  | "restriction";
+  | "restriction"
+  | "stairs"
+  | "escalator"
+  | "elevator"
+  | "parking"
+  | "exit-shed";
 
 /** 方案狀態：沿用、新建、拆除、改作他用。 */
 export type FeatureStatus = "existing" | "added" | "removed" | "repurposed";
@@ -137,6 +142,9 @@ export const TRACK_OFFSET = 8.0;
 /** 股道量體寬度與厚度（公尺）。 */
 export const TRACK_BAND_WIDTH = 3.0;
 export const TRACK_BAND_THICKNESS = 0.3;
+
+/** 地下停車場樓面的厚度（公尺）：只表現樓面範圍。 */
+export const PARKING_FLOOR_THICKNESS = 0.2;
 
 /** 通道與樓板厚度（公尺）。 */
 export const SLAB_THICKNESS = 0.4;

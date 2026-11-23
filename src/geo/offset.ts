@@ -71,6 +71,33 @@ export function truncatePolyline(pts: Local[], length: number): Local[] {
   return out;
 }
 
+/** 取折線上弧長 from 至 to 之間的子折線，含其間的原頂點。 */
+export function slicePolyline(pts: Local[], from: number, to: number): Local[] {
+  const total = polylineLength(pts);
+  const start = Math.min(Math.max(from, 0), total);
+  const end = Math.min(Math.max(to, 0), total);
+  if (end - start <= 1e-9) return [];
+
+  const out: Local[] = [];
+  let walked = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const segEnd = walked + seg;
+    if (seg > 0 && segEnd > start + 1e-9 && walked < end - 1e-9) {
+      const at = (s: number): Local => {
+        const t = (s - walked) / seg;
+        return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      };
+      if (out.length === 0) out.push(walked >= start ? a : at(start));
+      out.push(segEnd <= end ? b : at(end));
+    }
+    walked = segEnd;
+  }
+  return out;
+}
+
 /**
  * 以中心線與寬度產生矩形量體的封閉多邊形（左右各半寬）。
  * 回傳順序為左側正向 + 右側反向，形成不自交的環。

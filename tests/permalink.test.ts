@@ -21,6 +21,14 @@ describe("永久連結", () => {
     expect(decodeState(`#${hash}`)).toEqual(state);
   });
 
+  it("方案 C 往返一致", () => {
+    const state = defaultState();
+    state.scenario = "proposal-c";
+    const hash = encodeState(state);
+    expect(hash).toContain("s=proposal-c");
+    expect(decodeState(`#${hash}`)).toEqual(state);
+  });
+
   it("舊版 v=1 連結回到預設狀態", () => {
     const state = decodeState("#v=1&m=aerial&voff=B3&loff=metro");
     expect(state.layers).toEqual(defaultState().layers);
