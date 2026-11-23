@@ -15,6 +15,7 @@ import {
 import { STACKED_TRACK_IDS } from "../src/data/structures/stacked-station.ts";
 import { nearestOnPolyline } from "../src/geo/measure.ts";
 import { PARKING_FLOOR_THICKNESS, PLATFORM_RISE } from "../src/data/schema.ts";
+import { featureColor } from "../src/render/palette.ts";
 
 const features = buildBaseline();
 
@@ -274,5 +275,13 @@ describe("現況場景", () => {
     const boxes = features.filter((f) => f.layer === "station-box").map((f) => f.id);
     expect(boxes).not.toContain("way/448227619");
     expect(boxes).not.toContain("way/605982576");
+  });
+
+  it("所有月台同色，不退回捷運圖層色", () => {
+    const platforms = features.filter((f) => f.kind === "platform");
+    expect(platforms.map((f) => f.id)).toContain("way/741259905");
+    for (const f of platforms) {
+      expect(featureColor(f.kind, f.layer, f.status, f.line), f.id).toBe("#cfc8bb");
+    }
   });
 });

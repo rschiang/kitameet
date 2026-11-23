@@ -12,6 +12,7 @@ import { decompose, nearestOnPolyline, polygonAxis } from "../src/geo/measure.ts
 import { offsetPolyline, polylineBearingAtX } from "../src/geo/offset.ts";
 import type { Local } from "../src/geo/project.ts";
 import { PLATFORM_WIDTH } from "../src/data/schema.ts";
+import { featureColor } from "../src/render/palette.ts";
 
 const features = featuresFor("proposal-b");
 const byId = new Map(features.map((f) => [f.id, f]));
@@ -299,5 +300,38 @@ describe("方案 B 幾何", () => {
     const statusQuo = featuresFor("status-quo");
     expect(statusQuo.some((f) => f.id.startsWith("proposal-b/"))).toBe(false);
     expect(statusQuo.every((f) => f.status !== "added")).toBe(true);
+  });
+});
+
+describe("方案著色", () => {
+  it("方案股道沿用路線色，新建與歸還月台維持中性", () => {
+    for (const scenario of ["proposal-b", "proposal-c"] as const) {
+      const all = featuresFor(scenario);
+      const c = (f: (typeof all)[number]): string => featureColor(f.kind, f.layer, f.status, f.line);
+      const baselineOf = (kind: "track-hsr" | "track-tra"): string => {
+        const f = all.find((item) => item.kind === kind && (item.status ?? "existing") === "existing");
+        expect(f, `${scenario} ${kind}`).toBeDefined();
+        return c(f!);
+      };
+      const hsr = baselineOf("track-hsr");
+      const tra = baselineOf("track-tra");
+      expect(hsr).not.toBe(tra);
+
+      const added = all.filter((f) => f.status === "added");
+      expect(added.some((f) => f.kind === "track-hsr"), scenario).toBe(true);
+      expect(added.some((f) => f.kind === "track-tra"), scenario).toBe(true);
+      for (const f of added) {
+        if (f.kind === "track-hsr") expect(c(f), f.id).toBe(hsr);
+        if (f.kind === "track-tra") expect(c(f), f.id).toBe(tra);
+      }
+
+      const returned = all.filter((f) => f.status === "repurposed" && /^track-/.test(f.kind));
+      expect(returned.length, scenario).toBeGreaterThan(0);
+      for (const f of returned) expect(c(f), f.id).toBe(tra);
+
+      const platforms = all.filter((f) => f.kind === "platform" && f.status !== "removed");
+      expect(platforms.some((f) => f.status === "added"), scenario).toBe(true);
+      for (const f of platforms) expect(c(f), f.id).toBe("#cfc8bb");
+    }
   });
 });

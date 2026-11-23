@@ -7,6 +7,7 @@ export const GROUND = "#efe9dd";
 /** 股道與站體的中性色：多處共用，必須一致。 */
 const TRACK_GRAY = "#8d8478";
 const STATION_BODY = "#d8cfc0";
+const PLATFORM = "#cfc8bb";
 
 /** 兩個 `#rrggbb` 色碼於 sRGB 空間線性內插；`t` 為 `to` 所佔比例。 */
 function mixHex(from: string, to: string, t: number): string {
@@ -30,7 +31,7 @@ export const LAYER_COLORS: Record<LayerId, string> = {
   terrain: GROUND,
   "station-box": STATION_BODY,
   // 月台與站體同為中性暖灰，不隨路線著色
-  platform: "#cfc8bb",
+  platform: PLATFORM,
   track: TRACK_GRAY,
   mall: "#e3d7c2",
   metro: "#7a6fae",
@@ -62,6 +63,8 @@ export const KIND_COLORS: Partial<Record<FeatureKind, string>> = {
   // 站體箱涵與大廳、付費區必須同色：兩者頂面常共面，異色會露出接縫
   "station-box": STATION_BODY,
   station: STATION_BODY,
+  // 月台一律中性暖灰：部分 OSM 月台的圖層為 metro，不可退回捷運圖層色
+  platform: PLATFORM,
   slab: "#ded7c8",
   green: "#d9e0cb",
   water: "#bcd3da",
@@ -75,12 +78,8 @@ export const KIND_COLORS: Partial<Record<FeatureKind, string>> = {
   "exit-shed": "#c9c1b3",
 };
 
-/** 方案狀態著色：新建提案紅、拆除灰、歸還臺鐵藍。 */
-export const STATUS_COLORS: Partial<Record<FeatureStatus, string>> = {
-  added: "#b03a3a",
-  removed: "#b9a79f",
-  repurposed: "#2f4f8f",
-};
+/** 方案拆除的量體一律褪為灰褐；新建與歸還臺鐵的量體沿用一般著色。 */
+export const REMOVED_COLOR = "#b9a79f";
 
 /** 路線色混入中性色的比例：股道中度、隧道極淡；站體、樓板、大廳與月台不著路線色。 */
 export const LINE_TINT: Partial<Record<FeatureKind, number>> = {
@@ -90,14 +89,14 @@ export const LINE_TINT: Partial<Record<FeatureKind, number>> = {
   tunnel: 0.2,
 };
 
-/** 著色優先序：方案狀態 → 類型中性色（股道、隧道再混入路線色）→ 圖層。 */
+/** 著色優先序：方案拆除 → 類型中性色（股道、隧道再混入路線色）→ 圖層。 */
 export function featureColor(
   kind: FeatureKind,
   layer: LayerId,
   status?: FeatureStatus,
   line?: LineId,
 ): string {
-  if (status && STATUS_COLORS[status]) return STATUS_COLORS[status] as string;
+  if (status === "removed") return REMOVED_COLOR;
   const neutral = KIND_COLORS[kind] ?? LAYER_COLORS[layer];
   const tint = LINE_TINT[kind];
   return line && tint !== undefined ? mixHex(neutral, LINE_COLORS[line], tint) : neutral;

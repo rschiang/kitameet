@@ -360,6 +360,7 @@ function trackFeature(
   return {
     id: `${config.id}/track/${name}-${side}`,
     kind: "track-hsr",
+    line: "hsr",
     name: `高鐵新建股道（月台 ${name} ${side}側）`,
     level: "B2",
     structure: "tra-hsr-station",

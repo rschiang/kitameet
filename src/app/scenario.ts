@@ -1,6 +1,6 @@
 /**
  * 方案切換：現況回傳基準量體，方案 B、C 另外標記拆除、新建與歸還臺鐵的量體。
- * 著色由 {@link Feature.status} 決定，渲染端不需認得方案。
+ * 著色只看 {@link Feature.status} 是否為拆除與 {@link Feature.line}，渲染端不需認得方案。
  */
 import { buildBaseline } from "../data/scene.ts";
 import type { Feature } from "../data/schema.ts";
@@ -46,6 +46,7 @@ function splitRebuilt(
       out.push({
         ...feature,
         id: `${feature.id}/tra`,
+        line: "tra",
         geometry: { polyline: tra },
         status: "repurposed",
         sourceNote: `${label}：改作臺鐵喉道，軌距由 1435 mm 改為 1067 mm。${feature.sourceNote ?? ""}`,
@@ -172,7 +173,7 @@ export function featuresFor(scenario: ScenarioId): Feature[] {
     }
     const note = repurposed.get(feature.id);
     if (note !== undefined) {
-      return [{ ...feature, status: "repurposed", sourceNote: `${proposal.label}：${note}。${feature.sourceNote ?? ""}` }];
+      return [{ ...feature, line: "tra", status: "repurposed", sourceNote: `${proposal.label}：${note}。${feature.sourceNote ?? ""}` }];
     }
     const zone = rebuilt.get(feature.id);
     if (zone !== undefined) return splitRebuilt(feature, zone, proposal.label);
