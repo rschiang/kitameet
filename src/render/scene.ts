@@ -4,6 +4,7 @@
  */
 import {
   Mesh,
+  type Material,
   MeshStandardMaterial,
   OrthographicCamera,
   PerspectiveCamera,
@@ -17,7 +18,7 @@ import {
   Group,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { Feature } from "../data/schema.ts";
+import type { Feature, LayerId } from "../data/schema.ts";
 import {
   AERIAL_HIDDEN_LAYERS,
   AERIAL_PLATE_Y,
@@ -27,13 +28,26 @@ import {
   type ViewMode,
 } from "../app/viewMode.ts";
 import {
+  addGhostPasses,
   buildFeatureMesh,
   disposeMesh,
   meshGroupKey,
   mergeMeshes,
   type FeatureUserData,
+  type GhostPasses,
 } from "./builders.ts";
-import { BACKGROUND_COLOR, setupLighting } from "./materials.ts";
+import {
+  BACKGROUND_COLOR,
+  FADE_BYTES,
+  FADE_MAP,
+  FADE_MAP_CAPACITY,
+  setupLighting,
+} from "./materials.ts";
+import {
+  buildOcclusionIndex,
+  findObstructing,
+  type OcclusionIndex,
+} from "./occlusion.ts";
 
 export interface CameraState {
   position: [number, number, number];
@@ -49,6 +63,11 @@ export const DEFAULT_CAMERA: CameraState = {
 
 /** 空拍模式切回 3D 的極角門檻（度）。 */
 const POLAR_EXIT_THRESHOLD = 2;
+
+/** 遮蔽建物淡入淡出的長度（毫秒）。 */
+const GHOST_FADE_MS = 200;
+/** 建物不再遮蔽後維持半透明的時間（毫秒），避免在判定邊界來回閃爍。 */
+const GHOST_HOLD_MS = 250;
 
 /** 正投影視錐的半高（公尺），同時用於與透視距離互換。 */
 const ORTHO_HALF_HEIGHT = 620;
@@ -107,6 +126,15 @@ export class Viewer {
   private cameraTween?: { azimuth: number; polar: number; start: number };
   /** 切往空拍前的視線方向，供切回 3D 時還原。 */
   private restoreDirection?: { azimuth: number; polar: number };
+  private readonly ghosts = new Map<Mesh, GhostPasses>();
+  private occlusion?: OcclusionIndex;
+  private obstructing = new Uint8Array(0);
+  private wasObstructing = new Uint8Array(0);
+  private ghostFade = new Float32Array(0);
+  private releaseAt = new Float64Array(0);
+  private occlusionDirty = true;
+  private ghostActive = false;
+  private ghostClock = performance.now();
 
   /** 空拍模式被拖曳旋轉時呼叫，由 app 層決定如何切回 3D。 */
   onAerialRotate?: () => void;
@@ -148,6 +176,7 @@ export class Viewer {
     for (const controls of [this.perspectiveControls, this.orthographicControls]) {
       controls.addEventListener("change", () => {
         this.needsRender = true;
+        this.occlusionDirty = true;
         this.onCameraChange?.();
       });
     }
@@ -192,10 +221,23 @@ export class Viewer {
       disposeMesh(mesh);
     }
     this.meshes.clear();
+    this.ghosts.clear();
+
+    const occlusion = buildOcclusionIndex(features);
+    if (occlusion.unitCount > FADE_MAP_CAPACITY) {
+      throw new Error(
+        `淡化單元共 ${occlusion.unitCount} 個，超出淡化貼圖的容量 ${FADE_MAP_CAPACITY}`,
+      );
+    }
+    this.occlusion = occlusion;
+    this.obstructing = new Uint8Array(occlusion.unitCount);
+    this.wasObstructing = new Uint8Array(occlusion.unitCount);
+    this.ghostFade = new Float32Array(occlusion.unitCount);
+    this.releaseAt = new Float64Array(occlusion.unitCount);
 
     const groups = new Map<string, Mesh[]>();
     for (const feature of features) {
-      const mesh = buildFeatureMesh(feature);
+      const mesh = buildFeatureMesh(feature, occlusion.units.get(feature));
       if (!mesh) continue;
       const key = meshGroupKey(mesh);
       const list = groups.get(key);
@@ -207,15 +249,19 @@ export class Viewer {
       const merged = mergeMeshes(key, group);
       this.meshes.set(key, merged);
       this.featureGroup.add(merged);
+      const ghost = addGhostPasses(merged);
+      if (ghost) this.ghosts.set(merged, ghost);
     }
     this.applyMorph();
     this.applyClipping();
+    this.settleOcclusion();
     this.needsRender = true;
   }
 
   /** 設定圖層可見性判斷；與視圖模式無關，空拍隱藏的圖層由轉場淡出處理。 */
   setLayerFilter(predicate: (data: FeatureUserData) => boolean): void {
     this.layerFilter = predicate;
+    this.occlusionDirty = true;
     this.applyMorph();
     this.needsRender = true;
   }
@@ -271,6 +317,7 @@ export class Viewer {
     controls.update();
     this.startMorph(mode === "aerial" ? 1 : 0);
     this.resize();
+    this.occlusionDirty = true;
   }
 
   private startMorph(to: number): void {
@@ -285,6 +332,7 @@ export class Viewer {
     this.morph = this.morphTo;
     this.cameraTween = undefined;
     this.applyMorph();
+    this.settleOcclusion();
     this.needsRender = true;
   }
 
@@ -309,6 +357,8 @@ export class Viewer {
       const aerialOpacity = Math.min(baseOpacity, data.status === "removed" ? 0.3 : 0.72);
       const opacity = (baseOpacity + (aerialOpacity - baseOpacity) * t) * fade;
       material.opacity = opacity;
+      const ghost = this.ghosts.get(mesh);
+      if (ghost) (ghost.veil.material as MeshStandardMaterial).opacity = opacity;
       const transparent = opacity < 1;
       if (material.transparent !== transparent) {
         material.transparent = transparent;
@@ -326,13 +376,19 @@ export class Viewer {
     // 局部座標法線 (cos, sin) 轉場景座標 (x, −z)
     this.clipPlane.normal.set(Math.cos(rad), 0, -Math.sin(rad)).normalize();
     this.clipPlane.constant = -offset;
+    this.occlusionDirty = true;
     this.applyClipping();
     this.needsRender = true;
   }
 
   private applyClipping(): void {
     const planes = this.clipping ? [this.clipPlane] : [];
-    const materials = [...this.meshes.values()].map((mesh) => mesh.material as MeshStandardMaterial);
+    const materials: Material[] = [];
+    for (const mesh of this.meshes.values()) {
+      materials.push(mesh.material as Material);
+      const ghost = this.ghosts.get(mesh);
+      if (ghost) materials.push(ghost.prepass.material as Material, ghost.veil.material as Material);
+    }
     for (const material of materials) {
       material.clippingPlanes = planes;
       material.needsUpdate = true;
@@ -370,6 +426,7 @@ export class Viewer {
     camera.updateProjectionMatrix();
     this.controls.target.set(tx, ty, tz);
     this.controls.update();
+    this.occlusionDirty = true;
     this.needsRender = true;
   }
 
@@ -391,6 +448,7 @@ export class Viewer {
     this.orthographic.top = ORTHO_HALF_HEIGHT;
     this.orthographic.bottom = -ORTHO_HALF_HEIGHT;
     this.orthographic.updateProjectionMatrix();
+    this.occlusionDirty = true;
     this.needsRender = true;
   }
 
@@ -420,9 +478,105 @@ export class Viewer {
     }
   }
 
+  /** 依目前的相機、圖層開關與剖面重新判定遮蔽；空拍模式不淡化。 */
+  private computeObstructing(): void {
+    const index = this.occlusion;
+    if (!index) return;
+    if (this.mode !== "3d") {
+      this.obstructing.fill(0);
+      return;
+    }
+    const visible = new Set<LayerId>();
+    for (const mesh of this.meshes.values()) {
+      if (mesh.visible) visible.add((mesh.userData as FeatureUserData).layer);
+    }
+    findObstructing(
+      index,
+      this.perspective,
+      {
+        layerVisible: (layer) => visible.has(layer),
+        clipPlane: this.clipping ? this.clipPlane : null,
+      },
+      this.obstructing,
+    );
+  }
+
+  private syncGhostVisibility(): void {
+    for (const ghost of this.ghosts.values()) {
+      const active = ghost.units.some((unit) => FADE_BYTES[unit] > 0);
+      ghost.prepass.visible = active;
+      ghost.veil.visible = active;
+    }
+  }
+
+  /** 立即套用遮蔽判定的結果，不留淡入淡出；用於重建場景與由網址還原狀態。 */
+  private settleOcclusion(): void {
+    this.computeObstructing();
+    for (let unit = 0; unit < this.obstructing.length; unit++) {
+      const on = this.obstructing[unit] === 1;
+      this.ghostFade[unit] = on ? 1 : 0;
+      FADE_BYTES[unit] = on ? 255 : 0;
+    }
+    this.releaseAt.fill(0);
+    FADE_MAP.value.needsUpdate = true;
+    this.syncGhostVisibility();
+    this.occlusionDirty = false;
+    this.ghostActive = false;
+    this.needsRender = true;
+  }
+
+  /** 視角改變時重新判定遮蔽，並逐幀推進各單元的淡化程度。 */
+  private updateOcclusion(): void {
+    const now = performance.now();
+    const elapsed = Math.min(now - this.ghostClock, 100);
+    this.ghostClock = now;
+    if (!this.occlusion) return;
+
+    const count = this.obstructing.length;
+    if (this.occlusionDirty) {
+      this.occlusionDirty = false;
+      this.wasObstructing.set(this.obstructing);
+      this.computeObstructing();
+      for (let unit = 0; unit < count; unit++) {
+        if (this.wasObstructing[unit] && !this.obstructing[unit]) {
+          this.releaseAt[unit] = now + GHOST_HOLD_MS;
+        }
+      }
+      this.ghostActive = true;
+    }
+    if (!this.ghostActive) return;
+
+    const step = elapsed / GHOST_FADE_MS;
+    let active = false;
+    let changed = false;
+    for (let unit = 0; unit < count; unit++) {
+      const held = !this.obstructing[unit] && now < this.releaseAt[unit];
+      const target = this.obstructing[unit] || held ? 1 : 0;
+      let fade = this.ghostFade[unit];
+      if (fade !== target) {
+        fade = target > fade ? Math.min(1, fade + step) : Math.max(0, fade - step);
+        this.ghostFade[unit] = fade;
+        // 淡化中的單元至少寫入 1：著色器以 0 與非 0 區分實心與淡化兩道繪製
+        const byte = fade <= 0 ? 0 : Math.max(1, Math.round(ease(fade) * 255));
+        if (FADE_BYTES[unit] !== byte) {
+          FADE_BYTES[unit] = byte;
+          changed = true;
+        }
+      }
+      if (fade !== target || held) active = true;
+    }
+    this.ghostActive = active;
+    if (changed) {
+      FADE_MAP.value.needsUpdate = true;
+      this.syncGhostVisibility();
+      this.needsRender = true;
+    }
+  }
+
   private tick(): void {
     this.updateTransitions();
     if (this.perspectiveControls.enabled) this.perspectiveControls.update();
+    this.updateOcclusion();
     if (!this.needsRender) return;
     this.needsRender = false;
     this.renderer.render(this.scene, this.camera);

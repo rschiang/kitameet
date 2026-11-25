@@ -232,7 +232,7 @@ const FILL_OPACITY: Partial<Record<Feature["kind"], number>> = {
 };
 
 /** 由 {@link Feature} 建立可直接加入場景的 mesh；幾何不足時回傳 null。 */
-export function buildFeatureMesh(feature: Feature): Mesh | null {
+export function buildFeatureMesh(feature: Feature, occluderUnit?: number): Mesh | null {
   // 深度放大作用於上下兩端高程，高度由差值求得，避免分別放大造成錯位
   const trueBase = feature.base ?? 0;
   const base = exaggerate(trueBase);
@@ -268,6 +268,10 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
   } else {
     return null;
   }
+  if (occluderUnit !== undefined) {
+    const units = new Float32Array(geometry.getAttribute("position").count).fill(occluderUnit);
+    geometry.setAttribute("occluder", new Float32BufferAttribute(units, 1));
+  }
 
   const status = feature.status ?? "existing";
   // 站體外殼只畫背面，做出掀蓋紙盒的效果，使內部月台、股道不被遮住；
@@ -292,6 +296,7 @@ export function buildFeatureMesh(feature: Feature): Mesh | null {
     side: shell ? BackSide : DoubleSide,
     // 樓板、外殼與地塊一律退讓給貼在它上面的量體
     offset: slab || shell || terrain,
+    occluder: occluderUnit !== undefined ? "solid" : undefined,
   });
   material.userData.baseOpacity = opacity;
 
@@ -335,6 +340,7 @@ export function meshGroupKey(mesh: Mesh): string {
     data.trueBase.toFixed(3),
     mesh.castShadow ? 1 : 0,
     mesh.receiveShadow ? 1 : 0,
+    mesh.geometry.hasAttribute("occluder") ? 1 : 0,
   ].join("|");
 }
 
@@ -353,6 +359,7 @@ export function mergeMeshes(key: string, group: Mesh[]): Mesh {
     const plain = new BufferGeometry();
     plain.setAttribute("position", source.getAttribute("position"));
     plain.setAttribute("normal", source.getAttribute("normal"));
+    if (source.hasAttribute("occluder")) plain.setAttribute("occluder", source.getAttribute("occluder"));
     return plain;
   });
   const merged = mergeGeometries(geometries, false);
@@ -378,10 +385,43 @@ export function mergeMeshes(key: string, group: Mesh[]): Mesh {
   return mesh;
 }
 
+/** 淡化繪製排在所有半透明量體之後；數值需大於 `LEVEL_ORDER` 的最大值 5。 */
+const GHOST_PREPASS_ORDER = 10;
+const GHOST_VEIL_ORDER = 11;
+
+export interface GhostPasses {
+  /** 此 mesh 內含的淡化單元編號，不重複。 */
+  units: number[];
+  prepass: Mesh;
+  veil: Mesh;
+}
+
+/**
+ * 為帶有 `occluder` 屬性的 mesh 掛上淡化用的兩道繪製，共用其幾何與變換；
+ * 沒有淡化中的單元時兩者皆隱藏，不產生繪製呼叫。不帶該屬性時回傳 null。
+ */
+export function addGhostPasses(mesh: Mesh): GhostPasses | null {
+  if (!mesh.geometry.hasAttribute("occluder")) return null;
+  const color = `#${(mesh.material as MeshStandardMaterial).color.getHexString()}`;
+  const prepass = new Mesh(mesh.geometry, createPaperMaterial({ color, occluder: "prepass" }));
+  const veil = new Mesh(mesh.geometry, createPaperMaterial({ color, occluder: "veil" }));
+  prepass.renderOrder = GHOST_PREPASS_ORDER;
+  veil.renderOrder = GHOST_VEIL_ORDER;
+  veil.receiveShadow = mesh.receiveShadow;
+  prepass.visible = false;
+  veil.visible = false;
+  mesh.add(prepass, veil);
+  const units = [...new Set(mesh.geometry.getAttribute("occluder").array as Float32Array)];
+  return { units, prepass, veil };
+}
+
 /** 釋放 mesh 佔用的 GPU 資源。 */
 export function disposeMesh(mesh: Mesh): void {
   mesh.geometry.dispose();
-  const material = mesh.material;
-  if (Array.isArray(material)) material.forEach((m) => m.dispose());
-  else material.dispose();
+  mesh.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const material = object.material;
+    if (Array.isArray(material)) material.forEach((m) => m.dispose());
+    else material.dispose();
+  });
 }
