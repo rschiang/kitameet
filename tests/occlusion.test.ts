@@ -85,7 +85,8 @@ const studioCamera = (position: [number, number, number]): PerspectiveCamera => 
   return camera;
 };
 
-const ALL_VISIBLE: OcclusionOptions = { layerVisible: () => true, clipPlane: null };
+const FOCUS = new Vector3(0, -17, 0);
+const ALL_VISIBLE: OcclusionOptions = { layerVisible: () => true, clipPlane: null, focus: FOCUS };
 
 const flagsFor = (
   camera: PerspectiveCamera,
@@ -120,6 +121,7 @@ describe("遮蔽判定", () => {
     const { out } = flagsFor(studioCamera([0, 120, 200]), {
       layerVisible: () => false,
       clipPlane: null,
+      focus: FOCUS,
     });
     expect([...out]).toEqual(new Array(out.length).fill(0));
   });
@@ -128,6 +130,7 @@ describe("遮蔽判定", () => {
     const { out } = flagsFor(studioCamera([0, 120, 200]), {
       layerVisible: () => true,
       clipPlane: new Plane(new Vector3(0, 0, 1), -50),
+      focus: FOCUS,
     });
     expect([...out]).toEqual(new Array(out.length).fill(0));
   });
@@ -136,6 +139,7 @@ describe("遮蔽判定", () => {
     const { index, out } = flagsFor(studioCamera([0, 120, 200]), {
       layerVisible: () => true,
       clipPlane: new Plane(new Vector3(1, 0, 0), -30),
+      focus: FOCUS,
     });
     expect(out[index.units.get(clipped0)!]).toBe(1);
     expect(out[index.units.get(front)!]).toBe(0);
@@ -147,12 +151,26 @@ describe("遮蔽判定", () => {
     expect(out[index.units.get(aroundCamera)!]).toBe(1);
     expect(out[index.units.get(front)!]).toBe(0);
   });
+
+  it("視線目標之後的建物不淡化", () => {
+    const { out } = flagsFor(studioCamera([0, 120, 200]), {
+      ...ALL_VISIBLE,
+      focus: new Vector3(0, 60, 112),
+    });
+    expect([...out]).toEqual(new Array(out.length).fill(0));
+  });
+
+  it("拉遠後遮住的範圍不足時不淡化", () => {
+    const { out } = flagsFor(studioCamera([0, 480, 800]));
+    expect([...out]).toEqual(new Array(out.length).fill(0));
+  });
 });
 
 describe("實際資料的遮蔽判定", () => {
   const features = featuresFor("status-quo");
   const index = buildOcclusionIndex(features);
   const station = features.find((f) => f.id.startsWith("landmark/taipei-station/"))!;
+  const postOffice = features.find((f) => f.id.startsWith("landmark/post-office/"))!;
 
   const count = (position: [number, number, number]): { out: Uint8Array; total: number } => {
     const camera = new PerspectiveCamera(50, 16 / 9, 1, 12000);
@@ -160,19 +178,24 @@ describe("實際資料的遮蔽判定", () => {
     camera.lookAt(0, -10, 30);
     camera.updateMatrixWorld();
     const out = new Uint8Array(index.unitCount);
-    findObstructing(index, camera, ALL_VISIBLE, out);
+    findObstructing(index, camera, { ...ALL_VISIBLE, focus: new Vector3(0, -10, 30) }, out);
     return { out, total: out.reduce((a, b) => a + b, 0) };
   };
 
-  it("預設視角淡化臺北車站與鐵道廊帶前方的街廓", () => {
+  it("預設視角只淡化臺北車站與前景的街廓", () => {
     const { out, total } = count([330, 250, 430]);
-    expect(total).toBeGreaterThan(600);
-    expect(total).toBeLessThan(1000);
+    expect(total).toBeGreaterThan(80);
+    expect(total).toBeLessThan(160);
     expect(out[index.units.get(station)!]).toBe(1);
   });
 
+  it("預設視角下背景的地標維持實心", () => {
+    const { out } = count([330, 250, 430]);
+    expect(out[index.units.get(postOffice)!]).toBe(0);
+  });
+
   it("近乎俯視時只淡化正壓在股道上的建物", () => {
-    expect(count([20, 500, 60]).total).toBeLessThan(150);
+    expect(count([20, 500, 60]).total).toBeLessThan(60);
   });
 });
 

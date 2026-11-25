@@ -496,6 +496,7 @@ export class Viewer {
       {
         layerVisible: (layer) => visible.has(layer),
         clipPlane: this.clipping ? this.clipPlane : null,
+        focus: this.perspectiveControls.target,
       },
       this.obstructing,
     );

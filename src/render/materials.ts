@@ -13,7 +13,7 @@ import {
 import { BACKGROUND } from "./palette.ts";
 
 /** 遮蔽建物轉為半透明時的不透明度。 */
-export const GHOST_OPACITY = 0.33;
+export const GHOST_OPACITY = 0.6;
 
 const FADE_MAP_WIDTH = 256;
 const FADE_MAP_HEIGHT = 64;

@@ -23,6 +23,10 @@ const MASK_MAX_WIDTH = 640;
 const NEAR_W = 1;
 /** 遮罩格心與投影輪廓的容許距離（格）。 */
 const HULL_MARGIN = 0.5;
+/** 建物最近的頂點視深超過視線目標視深的此倍數時視為背景，不淡化。 */
+const FOREGROUND_REACH = 1.2;
+/** 淡化單元至少需遮住的遮罩格數；16 格在 768 像素高的畫面約為 17×17 像素。 */
+const MIN_HIDDEN_CELLS = 16;
 
 interface Prism {
   unit: number;
@@ -50,6 +54,8 @@ export interface OcclusionIndex {
   pointY: Float32Array;
   hullX: Float32Array;
   hullY: Float32Array;
+  /** 各淡化單元已遮住的遮罩格數，每次判定時歸零。 */
+  hidden: Uint16Array;
 }
 
 export interface OcclusionOptions {
@@ -57,6 +63,8 @@ export interface OcclusionOptions {
   layerVisible: (layer: LayerId) => boolean;
   /** 啟用中的剖切面；已切除一側的取樣點不列入判定。 */
   clipPlane: Plane | null;
+  /** 視線目標（軌道控制的環繞中心），場景座標；用於劃分前景與背景。 */
+  focus: Vector3;
 }
 
 /**
@@ -190,6 +198,7 @@ export function buildOcclusionIndex(features: Feature[]): OcclusionIndex {
     sampleLayers: new Uint8Array(sampleLayers),
     depth: new Float32Array(MASK_MAX_WIDTH * MASK_HEIGHT),
     sat: new Int32Array((MASK_MAX_WIDTH + 1) * (MASK_HEIGHT + 1)),
+    hidden: new Uint16Array(keys.size),
     pointX: new Float32Array(scratch),
     pointY: new Float32Array(scratch),
     hullX: new Float32Array(scratch),
@@ -238,7 +247,8 @@ function screenHull(index: OcclusionIndex, n: number): number {
 
 /**
  * 判定各淡化單元是否擋住月台或股道，結果寫入 `out`（長度為 `unitCount`，1 為遮蔽）。
- * 判定偏向保守：輪廓取凸包、遮罩有一格以內的誤差，寧可多淡化鄰近的建物。
+ * 只淡化前景中遮蔽範圍夠大的建物：最近的頂點需在視線目標視深的 `FOREGROUND_REACH` 倍以內，
+ * 且同一單元合計遮住至少 `MIN_HIDDEN_CELLS` 格。輪廓取凸包，遮罩有一格以內的誤差。
  */
 export function findObstructing(
   index: OcclusionIndex,
@@ -251,8 +261,11 @@ export function findObstructing(
   const e = viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements;
   const height = MASK_HEIGHT;
   const width = Math.max(1, Math.min(MASK_MAX_WIDTH, Math.round(height * camera.aspect)));
-  const { depth, sat, samples, sampleLayers, pointX, pointY, hullX, hullY } = index;
+  const { depth, sat, hidden, samples, sampleLayers, pointX, pointY, hullX, hullY } = index;
   depth.fill(0, 0, width * height);
+  hidden.fill(0);
+  const { focus } = options;
+  const foreground = FOREGROUND_REACH * (e[3] * focus.x + e[7] * focus.y + e[11] * focus.z + e[15]);
 
   // 一、月台與股道的取樣點寫入遮罩，每格記錄最遠的視深
   const visible = TARGET_LAYERS.map((layer) => options.layerVisible(layer));
@@ -337,7 +350,7 @@ export function findObstructing(
       sat[(j1 + 1) * stride + i1 + 1] - sat[j0 * stride + i1 + 1] - sat[(j1 + 1) * stride + i0] + sat[j0 * stride + i0];
     if (covered === 0) continue;
 
-    // 四、底面與頂面輪廓投影後取凸包，逐格比對較建物更遠的月台與股道
+    // 四、底面與頂面輪廓投影後取凸包，逐格累計較建物更遠的月台與股道
     let count = 0;
     let nearest = Infinity;
     for (let side = 0; side < 2; side++) {
@@ -353,6 +366,8 @@ export function findObstructing(
         count++;
       }
     }
+    // 背景建物即使擋住遠處的股道也不淡化
+    if (nearest > foreground) continue;
     const corners = screenHull(index, count);
     u0 = v0 = Infinity;
     u1 = v1 = -Infinity;
@@ -378,7 +393,7 @@ export function findObstructing(
           const left = ((j + 0.5 - hullY[k]) * ex - (i + 0.5 - hullX[k]) * ey) / (Math.hypot(ex, ey) || 1);
           if (left < -HULL_MARGIN) inside = false;
         }
-        if (inside) {
+        if (inside && ++hidden[prism.unit] >= MIN_HIDDEN_CELLS) {
           out[prism.unit] = 1;
           break search;
         }
