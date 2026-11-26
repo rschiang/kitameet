@@ -5,7 +5,7 @@
  */
 import { Box3, Frustum, Matrix4, Vector3, type PerspectiveCamera, type Plane } from "three";
 import type { Feature, LayerId } from "../data/schema.ts";
-import { convexHull, pointInPolygon } from "../geo/measure.ts";
+import { convexHull, pointInPolygon, polygonCentroid } from "../geo/measure.ts";
 import type { Local } from "../geo/project.ts";
 import { exaggerate } from "./depth.ts";
 
@@ -13,6 +13,37 @@ import { exaggerate } from "./depth.ts";
 export const OCCLUDER_LAYERS: readonly LayerId[] = ["building", "landmark"];
 /** 必須保持可見的圖層。 */
 export const TARGET_LAYERS: readonly LayerId[] = ["platform", "track"];
+
+/** 取樣點是否屬於臺鐵或高鐵；其餘（捷運股道與捷運月台）淡化程度較淺。 */
+function isMainlineTarget(feature: Feature): boolean {
+  return feature.line === "tra" || feature.line === "hsr" || feature.structure === "tra-hsr-station";
+}
+
+/**
+ * 臺北車站特定區：南臨忠孝西路一段、東臨中山北路一段、北臨市民大道一段
+ * （承德路以西為市民大道高架正下方的鄭州路）、西臨延平北路一段。
+ * 頂點取 OSM 路面中心線（雙向分幅者取兩幅中點），單位為局部公尺；
+ * 街廓內的建物不會跨越中心線，因此以輪廓形心判定內外即可。
+ */
+const STATION_AREA: Local[] = [
+  [-590, 35], // 忠孝西路 × 延平北路（北門西北側路口）
+  [-463, -44],
+  [-396, -62],
+  [-220, -109],
+  [32, -177], // 忠孝西路，站前廣場南側
+  [238, -232], // 忠孝西路 × 中山北路
+  [322, -68],
+  [360, 25], // 中山北路 × 市民大道
+  [255, 53],
+  [145, 70],
+  [89, 79],
+  [-70, 106], // 市民大道 × 承德路，以西沿鄭州路
+  [-232, 138],
+  [-398, 181],
+  [-528, 229], // 鄭州路 × 延平北路
+  [-536, 206],
+  [-580, 71],
+];
 
 /** 月台與股道的取樣間距（公尺）；股道寬 3 公尺，取樣點的投影範圍同時涵蓋其寬度。 */
 const TARGET_STEP = 4;
@@ -30,6 +61,8 @@ const MIN_HIDDEN_CELLS = 16;
 
 interface Prism {
   unit: number;
+  /** 輪廓形心是否落在 {@link STATION_AREA} 內；深淡化的必要條件。 */
+  inStation: boolean;
   /** 底面與頂面輪廓的凸包，場景座標 (x, z) 交錯排列。 */
   bottom: Float32Array;
   top: Float32Array;
@@ -48,7 +81,11 @@ export interface OcclusionIndex {
   samples: Float32Array;
   /** 各取樣點所屬圖層於 {@link TARGET_LAYERS} 的索引。 */
   sampleLayers: Uint8Array;
+  /** 各取樣點是否屬於臺鐵或高鐵（1 為是），見 {@link isMainlineTarget}。 */
+  sampleRail: Uint8Array;
   depth: Float32Array;
+  /** 只由臺鐵、高鐵取樣點寫入的視深遮罩，大小同 {@link OcclusionIndex.depth}。 */
+  depthRail: Float32Array;
   sat: Int32Array;
   pointX: Float32Array;
   pointY: Float32Array;
@@ -56,6 +93,8 @@ export interface OcclusionIndex {
   hullY: Float32Array;
   /** 各淡化單元已遮住的遮罩格數，每次判定時歸零。 */
   hidden: Uint16Array;
+  /** 各淡化單元已遮住的臺鐵、高鐵遮罩格數，每次判定時歸零。 */
+  hiddenRail: Uint16Array;
 }
 
 export interface OcclusionOptions {
@@ -150,6 +189,7 @@ export function buildOcclusionIndex(features: Feature[]): OcclusionIndex {
   const prisms: Prism[] = [];
   const samples: number[] = [];
   const sampleLayers: number[] = [];
+  const sampleRail: number[] = [];
   let maxRing = 0;
 
   for (const feature of features) {
@@ -157,7 +197,11 @@ export function buildOcclusionIndex(features: Feature[]): OcclusionIndex {
     if (target >= 0) {
       const before = samples.length;
       sampleTarget(feature, samples);
-      for (let i = before; i < samples.length; i += 3) sampleLayers.push(target);
+      const mainline = isMainlineTarget(feature);
+      for (let i = before; i < samples.length; i += 3) {
+        sampleLayers.push(target);
+        sampleRail.push(mainline ? 1 : 0);
+      }
       continue;
     }
     const key = occluderKey(feature);
@@ -186,7 +230,8 @@ export function buildOcclusionIndex(features: Feature[]): OcclusionIndex {
       }
     }
     maxRing = Math.max(maxRing, bottom.length / 2, top.length / 2);
-    prisms.push({ unit, bottom, top, lo, hi, box });
+    const inStation = pointInPolygon(polygonCentroid(polygon), STATION_AREA);
+    prisms.push({ unit, inStation, bottom, top, lo, hi, box });
   }
 
   const scratch = 2 * maxRing + 2;
@@ -196,9 +241,12 @@ export function buildOcclusionIndex(features: Feature[]): OcclusionIndex {
     prisms,
     samples: new Float32Array(samples),
     sampleLayers: new Uint8Array(sampleLayers),
+    sampleRail: new Uint8Array(sampleRail),
     depth: new Float32Array(MASK_MAX_WIDTH * MASK_HEIGHT),
+    depthRail: new Float32Array(MASK_MAX_WIDTH * MASK_HEIGHT),
     sat: new Int32Array((MASK_MAX_WIDTH + 1) * (MASK_HEIGHT + 1)),
     hidden: new Uint16Array(keys.size),
+    hiddenRail: new Uint16Array(keys.size),
     pointX: new Float32Array(scratch),
     pointY: new Float32Array(scratch),
     hullX: new Float32Array(scratch),
@@ -246,7 +294,8 @@ function screenHull(index: OcclusionIndex, n: number): number {
 }
 
 /**
- * 判定各淡化單元是否擋住月台或股道，結果寫入 `out`（長度為 `unitCount`，1 為遮蔽）。
+ * 判定各淡化單元是否擋住月台或股道，結果寫入 `out`（長度為 `unitCount`）：
+ * 0 為不淡化、1 為位於車站特定區內且擋住臺鐵或高鐵（深淡化）、2 為其餘遮蔽（淺淡化）。
  * 只淡化前景中遮蔽範圍夠大的建物：最近的頂點需在視線目標視深的 `FOREGROUND_REACH` 倍以內，
  * 且同一單元合計遮住至少 `MIN_HIDDEN_CELLS` 格。輪廓取凸包，遮罩有一格以內的誤差。
  */
@@ -261,13 +310,16 @@ export function findObstructing(
   const e = viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements;
   const height = MASK_HEIGHT;
   const width = Math.max(1, Math.min(MASK_MAX_WIDTH, Math.round(height * camera.aspect)));
-  const { depth, sat, hidden, samples, sampleLayers, pointX, pointY, hullX, hullY } = index;
+  const { depth, depthRail, sat, hidden, hiddenRail, samples, sampleLayers, sampleRail } = index;
+  const { pointX, pointY, hullX, hullY } = index;
   depth.fill(0, 0, width * height);
+  depthRail.fill(0, 0, width * height);
   hidden.fill(0);
+  hiddenRail.fill(0);
   const { focus } = options;
   const foreground = FOREGROUND_REACH * (e[3] * focus.x + e[7] * focus.y + e[11] * focus.z + e[15]);
 
-  // 一、月台與股道的取樣點寫入遮罩，每格記錄最遠的視深
+  // 一、月台與股道的取樣點寫入遮罩，每格記錄最遠的視深；臺鐵、高鐵另寫入第二道遮罩
   const visible = TARGET_LAYERS.map((layer) => options.layerVisible(layer));
   const clip = options.clipPlane;
   const spread = 0.25 * TARGET_STEP * camera.projectionMatrix.elements[5] * height;
@@ -287,9 +339,11 @@ export function findObstructing(
     const i1 = Math.min(width - 1, Math.floor(u + reach));
     const j0 = Math.max(0, Math.floor(v - reach));
     const j1 = Math.min(height - 1, Math.floor(v + reach));
+    const rail = sampleRail[n] === 1;
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
         if (w > depth[j * width + i]) depth[j * width + i] = w;
+        if (rail && w > depthRail[j * width + i]) depthRail[j * width + i] = w;
       }
     }
   }
@@ -311,7 +365,8 @@ export function findObstructing(
 
   frustum.setFromProjectionMatrix(viewProjection);
   for (const prism of index.prisms) {
-    if (out[prism.unit]) continue;
+    if (out[prism.unit] === 1) continue;
+    if (!prism.inStation && out[prism.unit] === 2) continue;
 
     // 三、外接方盒的八個角點：全在相機後方即略過，跨越近平面者只要落在視錐內就視為遮蔽
     const { min, max } = prism.box;
@@ -338,7 +393,7 @@ export function findObstructing(
     }
     if (behind === 8) continue;
     if (behind > 0) {
-      if (frustum.intersectsBox(prism.box)) out[prism.unit] = 1;
+      if (frustum.intersectsBox(prism.box)) out[prism.unit] = prism.inStation ? 1 : 2;
       continue;
     }
     let i0 = Math.max(0, Math.floor(u0));
@@ -393,9 +448,18 @@ export function findObstructing(
           const left = ((j + 0.5 - hullY[k]) * ex - (i + 0.5 - hullX[k]) * ey) / (Math.hypot(ex, ey) || 1);
           if (left < -HULL_MARGIN) inside = false;
         }
-        if (inside && ++hidden[prism.unit] >= MIN_HIDDEN_CELLS) {
-          out[prism.unit] = 1;
-          break search;
+        if (!inside) continue;
+        hidden[prism.unit]++;
+        if (prism.inStation && depthRail[j * width + i] > nearest) {
+          hiddenRail[prism.unit]++;
+          if (hiddenRail[prism.unit] >= MIN_HIDDEN_CELLS) {
+            out[prism.unit] = 1;
+            break search;
+          }
+        }
+        if (hidden[prism.unit] >= MIN_HIDDEN_CELLS && out[prism.unit] === 0) {
+          out[prism.unit] = 2;
+          if (!prism.inStation) break search;
         }
       }
     }

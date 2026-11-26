@@ -44,6 +44,7 @@ const track: Feature = {
   kind: "track-tra",
   level: "B2",
   layer: "track",
+  line: "tra",
   geometry: {
     polyline: [
       [-100, 0],
@@ -51,6 +52,24 @@ const track: Feature = {
     ],
   },
   base: -14.5,
+  height: 0.3,
+  width: 3,
+  confidence: "derived",
+};
+
+const metroTrack: Feature = {
+  id: "metro-track",
+  kind: "track-metro",
+  level: "B3",
+  layer: "track",
+  line: "bl",
+  geometry: {
+    polyline: [
+      [-380, 60],
+      [-180, 60],
+    ],
+  },
+  base: -16.5,
   height: 0.3,
   width: 3,
   confidence: "derived",
@@ -64,9 +83,11 @@ const landmarkB = building("landmark/demo/b", 400, 400, "landmark");
 const clipped0 = building("way/1#0", 60, -40);
 const clipped1 = building("way/1#1", 600, 400);
 const aroundCamera = building("around-camera", 0, -200);
+const overMetro = building("over-metro", -280, 10);
 
 const fixture = [
   track,
+  metroTrack,
   front,
   behind,
   aside,
@@ -75,6 +96,7 @@ const fixture = [
   clipped0,
   clipped1,
   aroundCamera,
+  overMetro,
 ];
 
 const studioCamera = (position: [number, number, number]): PerspectiveCamera => {
@@ -101,7 +123,7 @@ const flagsFor = (
 describe("遮蔽判定", () => {
   it("地標各部與裁切片段共用同一個淡化單元", () => {
     const index = buildOcclusionIndex(fixture);
-    expect(index.unitCount).toBe(6);
+    expect(index.unitCount).toBe(7);
     expect(index.units.get(landmarkA)).toBe(index.units.get(landmarkB));
     expect(index.units.get(clipped0)).toBe(index.units.get(clipped1));
     expect(index.units.has(track)).toBe(false);
@@ -148,7 +170,8 @@ describe("遮蔽判定", () => {
 
   it("相機位於建物之內時該建物仍判定為遮蔽", () => {
     const { index, out } = flagsFor(studioCamera([0, 10, 200]));
-    expect(out[index.units.get(aroundCamera)!]).toBe(1);
+    expect(out[index.units.get(aroundCamera)!]).toBe(2);
+    // 該建物位於忠孝西路以南，不在車站特定區內，因此只做淺淡化
     expect(out[index.units.get(front)!]).toBe(0);
   });
 
@@ -164,6 +187,19 @@ describe("遮蔽判定", () => {
     const { out } = flagsFor(studioCamera([0, 480, 800]));
     expect([...out]).toEqual(new Array(out.length).fill(0));
   });
+
+  it("車站特定區內只擋住捷運的建物仍為淺淡化", () => {
+    const camera = new PerspectiveCamera(50, 16 / 9, 1, 12000);
+    camera.position.set(-280, 120, 150);
+    camera.lookAt(-280, -17, -60);
+    camera.updateMatrixWorld();
+    const { index, out } = flagsFor(camera, {
+      ...ALL_VISIBLE,
+      focus: new Vector3(-280, -17, -60),
+    });
+    expect(out[index.units.get(overMetro)!]).toBe(2);
+    expect(out[index.units.get(front)!]).toBe(0);
+  });
 });
 
 describe("實際資料的遮蔽判定", () => {
@@ -171,6 +207,7 @@ describe("實際資料的遮蔽判定", () => {
   const index = buildOcclusionIndex(features);
   const station = features.find((f) => f.id.startsWith("landmark/taipei-station/"))!;
   const postOffice = features.find((f) => f.id.startsWith("landmark/post-office/"))!;
+  const shinKong = features.find((f) => f.id.startsWith("landmark/shin-kong/"))!;
 
   const count = (position: [number, number, number]): { out: Uint8Array; total: number } => {
     const camera = new PerspectiveCamera(50, 16 / 9, 1, 12000);
@@ -179,7 +216,7 @@ describe("實際資料的遮蔽判定", () => {
     camera.updateMatrixWorld();
     const out = new Uint8Array(index.unitCount);
     findObstructing(index, camera, { ...ALL_VISIBLE, focus: new Vector3(0, -10, 30) }, out);
-    return { out, total: out.reduce((a, b) => a + b, 0) };
+    return { out, total: out.reduce((a, b) => a + (b ? 1 : 0), 0) };
   };
 
   it("預設視角只淡化臺北車站與前景的街廓", () => {
@@ -196,6 +233,12 @@ describe("實際資料的遮蔽判定", () => {
 
   it("近乎俯視時只淡化正壓在股道上的建物", () => {
     expect(count([20, 500, 60]).total).toBeLessThan(60);
+  });
+
+  it("車站特定區外的遮蔽只做淺淡化", () => {
+    const { out } = count([330, 250, 430]);
+    expect(out[index.units.get(station)!]).toBe(1);
+    expect(out[index.units.get(shinKong)!]).toBe(2);
   });
 });
 

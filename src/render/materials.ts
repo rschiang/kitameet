@@ -12,8 +12,12 @@ import {
 } from "three";
 import { BACKGROUND } from "./palette.ts";
 
-/** 遮蔽建物轉為半透明時的不透明度。 */
-export const GHOST_OPACITY = 0.6;
+/** 車站特定區內遮蔽臺鐵、高鐵的建物轉為半透明時的不透明度。 */
+export const GHOST_OPACITY = 0.7;
+/** 其餘遮蔽（特定區外，或只壓到捷運股道與月台）的不透明度；本案以臺鐵、高鐵改線為主，其他遮蔽只要稍微透出即可。 */
+export const LIGHT_GHOST_OPACITY = 0.95;
+/** 淺淡化的強度，為淡化貼圖的目標值：著色器以 1 → GHOST_OPACITY 線性內插，此值使其落在 LIGHT_GHOST_OPACITY。 */
+export const LIGHT_GHOST_LEVEL = (1 - LIGHT_GHOST_OPACITY) / (1 - GHOST_OPACITY);
 
 const FADE_MAP_WIDTH = 256;
 const FADE_MAP_HEIGHT = 64;

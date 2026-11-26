@@ -41,6 +41,7 @@ import {
   FADE_BYTES,
   FADE_MAP,
   FADE_MAP_CAPACITY,
+  LIGHT_GHOST_LEVEL,
   setupLighting,
 } from "./materials.ts";
 import {
@@ -130,7 +131,10 @@ export class Viewer {
   private occlusion?: OcclusionIndex;
   private obstructing = new Uint8Array(0);
   private wasObstructing = new Uint8Array(0);
+  /** 各單元的淡化動畫進度（0 至 1）。 */
   private ghostFade = new Float32Array(0);
+  /** 各單元的淡化強度：1 為車站特定區內擋住臺鐵高鐵，{@link LIGHT_GHOST_LEVEL} 為其餘遮蔽。 */
+  private ghostLevel = new Float32Array(0);
   private releaseAt = new Float64Array(0);
   private occlusionDirty = true;
   private ghostActive = false;
@@ -233,6 +237,7 @@ export class Viewer {
     this.obstructing = new Uint8Array(occlusion.unitCount);
     this.wasObstructing = new Uint8Array(occlusion.unitCount);
     this.ghostFade = new Float32Array(occlusion.unitCount);
+    this.ghostLevel = new Float32Array(occlusion.unitCount);
     this.releaseAt = new Float64Array(occlusion.unitCount);
 
     const groups = new Map<string, Mesh[]>();
@@ -510,13 +515,23 @@ export class Viewer {
     }
   }
 
+  /** 由遮蔽判定的旗標取淡化強度；0 表示不再遮蔽，沿用既有強度以免淡出途中跳動。 */
+  private levelFor(unit: number): number {
+    const flag = this.obstructing[unit];
+    if (flag === 1) return 1;
+    if (flag === 2) return LIGHT_GHOST_LEVEL;
+    return this.ghostLevel[unit];
+  }
+
   /** 立即套用遮蔽判定的結果，不留淡入淡出；用於重建場景與由網址還原狀態。 */
   private settleOcclusion(): void {
     this.computeObstructing();
     for (let unit = 0; unit < this.obstructing.length; unit++) {
-      const on = this.obstructing[unit] === 1;
+      const on = this.obstructing[unit] !== 0;
+      const level = on ? this.levelFor(unit) : 0;
+      this.ghostLevel[unit] = level;
       this.ghostFade[unit] = on ? 1 : 0;
-      FADE_BYTES[unit] = on ? 255 : 0;
+      FADE_BYTES[unit] = on ? Math.max(1, Math.round(level * 255)) : 0;
     }
     this.releaseAt.fill(0);
     FADE_MAP.value.needsUpdate = true;
@@ -539,6 +554,7 @@ export class Viewer {
       this.wasObstructing.set(this.obstructing);
       this.computeObstructing();
       for (let unit = 0; unit < count; unit++) {
+        this.ghostLevel[unit] = this.levelFor(unit);
         if (this.wasObstructing[unit] && !this.obstructing[unit]) {
           this.releaseAt[unit] = now + GHOST_HOLD_MS;
         }
@@ -557,12 +573,13 @@ export class Viewer {
       if (fade !== target) {
         fade = target > fade ? Math.min(1, fade + step) : Math.max(0, fade - step);
         this.ghostFade[unit] = fade;
-        // 淡化中的單元至少寫入 1：著色器以 0 與非 0 區分實心與淡化兩道繪製
-        const byte = fade <= 0 ? 0 : Math.max(1, Math.round(ease(fade) * 255));
-        if (FADE_BYTES[unit] !== byte) {
-          FADE_BYTES[unit] = byte;
-          changed = true;
-        }
+      }
+      // 淡化中的單元至少寫入 1：著色器以 0 與非 0 區分實心與淡化兩道繪製；
+      // 淡化的深淺則取 ghostLevel，只擋住捷運者停在較淺的一級
+      const byte = fade <= 0 ? 0 : Math.max(1, Math.round(ease(fade) * this.ghostLevel[unit] * 255));
+      if (FADE_BYTES[unit] !== byte) {
+        FADE_BYTES[unit] = byte;
+        changed = true;
       }
       if (fade !== target || held) active = true;
     }
