@@ -20,7 +20,7 @@ import {
   type OsmBuildingRef,
 } from "./dorts.ts";
 import { interiorPoint, pointInPolygon, polygonArea, polygonCentroid } from "../geo/measure.ts";
-import { corridorPolygon, polylineLength } from "../geo/offset.ts";
+import { corridorPolygon } from "../geo/offset.ts";
 import { polygonize } from "../geo/polygonize.ts";
 import { TERRAIN_DEPTH, OVERGROUND_RING, clipToCoverage } from "./coverage.ts";
 import type { Local } from "../geo/project.ts";
@@ -32,7 +32,7 @@ import {
   type MetroLineId,
   type StructureId,
 } from "./levels.ts";
-import { deckNodeElevations, deckProfiles, isElevatedTags } from "./structures/elevated.ts";
+import { deckProfiles, deckVertexIndex, isElevatedTags, isGroundRoadTags } from "./structures/elevated.ts";
 import { buildLandmarks, landmarkClaims } from "./structures/landmarks/index.ts";
 import { buildExitSheds } from "./structures/exit-shed.ts";
 import { rebuildPlatforms } from "./structures/platforms.ts";
@@ -40,7 +40,7 @@ import { buildStationComplex } from "./structures/station-complex.ts";
 import { stackedPlatforms } from "./structures/metro-profile.ts";
 import { EXCLUDED_WAYS, NETWORK_WAY_IDS, buildMetroNetwork } from "./structures/metro-network.ts";
 import { airportTwinBore, boreTubes, fitBoxesToTracks } from "./structures/tunnels.ts";
-import { RAMP_GIRDER, VIADUCT_GIRDER, buildViaduct } from "./structures/viaduct.ts";
+import { RAMP_GIRDER, RAMP_GROUND, VIADUCT_GIRDER, buildViaduct } from "./structures/viaduct.ts";
 import {
   GROUND_EL,
   LEVELS,
@@ -198,8 +198,6 @@ const ROAD_THICKNESS = 0.06;
 /** 車行地下道的高程與厚度（公尺）。 */
 const UNDERPASS_BASE = aboveGround(-5.0);
 const UNDERPASS_THICKNESS = 0.6;
-/** 匝道落地端的高程（公尺）。 */
-const RAMP_GROUND = aboveGround(0.1);
 /** 人行天橋橋面（淨高 4.6 加梁深 0.8）、車行地下道人行段的高程、寬度與板厚（公尺）。 */
 const FOOT_BRIDGE_BASE = aboveGround(5.4);
 const FOOT_TUNNEL_BASE = aboveGround(-4.5);
@@ -240,17 +238,19 @@ interface RoadVolume {
   level: LevelId;
   base: number;
   baseEnd?: number;
+  /** 逐頂點的底面高程（落地主線與匝道）。 */
+  elevations?: number[];
   height: number;
   width: number;
 }
 
 /**
- * 匝道鏈各節點的橋面高程。
+ * 匝道鏈各頂點的橋面高程。
  *
  * 市民大道的匝道沿主線並行再折下，端點到主線中心線的距離（0–9 公尺）無法辨別高低；
- * 改以路網拓樸判定：與高架主線共節點者為橋面端、與地面道路共節點者為落地端，
- * 其餘節點沿匝道鏈的長度在兩者之間線性內插。高程只與節點有關，
- * 因此被切成數段的同一條匝道在共用節點上必然等高，不會出現段差。
+ * 改以路網拓樸判定：與高架主線共頂點者為橋面端、與地面道路共頂點者為落地端，
+ * 其餘頂點沿匝道鏈的長度在兩者之間線性內插。接在其他路段中間頂點上的匝道也因此有錨點。
+ * 高程只與頂點有關，因此被切成數段的同一條匝道在共用頂點上必然等高，不會出現段差。
  *
  * 匝道鏈除 `*_link` 外，也含無 bridge 標籤的 `trunk` 落地段：
  * 忠孝橋西端、環河快速道路的連接段等在 OSM 本身即無 bridge 標籤，
@@ -295,8 +295,7 @@ function chainDistances(
 }
 
 function buildRampChains(): void {
-  const deckSeeds = new Map<string, number>();
-  const groundSeeds = new Map<string, number>();
+  const groundVertices = new Set<string>();
   const adjacency = new Map<string, { to: string; length: number }[]>();
   const link = (a: string, b: string, length: number) => {
     const list = adjacency.get(a);
@@ -305,32 +304,35 @@ function buildRampChains(): void {
   };
 
   rampEdgeIds = new Set();
-  const nodes = deckNodeElevations();
   const seen = new Set<string>();
   for (const osm of [...underground.features, ...surface.features]) {
     if (seen.has(osm.id)) continue;
     seen.add(osm.id);
     const points = osm.polyline ?? [];
     const highway = osm.tags.highway ?? "";
-    if (highway === "" || points.length < 2) continue;
-    const ends = [nodeKey(points[0]), nodeKey(points[points.length - 1])];
-    const elevated = isElevatedTags(osm.tags);
-    if (elevated && !highway.endsWith("_link")) {
-      // 橋面端：高程取該節點的橋面底面，再換算為匝道梁深（兩者橋面頂齊平）
-      for (const end of ends) {
-        const deck = nodes.get(end);
-        if (deck !== undefined) deckSeeds.set(end, deck + VIADUCT_GIRDER - RAMP_GIRDER);
-      }
-      continue;
-    }
-    if (!elevated && !highway.endsWith("_link") && highway !== "trunk") {
-      for (const end of ends) groundSeeds.set(end, RAMP_GROUND);
+    if (highway === "" || points.length < 2 || FOOT_HIGHWAY[highway]) continue;
+    if (isElevatedTags(osm.tags) && !highway.endsWith("_link")) continue;
+    if (isGroundRoadTags(osm.tags)) {
+      for (const p of points) groundVertices.add(nodeKey(p));
       continue;
     }
     rampEdgeIds.add(osm.id);
-    const length = polylineLength(points);
-    link(ends[0], ends[1], length);
-    link(ends[1], ends[0], length);
+    for (let i = 1; i < points.length; i++) {
+      const [a, b] = [points[i - 1], points[i]];
+      const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      link(nodeKey(a), nodeKey(b), length);
+      link(nodeKey(b), nodeKey(a), length);
+    }
+  }
+
+  // 橋面端：高程取該頂點的橋面底面，再換算為匝道梁深（兩者橋面頂齊平）；同時落在地面道路上者以橋面為準
+  const decks = deckVertexIndex();
+  const deckSeeds = new Map<string, number>();
+  const groundSeeds = new Map<string, number>();
+  for (const node of adjacency.keys()) {
+    const deck = decks.get(node);
+    if (deck !== undefined) deckSeeds.set(node, deck + VIADUCT_GIRDER - RAMP_GIRDER);
+    else if (groundVertices.has(node)) groundSeeds.set(node, RAMP_GROUND);
   }
 
   const toDeck = chainDistances(deckSeeds, adjacency);
@@ -388,6 +390,16 @@ function roadOf(id: string, tags: Record<string, string>, polyline: Local[]): Ro
   }
   if (isElevatedTags(tags) && !highway.endsWith("_link")) {
     const profile = deckProfiles().get(id);
+    if (profile?.elevations !== undefined) {
+      return {
+        kind: "elevated-road",
+        level: "elevated",
+        base: profile.elevations[0],
+        elevations: profile.elevations,
+        height: VIADUCT_GIRDER,
+        width,
+      };
+    }
     const base = profile?.base ?? LEVELS.elevated.floor - VIADUCT_GIRDER;
     const baseEnd = profile?.baseEnd ?? base;
     return {
@@ -402,15 +414,15 @@ function roadOf(id: string, tags: Record<string, string>, polyline: Local[]): Ro
   if (isRampEdge(id) && polyline.length >= 2) {
     const nodes = rampNodeElevations();
     const deck = LEVELS.elevated.floor - RAMP_GIRDER;
-    const base = nodes.get(nodeKey(polyline[0])) ?? deck;
-    const end = nodes.get(nodeKey(polyline[polyline.length - 1])) ?? deck;
-    // 兩端都已落地者維持地面道路，不把遠離高架的平面連接段抬起來
-    if (base > RAMP_GROUND + 0.05 || end > RAMP_GROUND + 0.05) {
+    const elevations = polyline.map((p) => nodes.get(nodeKey(p)) ?? deck);
+    // 全段都已落地者維持地面道路，不把遠離高架的平面連接段抬起來
+    if (elevations.some((e) => e > RAMP_GROUND + 0.05)) {
+      const base = elevations[0];
       return {
         kind: "elevated-road",
         level: "elevated",
         base,
-        ...(Math.abs(end - base) < 1e-6 ? {} : { baseEnd: end }),
+        ...(elevations.every((e) => Math.abs(e - base) < 1e-6) ? {} : { elevations }),
         height: RAMP_GIRDER,
         width,
       };
@@ -606,6 +618,9 @@ function convert(osm: OsmFeature): Feature | null {
   if (line !== undefined) feature.line = line;
   if (override.baseEnd !== undefined) feature.baseEnd = override.baseEnd;
   else if (road?.baseEnd !== undefined) feature.baseEnd = road.baseEnd;
+  if (override.baseEnd === undefined && override.base === undefined && road?.elevations !== undefined) {
+    feature.elevations = road.elevations;
+  }
   const name = override.name ?? LANDMARK_IDS[osm.id] ?? osm.name;
   if (name !== undefined) feature.name = name;
   if (override.sourceNote !== undefined) feature.sourceNote = override.sourceNote;
@@ -640,7 +655,8 @@ function mergeableRoad(feature: Feature): boolean {
     feature.width !== undefined &&
     feature.base !== undefined &&
     feature.height !== undefined &&
-    feature.baseEnd === undefined
+    feature.baseEnd === undefined &&
+    feature.elevations === undefined
   );
 }
 

@@ -7,12 +7,15 @@
 import { pointInPolygon } from "../../geo/measure.ts";
 import { polylineLength, truncatePolyline } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
-import { GROUND_EL, type Feature } from "../schema.ts";
+import { elevationAt } from "../elevation.ts";
+import { GROUND_EL, aboveGround, type Feature } from "../schema.ts";
 
 /** 主線橋面的梁深（公尺）：橋面頂維持 {@link LEVELS}.elevated 的離地 8.0 公尺。 */
 export const VIADUCT_GIRDER = 1.8;
 /** 匝道橋面的梁深（公尺）；單車道橋面較主線淺。 */
 export const RAMP_GIRDER = 1.0;
+/** 匝道落地端的高程（公尺）。 */
+export const RAMP_GROUND = aboveGround(0.1);
 
 /**
  * 橋墩間距與斷面邊長（公尺）。間距取《中華技術》〈都市高架快速道路之設計與施工〉
@@ -24,10 +27,13 @@ const PIER_SIZE = 2.0;
 const PIER_MERGE_DISTANCE = 8;
 /** 共用一柱的柱頂高差上限（公尺）；超過即為不同層的高架，各自立柱。 */
 const PIER_MERGE_RISE = 1.0;
+/** 柱高下限（公尺）：落地段離地不足者不立柱。 */
+const PIER_MIN_HEIGHT = 2.0;
 
 const NOTE =
   `橋墩位置與尺寸為推估：沿各高架橋面中心線每 ${PIER_SPACING} 公尺一柱，` +
-  "柱頂接該處橋面底面，柱底落在河道內者伸至河床。";
+  "柱頂接該處橋面底面，柱底落在河道內者伸至河床；" +
+  `離地不足 ${PIER_MIN_HEIGHT} 公尺的落地段不立柱。`;
 
 /** 以中心點與邊長產生正方形輪廓。 */
 function square(centre: Local, size: number): Local[] {
@@ -47,31 +53,21 @@ function square(centre: Local, size: number): Local[] {
  */
 export function buildViaduct(decks: Feature[], waters: Local[][], channelBed: number): Feature[] {
   const lines = decks
-    .flatMap((deck) => {
-      const points = deck.geometry.polyline;
-      if (!points || points.length < 2) return [];
-      return [
-        {
-          id: deck.id,
-          name: deck.name,
-          points,
-          base: deck.base ?? GROUND_EL,
-          baseEnd: deck.baseEnd ?? deck.base ?? GROUND_EL,
-        },
-      ];
-    })
+    .filter((deck) => (deck.geometry.polyline?.length ?? 0) >= 2)
     .sort((a, b) => (a.id < b.id ? -1 : 1));
 
   const placed: { centre: Local; top: number }[] = [];
   const piers: Feature[] = [];
   for (const deck of lines) {
-    const length = polylineLength(deck.points);
+    const points = deck.geometry.polyline as Local[];
+    const length = polylineLength(points);
+    // 柱頂即該處的橋面底面：依逐頂點高程或兩端高程沿弧長內插
+    const topAt = elevationAt(deck);
     let index = 0;
     for (let along = PIER_SPACING / 2; along < length; along += PIER_SPACING) {
-      const walked = truncatePolyline(deck.points, along);
+      const walked = truncatePolyline(points, along);
       const centre = walked[walked.length - 1];
-      // 柱頂即該處的橋面底面：兩端高程沿弧長內插
-      const top = deck.base + (deck.baseEnd - deck.base) * (along / length);
+      const top = topAt(along);
       index += 1;
       if (
         placed.some(
@@ -82,8 +78,9 @@ export function buildViaduct(decks: Feature[], waters: Local[][], channelBed: nu
       ) {
         continue;
       }
-      placed.push({ centre, top });
       const bottom = waters.some((water) => pointInPolygon(centre, water)) ? channelBed : GROUND_EL;
+      if (top - bottom < PIER_MIN_HEIGHT) continue;
+      placed.push({ centre, top });
       piers.push({
         id: `${deck.id}/pier/${index}`,
         kind: "elevated-road",

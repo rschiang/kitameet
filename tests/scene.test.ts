@@ -427,8 +427,40 @@ describe("現況場景", () => {
     const ramp = baselineById("way/51285123");
     expect(ramp?.kind).toBe("elevated-road");
     expect(ramp?.name).toBe("新生高架道路");
-    expect(ramp?.base).toBeCloseTo(aboveGround(0.1), 6);
-    expect(ramp!.baseEnd!).toBeCloseTo(aboveGround(8.0 - 1.0), 6);
+    const elevations = vertexElevations(ramp!);
+    expect(elevations[0]).toBeCloseTo(aboveGround(0.1), 6);
+    expect(elevations[elevations.length - 1]).toBeCloseTo(aboveGround(8.0 - 1.0), 6);
+  });
+
+  it("忠孝橋引道自橋面斜降至忠孝西路", () => {
+    // 落地端的橋面頂與匝道落地端齊平：匝道落地高程加匝道梁深，再扣主線梁深
+    const landing = aboveGround(0.1) + 1.0 - 1.8;
+    const eastbound = baselineById("way/909274074");
+    expect(eastbound?.kind).toBe("elevated-road");
+    const east = vertexElevations(eastbound!);
+    const points = eastbound!.geometry.polyline!;
+    expect(points[points.length - 1][0]).toBeCloseTo(-984.6, 1);
+    expect(points[points.length - 1][1]).toBeCloseTo(85.38, 1);
+    expect(east[east.length - 1]).toBeCloseTo(landing, 6);
+    expect(east[0]).toBeCloseTo(deckProfiles().get("way/909274074")!.base, 6);
+    expect(east[0]).toBeGreaterThan(aboveGround(5));
+
+    // 機慢車道 way/820121741 的匯入點為錨點，自此以東才開始下降
+    const westbound = baselineById("way/51919199");
+    const west = vertexElevations(westbound!);
+    expect(west[0]).toBeCloseTo(landing, 6);
+    expect(westbound!.geometry.polyline![1][0]).toBeCloseTo(-1067.43, 1);
+    expect(west[1]).toBeGreaterThan(aboveGround(5));
+  });
+
+  it("接在路段中間頂點的匝道也能落地與上橋", () => {
+    // 南京西路出口匝道落在環河北路的中間頂點
+    const nanjing = vertexElevations(baselineById("way/51919193")!);
+    expect(nanjing[nanjing.length - 1]).toBeCloseTo(aboveGround(0.1), 6);
+    // 忠孝橋出口匝道起於環河快速道路的中間頂點
+    expect(vertexElevations(baselineById("way/51919189")!)[0]).toBeGreaterThan(aboveGround(5));
+    // 環河南路快速道路落地段：首頂點落在地面道路上
+    expect(vertexElevations(baselineById("way/888902276")!)[0]).toBeCloseTo(aboveGround(0.1), 6);
   });
 
   it("淡水河沙洲浮出水面，其上的量體以沙洲頂面為地面", () => {
