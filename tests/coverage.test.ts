@@ -18,6 +18,7 @@ import {
 } from "../src/geo/measure.ts";
 import { featureColor } from "../src/render/palette.ts";
 import { polylineLength } from "../src/geo/offset.ts";
+import { elevationAt } from "../src/data/elevation.ts";
 import { buildBaseline } from "../src/data/scene.ts";
 import surfaceJson from "../src/data/osm/surface.json";
 import type { OsmDataset } from "../src/data/osm-types.ts";
@@ -145,6 +146,45 @@ describe("涵蓋範圍", () => {
     expect(clipped[0].baseEnd!).toBeGreaterThan(0);
     expect(clipped[0].baseEnd!).toBeLessThan(10);
     expect(Math.abs(clipped[0].baseEnd! / 10 - ratio)).toBeLessThan(0.02);
+  });
+
+  it("帶各頂點高程的折線裁切後，各頂點高程沿用原縱斷面", () => {
+    // 自地下範圍首邊的中點向內 150 公尺起，經內側 50 公尺的高點，止於界外 50 公尺
+    const [ax, ay] = UNDERGROUND_RING[0];
+    const [bx, by] = UNDERGROUND_RING[1];
+    const len = Math.hypot(bx - ax, by - ay);
+    const inward: Local = [-(by - ay) / len, (bx - ax) / len];
+    const mid: Local = [(ax + bx) / 2, (ay + by) / 2];
+    const at = (d: number): Local => [mid[0] + inward[0] * d, mid[1] + inward[1] * d];
+    const original = {
+      id: "test/profile",
+      kind: "track-metro" as const,
+      level: "B2" as const,
+      layer: "metro" as const,
+      geometry: { polyline: [at(150), at(50), at(-50)] },
+      elevations: [0, 10, 0],
+      base: 0,
+      confidence: "estimated" as const,
+    };
+    expect(insideRing(at(150), UNDERGROUND_RING)).toBe(true);
+    expect(insideRing(at(-50), UNDERGROUND_RING)).toBe(false);
+
+    const clipped = clipToCoverage(original);
+    expect(clipped).toHaveLength(1);
+    const profile = elevationAt(original);
+    // 三點共線，弧長即與起點的距離
+    const start = original.geometry.polyline[0];
+    for (const piece of clipped) {
+      const line = piece.geometry.polyline!;
+      expect(piece.elevations).toHaveLength(line.length);
+      expect(piece.base).toBe(piece.elevations![0]);
+      line.forEach((p, i) => {
+        const s = Math.hypot(p[0] - start[0], p[1] - start[1]);
+        expect(piece.elevations![i], `${i}`).toBeCloseTo(profile(s), 6);
+      });
+    }
+    // 界線恰在高點與末點正中，該處高程為 5
+    expect(clipped[0].elevations![clipped[0].elevations!.length - 1]).toBeCloseTo(5, 3);
   });
 
   it("多邊形與折線裁切至環內", () => {

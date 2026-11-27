@@ -40,8 +40,8 @@ const LENGTH_NOTE = `長度取 6 節列車長 ${METRO_PLATFORM_LENGTH} 公尺。
 
 /**
  * 重建的月台與其相鄰軌道的來源：
- * `rail` 為臺鐵與高鐵股道、`airport` 為 OSM 的機場捷運正線、`metro` 為該路線的捷運軌道
- * （公告圖軌道中心線，以及縱斷面保留的 OSM 正線）。
+ * `rail` 為臺鐵與高鐵股道、`airport` 為機場捷運的軌道、`metro` 為該路線的捷運軌道
+ * （路網正線與配線）。
  * 捷運月台與軌道同高，OSM 月台與軌道的平面差距會使兩者相交，故停靠站的月台一律重建。
  */
 export type PlatformRebuild =
@@ -84,9 +84,7 @@ export function platformTracks(
         if (feature.kind === "track-hsr") return [{ feature, edge: HSR_EDGE }];
         return [];
       case "airport":
-        return feature.kind === "track-metro" && feature.line === "a" && !feature.id.startsWith("dorts/")
-          ? [{ feature, edge: AIRPORT_EDGE }]
-          : [];
+        return feature.kind === "track-metro" && feature.line === "a" ? [{ feature, edge: AIRPORT_EDGE }] : [];
       case "metro":
         return feature.kind === "track-metro" && feature.line === spec.line ? [{ feature, edge: METRO_EDGE }] : [];
     }
@@ -137,12 +135,14 @@ function rebuild(platform: Feature, spec: PlatformRebuild, features: Feature[]):
     let left: { lateral: number; clearance: number } | null = null;
     let right: { lateral: number; clearance: number } | null = null;
     for (const { edge, samples } of tracks) {
-      const near = samples.filter((q) => Math.abs(q.along - s) <= ALONG_WINDOW);
+      // 連續的正線會在遠處再次經過同一段主軸範圍，只取側向在可及範圍內的取樣點
+      const near = samples.filter(
+        (q) => Math.abs(q.along - s) <= ALONG_WINDOW && Math.abs(q.lateral) <= half + LATERAL_REACH,
+      );
       if (near.length === 0) continue;
       // 以中位數判定軌道在哪一側，月台邊緣則自窗口內最靠近主軸的取樣點外推，彎道上才不會壓進股道帶
       const laterals = near.map((q) => q.lateral);
       const lateral = median(laterals);
-      if (Math.abs(lateral) > half + LATERAL_REACH) continue;
       // 軌道斜交主軸時，邊緣距離須沿軌道法向量得：橫向間距放大為 edge·√(1 + 斜率²)
       const [first, last] = [near[0], near[near.length - 1]];
       const run = last.along - first.along;

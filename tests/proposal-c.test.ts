@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { featuresFor } from "../src/app/scenario.ts";
-import { baselineById, buildBaseline } from "../src/data/scene.ts";
+import { baselineById } from "../src/data/scene.ts";
 import { REBUILD_ZONE } from "../src/data/scenarios/proposal-c.ts";
 import {
   NEW_PLATFORM_LENGTH,
@@ -189,13 +189,10 @@ describe("方案 C 幾何", () => {
     }
   });
 
-  it("新建股道與捷運板南線公告圖正線淨距不小於 20 公尺", () => {
+  it("新建股道與捷運板南線正線淨距不小於 20 公尺", () => {
     for (const id of trackIds) {
-      // 公告圖正線可能在疊式站區的影響範圍切成數段（`#n`），逐段檢查
-      const bannan = buildBaseline().filter((f) => /^dorts\/N\/track\/[48](#\d+)?$/.test(f.id));
-      expect(bannan.length).toBeGreaterThanOrEqual(2);
-      for (const track of bannan) {
-        expect(clearance(trackLine(id), outlineOf(track.id)), `${id} × ${track.id}`).toBeGreaterThan(20);
+      for (const main of ["metro/bl/to-nangang", "metro/bl/to-dingpu"]) {
+        expect(clearance(trackLine(id), outlineOf(main)), `${id} × ${main}`).toBeGreaterThan(20);
       }
     }
   });

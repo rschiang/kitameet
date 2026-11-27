@@ -5,13 +5,17 @@ import { describe, expect, it } from "vitest";
 import { buildBaseline } from "../src/data/scene.ts";
 import { BORE_AXIS_RISE, dortsBores } from "../src/data/dorts.ts";
 import { UNDERGROUND_RING } from "../src/data/coverage.ts";
+import { elevationAt, vertexElevations } from "../src/data/elevation.ts";
+import { TBM_LINING } from "../src/data/structures/tunnels.ts";
 import { pointInPolygon } from "../src/geo/measure.ts";
-import { polylineLength } from "../src/geo/offset.ts";
+import { offsetPolyline, polylineLength } from "../src/geo/offset.ts";
 import type { Local } from "../src/geo/project.ts";
 import type { Feature } from "../src/data/schema.ts";
 
 const features = buildBaseline();
 const tubes = features.filter((f) => (f.geometry.tube?.length ?? 0) >= 2);
+/** 沿單一正線的圓管；雙圓潛盾沿兩條正線的中線，另行檢查。 */
+const trackTubes = tubes.filter((f) => f.twinSpacing === undefined);
 const tracks = features.filter((f) => f.kind === "track-metro" && (f.geometry.polyline?.length ?? 0) >= 2);
 
 /** 折線上每 `step` 公尺的取樣點與弧長（含終點）。 */
@@ -49,33 +53,27 @@ function projectArc(line: Local[], p: Local): { distance: number; arc: number } 
   return best;
 }
 
-/** 量體沿線的高程：兩端依弧長線性內插。 */
-function elevationAt(feature: Feature, line: Local[], s: number): number {
-  const base = feature.base!;
-  const end = feature.baseEnd ?? base;
-  const length = polylineLength(line);
-  return length > 0 ? base + ((end - base) * s) / length : base;
-}
-
 /** 圓管的來源軌道（去除切段編號）。 */
 const sourceTrack = (tube: Feature): string => tube.id.slice(tube.id.indexOf("@") + 1).split("#")[0];
 
 describe("潛盾圓管", () => {
-  it("有圓管，且一部分隨正線的坡度傾斜", () => {
-    expect(tubes.length).toBeGreaterThan(40);
-    expect(tubes.some((t) => t.baseEnd !== undefined)).toBe(true);
+  it("有圓管，且一部分隨正線的坡度傾斜；臺北捷運的圓管環片厚 0.25 公尺", () => {
+    expect(trackTubes.length).toBeGreaterThan(20);
+    expect(trackTubes.some((t) => new Set(vertexElevations(t)).size > 1)).toBe(true);
+    for (const tube of trackTubes) expect(tube.lining, tube.id).toBe(TBM_LINING);
   });
 
   it("軸心沿同路線的正線，高出軌道面 1.5 公尺", () => {
-    for (const tube of tubes) {
+    for (const tube of trackTubes) {
       const axis = tube.geometry.tube!;
+      const tubeAt = elevationAt(tube);
       const candidates = tracks.filter((t) => t.line === tube.line);
       for (const { point, arc } of samplesAlong(axis, 1)) {
-        const z = elevationAt(tube, axis, arc);
+        const z = tubeAt(arc);
         const matched = candidates.some((track) => {
           const line = track.geometry.polyline!;
           const hit = projectArc(line, point);
-          return hit.distance <= 0.01 && Math.abs(elevationAt(track, line, hit.arc) + BORE_AXIS_RISE - z) <= 0.01;
+          return hit.distance <= 0.01 && Math.abs(elevationAt(track)(hit.arc) + BORE_AXIS_RISE - z) <= 0.01;
         });
         expect(matched, `${tube.id} (${point.map((v) => v.toFixed(1))}) EL ${z.toFixed(3)}`).toBe(true);
       }
@@ -83,15 +81,19 @@ describe("潛盾圓管", () => {
   });
 
   it("不同正線的圓管互不相交", () => {
-    const sampled = tubes.map((tube) => {
+    // 雙圓潛盾拆成左右兩個圓，各以半徑比對
+    const circles = tubes.flatMap((tube) => {
       const axis = tube.geometry.tube!;
+      const at = elevationAt(tube);
+      const offsets = tube.twinSpacing === undefined ? [0] : [tube.twinSpacing / 2, -tube.twinSpacing / 2];
+      return offsets.map((offset) => ({ tube, axis: offset === 0 ? axis : offsetPolyline(axis, offset), at }));
+    });
+    const sampled = circles.map(({ tube, axis, at }) => {
       const length = polylineLength(axis);
       const radius = tube.radius!;
-      const points = samplesAlong(axis, 0.5).map(({ point, arc }) => ({
-        point,
-        arc,
-        z: elevationAt(tube, axis, arc),
-      }));
+      // 平移後的軸線弧長與原軸線略有出入；雙圓潛盾全段等高，取比例換算
+      const scale = polylineLength(tube.geometry.tube!) / length;
+      const points = samplesAlong(axis, 0.5).map(({ point, arc }) => ({ point, arc, z: at(arc * scale) }));
       const xs = axis.map((p) => p[0]);
       const ys = axis.map((p) => p[1]);
       return {

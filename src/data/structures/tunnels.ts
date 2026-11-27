@@ -4,10 +4,11 @@
  * 公告圖只給出潛盾與箱涵的平面範圍，深度是推得的；若各自取路線的單一軌道面，
  * 正線依各站月台層起伏後，圓管就會浮在軌道上方或埋進軌道下方，無法據以檢查碰撞。
  * 本模組沿落在潛盾範圍內的每條正線產生圓管（軸心高出軌道面 {@link BORE_AXIS_RISE}），
- * 疊式段兩條正線各有一管；箱涵的底板則依箱涵內同路線正線的最低軌道面推算。
+ * 疊式段兩條正線各有一管；箱涵的底板則依箱涵內同路線軌道最低的軌道面推算。
+ * 機場捷運的雙圓潛盾（{@link airportTwinBore}）沿兩條正線的中線產生。
  */
-import { pointInPolygon } from "../../geo/measure.ts";
-import { polylineLength, slicePolyline } from "../../geo/offset.ts";
+import { nearestOnPolyline, pointInPolygon } from "../../geo/measure.ts";
+import { polylineLength, slicePolyline, splitPolylineAtX } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
 import {
   BORE_AXIS_RISE,
@@ -17,8 +18,24 @@ import {
   STATION_TOP,
   type DortsBore,
 } from "../dorts.ts";
-import { levelLabelFor } from "../levels.ts";
+import { elevationAt } from "../elevation.ts";
+import { levelLabelFor, railLevelOf } from "../levels.ts";
 import type { Feature } from "../schema.ts";
+
+/** 臺北捷運潛盾隧道的環片厚度（公尺）：捷運工程叢書精進版 8 第 44 頁。 */
+export const TBM_LINING = 0.25;
+
+/**
+ * 機場捷運雙圓潛盾的東端（x，公尺）：OSM `way/1226069618` 捷運北門站的西緣，
+ * 代表文獻所記「北門站北端 C 出入口西側」的到達位置，為推估值。
+ */
+const DOT_EAST_X = -747.7;
+/** 雙圓潛盾的全長（公尺）：西端自東端沿軸線回推，其西為三重的明挖覆蓋段。 */
+const DOT_LENGTH = 1582;
+/** 雙圓潛盾的斷面（公尺）：外半徑、兩圓心間距、環片厚度。 */
+const DOT_RADIUS = 3.1;
+const DOT_SPACING = 5.2;
+const DOT_LINING = 0.3;
 
 /** 沿軌道的取樣間距（公尺）。 */
 const TUBE_STEP = 0.5;
@@ -81,14 +98,7 @@ function samples(polyline: Local[]): { point: Local; arc: number }[] {
   return out;
 }
 
-/** 軌道在弧長 `s` 處的軌道面高程：兩端高程依弧長線性內插。 */
-function railAt(track: Feature, length: number, s: number): number {
-  const base = track.base ?? 0;
-  const end = track.baseEnd ?? base;
-  return length > 0 ? base + ((end - base) * s) / length : base;
-}
-
-/** 有路線、有折線的捷運正線。 */
+/** 有路線、有折線的捷運軌道。 */
 function metroTracks(tracks: Feature[]): (Feature & { line: NonNullable<Feature["line"]> })[] {
   return tracks.filter(
     (f): f is Feature & { line: NonNullable<Feature["line"]> } =>
@@ -99,7 +109,7 @@ function metroTracks(tracks: Feature[]): (Feature & { line: NonNullable<Feature[
 /**
  * 沿正線產生潛盾圓管：軌道取樣點落在同路線潛盾軸線 {@link BORE_REACH} 內、且投影在軸線兩端之內者
  * 屬於該潛盾（多條命中取最近者），同一潛盾的連續取樣成為一段圓管。
- * 公告圖把疊式雙管畫成一條時，上下兩條正線各得一管。
+ * 公告圖把疊式雙管畫成一條時，上下兩條正線各得一管。配線不產生圓管。
  */
 export function boreTubes(tracks: Feature[], bores: DortsBore[]): Feature[] {
   const axes = bores.map((bore) => ({
@@ -108,12 +118,12 @@ export function boreTubes(tracks: Feature[], bores: DortsBore[]): Feature[] {
     length: polylineLength(bore.axis),
   }));
   const tubes: Feature[] = [];
-  for (const track of metroTracks(tracks)) {
+  for (const track of metroTracks(tracks).filter((f) => f.trackRole === "main")) {
     const polyline = track.geometry.polyline as Local[];
     const trackBounds = boundsOf(polyline);
     const nearby = axes.filter((a) => a.bore.line === track.line && overlaps(a.bounds, trackBounds));
     if (nearby.length === 0) continue;
-    const length = polylineLength(polyline);
+    const railAt = elevationAt(track);
 
     // 逐點歸屬，再把同一潛盾的連續取樣併成一段。目前的潛盾仍涵蓋此點時沿用：
     // 公告圖常有兩條潛盾範圍重合（相鄰圖幅、疊式段），取最近者會來回跳動，切出零碎的短管
@@ -153,29 +163,80 @@ export function boreTubes(tracks: Feature[], bores: DortsBore[]): Feature[] {
       const n = seen.get(bore.id) ?? 0;
       seen.set(bore.id, n + 1);
       const pairId = `${bore.id}@${track.id}`;
-      const base = railAt(track, length, from) + BORE_AXIS_RISE;
-      const baseEnd = railAt(track, length, to) + BORE_AXIS_RISE;
-      const tube: Feature = {
+      const axis = slicePolyline(polyline, from, to);
+      let walked = from;
+      const elevations = axis.map((p, i) => {
+        if (i > 0) walked += Math.hypot(p[0] - axis[i - 1][0], p[1] - axis[i - 1][1]);
+        return railAt(walked) + BORE_AXIS_RISE;
+      });
+      tubes.push({
         id: (perBore.get(bore.id) as number) === 1 ? pairId : `${pairId}#${n}`,
         kind: "tunnel",
         name: `捷運${bore.label}潛盾隧道`,
-        level: levelLabelFor(Math.min(base, baseEnd)),
+        level: levelLabelFor(Math.min(...elevations)),
         structure: bore.structure,
         line: bore.line,
         layer: "metro",
-        geometry: { tube: slicePolyline(polyline, from, to) },
-        base,
+        geometry: { tube: axis },
+        elevations,
+        base: elevations[0],
         height: bore.radius * 2,
         radius: bore.radius,
+        lining: TBM_LINING,
         confidence: "estimated",
-        sourceNote: `${SOURCE}的潛盾範圍與管徑；軸線沿所在正線，軸心高出軌道面 ${BORE_AXIS_RISE} 公尺，端部止於車站箱涵外牆。`,
+        sourceNote:
+          `${SOURCE}的潛盾範圍與管徑；軸線沿所在正線，軸心高出軌道面 ${BORE_AXIS_RISE} 公尺，端部止於車站箱涵外牆。` +
+          "環片厚 0.25 公尺（捷運工程叢書精進版 8 第 44 頁）。",
         status: "existing",
-      };
-      if (Math.abs(baseEnd - base) > 1e-6) tube.baseEnd = baseEnd;
-      tubes.push(tube);
+      });
     }
   }
   return tubes;
+}
+
+/**
+ * 機場捷運的雙圓潛盾（CA450A 標）：軸線取兩條正線的中線（北側正線各頂點與南側正線最近點的中點），
+ * 東端止於 {@link DOT_EAST_X}，西端依全長 {@link DOT_LENGTH} 回推；軸心高出軌道面 {@link BORE_AXIS_RISE}。
+ */
+export function airportTwinBore(network: Feature[]): Feature {
+  const lineOf = (id: string): Local[] => {
+    const polyline = network.find((f) => f.id === id)?.geometry.polyline;
+    if (!polyline) throw new Error(`雙圓潛盾找不到機場捷運正線 ${id}`);
+    return polyline;
+  };
+  const south = lineOf("metro/a/south");
+  const middle = lineOf("metro/a/north").map((p): Local => {
+    const q = nearestOnPolyline(p, south).point;
+    return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+  });
+  const west = splitPolylineAtX(middle, DOT_EAST_X).west;
+  const length = polylineLength(west);
+  if (length < DOT_LENGTH) throw new Error(`雙圓潛盾的軸線只有 ${length.toFixed(0)} 公尺，短於全長`);
+  const axis = slicePolyline(west, length - DOT_LENGTH, length);
+  const centre = railLevelOf("airport-mrt-a1", "B3") + BORE_AXIS_RISE;
+  return {
+    id: "a/dot-bore",
+    kind: "tunnel",
+    name: "機場捷運雙圓潛盾隧道",
+    level: levelLabelFor(centre),
+    structure: "airport-mrt-a1",
+    line: "a",
+    layer: "metro",
+    geometry: { tube: axis },
+    elevations: axis.map(() => centre),
+    base: centre,
+    height: DOT_RADIUS * 2,
+    radius: DOT_RADIUS,
+    lining: DOT_LINING,
+    twinSpacing: DOT_SPACING,
+    confidence: "estimated",
+    sourceNote:
+      "《捷運技術》半年刊第 45 期，易永輝、楊國榮〈機場捷運DOT潛盾施工風險管理〉：" +
+      "CA450A 標雙圓潛盾自三重明挖覆蓋段出發，穿越淡水河，沿市民大道南側至北門站北端 C 出入口西側到達，" +
+      "全長約 1,582 公尺；斷面寬 11.4、高 6.2 公尺，兩圓心相距 5.2 公尺，環片厚 0.3 公尺。" +
+      "軸線取兩條正線的中線，東端位置為推估，西端依全長自東端回推，軸心高出軌道面 1.5 公尺。",
+    status: "existing",
+  };
 }
 
 /** 公告圖箱涵的 id：`dorts/<圖幅代號>/box/<n>`。 */
@@ -189,7 +250,7 @@ const DORTS_BOX = /^dorts\/[A-Z]+\/box\//;
 export function fitBoxesToTracks(features: Feature[], tracks: Feature[]): Feature[] {
   const lineTracks = metroTracks(tracks).map((track) => {
     const polyline = track.geometry.polyline as Local[];
-    return { track, polyline, bounds: boundsOf(polyline), length: polylineLength(polyline) };
+    return { track, polyline, bounds: boundsOf(polyline), railAt: elevationAt(track) };
   });
   return features.map((feature) => {
     const polygon = feature.geometry.polygon;
@@ -197,11 +258,11 @@ export function fitBoxesToTracks(features: Feature[], tracks: Feature[]): Featur
     const bounds = boundsOf(polygon);
     let min = Infinity;
     let max = -Infinity;
-    for (const { track, polyline, bounds: trackBounds, length } of lineTracks) {
+    for (const { track, polyline, bounds: trackBounds, railAt } of lineTracks) {
       if (track.line !== feature.line || !overlaps(bounds, trackBounds)) continue;
       for (const { point, arc } of samples(polyline)) {
         if (!contains(bounds, point) || !pointInPolygon(point, polygon)) continue;
-        const rail = railAt(track, length, arc);
+        const rail = railAt(arc);
         min = Math.min(min, rail);
         max = Math.max(max, rail);
       }

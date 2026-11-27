@@ -12,7 +12,7 @@ import { decompose, nearestOnPolyline } from "../src/geo/measure.ts";
 import type { Local } from "../src/geo/project.ts";
 
 /** 尾軌起點所銜接的既有 A1 正線。 */
-const A1_TRACKS: Record<string, string> = { 北: "way/1558102739", 南: "way/1558102738" };
+const A1_TRACKS: Record<string, string> = { 北: "metro/a/north", 南: "metro/a/south" };
 /** 尾軌東端的沿主軸位置（公尺）：中山北路一段西側車道。 */
 const TAIL_END = 309;
 /** A1 車站 B3 軌道面高程（公尺，EL）。 */
@@ -98,9 +98,8 @@ describe.each(["proposal-b", "proposal-c"] as const)("%s 的機場捷運尾軌",
   });
 
   it("尾軌維持 A1 車站 B3 軌道面，平面上橫越淡水信義線正線", () => {
-    // 淡水信義線的公告圖軌道：重新擷取或縱斷面切段都會改變編號，故依路線篩選
     const tamsui = features.filter(
-      (f) => f.kind === "track-metro" && f.line === "r" && f.id.startsWith("dorts/"),
+      (f) => f.kind === "track-metro" && f.line === "r" && f.trackRole === "main",
     );
     for (const side of ["北", "南"]) {
       const tail = byId.get(`${scenario}/a1/tail/${side}`)!;

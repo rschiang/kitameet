@@ -4,6 +4,7 @@
  * 本模組不依賴 WebGL，可直接以 vitest 驗證。
  */
 import { Box3, Frustum, Matrix4, Vector3, type PerspectiveCamera, type Plane } from "three";
+import { elevationAt } from "../data/elevation.ts";
 import { GROUND_EL, type Feature, type LayerId } from "../data/schema.ts";
 import { convexHull, pointInPolygon, polygonCentroid } from "../geo/measure.ts";
 import type { Local } from "../geo/project.ts";
@@ -11,8 +12,13 @@ import { sceneY } from "./depth.ts";
 
 /** 會轉為半透明的圖層。 */
 export const OCCLUDER_LAYERS: readonly LayerId[] = ["building", "landmark"];
-/** 必須保持可見的圖層。 */
-export const TARGET_LAYERS: readonly LayerId[] = ["platform", "track"];
+/** 必須保持可見的圖層：月台、股道，以及捷運圖層中的捷運軌道（{@link isTarget}）。 */
+export const TARGET_LAYERS: readonly LayerId[] = ["platform", "track", "metro"];
+
+/** 須保持可見的量體：捷運圖層只取軌道，隧道與箱涵本就包住軌道。 */
+function isTarget(feature: Feature): boolean {
+  return feature.layer === "metro" ? feature.kind === "track-metro" : TARGET_LAYERS.includes(feature.layer);
+}
 
 /** 取樣點是否屬於臺鐵或高鐵；其餘（捷運股道與捷運月台）淡化程度較淺。 */
 function isMainlineTarget(feature: Feature): boolean {
@@ -128,15 +134,9 @@ function hullRing(ring: Local[]): Float32Array {
   return flat;
 }
 
-/** 沿折線每隔不超過 `TARGET_STEP` 取一點；`elevation(s)` 以 0 至 1 的弧長比例給出頂面高程。 */
+/** 沿折線每隔不超過 `TARGET_STEP` 取一點；`elevation(s)` 以沿線弧長（公尺）給出頂面高程。 */
 function sampleLine(line: Local[], closed: boolean, elevation: (s: number) => number, out: number[]): void {
   const count = closed ? line.length : line.length - 1;
-  let total = 0;
-  for (let i = 0; i < count; i++) {
-    const [ax, ay] = line[i];
-    const [bx, by] = line[(i + 1) % line.length];
-    total += Math.hypot(bx - ax, by - ay);
-  }
   let travelled = 0;
   for (let i = 0; i < count; i++) {
     const [ax, ay] = line[i];
@@ -146,7 +146,7 @@ function sampleLine(line: Local[], closed: boolean, elevation: (s: number) => nu
     const last = !closed && i === count - 1 ? pieces : pieces - 1;
     for (let k = 0; k <= last; k++) {
       const u = k / pieces;
-      const s = total > 0 ? (travelled + u * length) / total : 0;
+      const s = travelled + u * length;
       out.push(ax + (bx - ax) * u, sceneY(elevation(s)), -(ay + (by - ay) * u));
     }
     travelled += length;
@@ -158,8 +158,7 @@ function sampleTarget(feature: Feature, out: number[]): void {
   const height = feature.height ?? 1;
   const { tube, polygon, polyline } = feature.geometry;
   if (tube && tube.length >= 2) {
-    const end = feature.baseEnd ?? base;
-    sampleLine(tube, false, (s) => base + (end - base) * s, out);
+    sampleLine(tube, false, elevationAt(feature), out);
   } else if (polygon && polygon.length >= 3) {
     sampleLine(polygon, true, () => base + height, out);
     let minX = Infinity;
@@ -179,8 +178,8 @@ function sampleTarget(feature: Feature, out: number[]): void {
       }
     }
   } else if (polyline && polyline.length >= 2) {
-    const end = feature.baseEnd ?? base;
-    sampleLine(polyline, false, (s) => base + (end - base) * s + height, out);
+    const at = elevationAt(feature);
+    sampleLine(polyline, false, (s) => at(s) + height, out);
   }
 }
 
@@ -194,8 +193,8 @@ export function buildOcclusionIndex(features: Feature[]): OcclusionIndex {
   let maxRing = 0;
 
   for (const feature of features) {
-    const target = TARGET_LAYERS.indexOf(feature.layer);
-    if (target >= 0) {
+    if (isTarget(feature)) {
+      const target = TARGET_LAYERS.indexOf(feature.layer);
       const before = samples.length;
       sampleTarget(feature, samples);
       const mainline = isMainlineTarget(feature);

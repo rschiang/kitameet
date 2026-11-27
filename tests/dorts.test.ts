@@ -12,6 +12,7 @@ import basemapJson from "../src/data/dorts/basemap.json";
 import { aboveGround, type Feature } from "../src/data/schema.ts";
 import { nearestOnPolyline, pointInPolygon, polygonArea, polygonCentroid } from "../src/geo/measure.ts";
 import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "../src/data/overrides.ts";
+import { elevationAt, vertexElevations } from "../src/data/elevation.ts";
 import { polylineLength } from "../src/geo/offset.ts";
 import type { Local } from "../src/geo/project.ts";
 
@@ -98,7 +99,7 @@ describe("公告圖量體", () => {
       for (const track of scene) {
         if (track.kind !== "track-metro" || track.line !== box.line || !track.geometry.polyline) continue;
         const line = track.geometry.polyline;
-        const length = polylineLength(line);
+        const at = elevationAt(track);
         let walked = 0;
         for (let i = 1; i < line.length; i++) {
           const [a, b] = [line[i - 1], line[i]];
@@ -106,8 +107,7 @@ describe("公告圖量體", () => {
           for (let t = 0; t <= seg; t += 0.5) {
             const p: Local = [a[0] + ((b[0] - a[0]) * t) / seg, a[1] + ((b[1] - a[1]) * t) / seg];
             if (!pointInPolygon(p, box.geometry.polygon!)) continue;
-            const end = track.baseEnd ?? track.base!;
-            min = Math.min(min, track.base! + ((end - track.base!) * (walked + t)) / length);
+            min = Math.min(min, at(walked + t));
           }
           walked += seg;
         }
@@ -117,7 +117,7 @@ describe("公告圖量體", () => {
     }
   });
 
-  it("潛盾範圍與軌道中心線沒有重複畫法", () => {
+  it("潛盾範圍與軌道沒有重複畫法", () => {
     const duplicated = (items: Local[][]) =>
       items.some((a) =>
         items.some((b) => {
@@ -127,13 +127,42 @@ describe("公告圖量體", () => {
         }),
       );
     const bores = dortsBores().map((b) => b.axis);
-    const tracks = features.flatMap((f) =>
-      f.kind === "track-metro" && f.geometry.polyline ? [f.geometry.polyline] : [],
-    );
     expect(bores.length).toBeGreaterThan(20);
-    expect(tracks.length).toBeGreaterThan(20);
     expect(duplicated(bores)).toBe(false);
-    expect(duplicated(tracks)).toBe(false);
+
+    // 軌道以三維比對：疊式段上下兩軌平面重合，高程相差一層
+    const tracks = buildBaseline().filter((f) => f.kind === "track-metro" && f.geometry.polyline);
+    expect(tracks.length).toBeGreaterThan(20);
+    for (const a of tracks) {
+      const line = a.geometry.polyline!;
+      const za = vertexElevations(a);
+      for (const b of tracks) {
+        if (a === b) continue;
+        const other = b.geometry.polyline!;
+        const cumulative = [0];
+        for (let i = 1; i < other.length; i++) {
+          cumulative.push(cumulative[i - 1] + Math.hypot(other[i][0] - other[i - 1][0], other[i][1] - other[i - 1][1]));
+        }
+        const zb = elevationAt(b);
+        // 超過一成的頂點不重合即可確定不重複，提早結束
+        const allowed = Math.floor(line.length * 0.1);
+        let misses = 0;
+        for (let i = 0; i < line.length && misses <= allowed; i++) {
+          const p = line[i];
+          let best = { distance: Infinity, arc: 0 };
+          for (let k = 1; k < other.length; k++) {
+            const [q0, q1] = [other[k - 1], other[k]];
+            const [vx, vy] = [q1[0] - q0[0], q1[1] - q0[1]];
+            const len2 = vx * vx + vy * vy;
+            const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, ((p[0] - q0[0]) * vx + (p[1] - q0[1]) * vy) / len2));
+            const distance = Math.hypot(q0[0] + vx * t - p[0], q0[1] + vy * t - p[1]);
+            if (distance < best.distance) best = { distance, arc: cumulative[k - 1] + t * Math.sqrt(len2) };
+          }
+          if (best.distance > 1.5 || Math.abs(zb(best.arc) - za[i]) > 1.0) misses++;
+        }
+        expect(misses > allowed, `${a.id} 與 ${b.id} 重複`).toBe(true);
+      }
+    }
   });
 });
 
@@ -178,13 +207,14 @@ describe("公告圖取代 OSM 平面", () => {
     }
   });
 
-  it("公告圖提供捷運正線，路面改由 OSM 中心線合併而成", () => {
+  it("公告圖不再直接輸出軌道，路面改由 OSM 中心線合併而成", () => {
     const dorts = features.filter((f) => f.id.startsWith("dorts/"));
     // 地形圖的道路邊線不再輸出：路緣改由合併後的路面自己界定
     expect(dorts.some((f) => f.layer === "road")).toBe(false);
-    expect(dorts.filter((f) => f.kind === "track-metro").length).toBeGreaterThan(10);
-    // 機場捷運不在公告圖範圍內，OSM 的正線須留下
-    expect(features.some((f) => f.kind === "track-metro" && f.id.startsWith("way/"))).toBe(true);
+    // 公告圖的軌道中心線只作為路網正線的平面來源
+    expect(features.some((f) => f.kind === "track-metro" && f.id.startsWith("dorts/"))).toBe(false);
+    // 機場捷運不在公告圖範圍內，正線取 OSM
+    expect(features.some((f) => f.id === "metro/a/north")).toBe(true);
     // 重疊的路面帶合併為互不重疊的單一路面網格，不再逐條 OSM way 各自成帶
     const merged = features.filter((f) => f.id.startsWith("road/merged/"));
     expect(merged.length).toBeGreaterThan(100);

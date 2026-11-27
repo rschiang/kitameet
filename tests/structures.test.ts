@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { baselineById, buildBaseline } from "../src/data/scene.ts";
 import { STRUCTURES, levelOf, railLevelOf } from "../src/data/levels.ts";
+import { vertexElevations } from "../src/data/elevation.ts";
 import { GROUND_EL, LEVELS, type LevelId } from "../src/data/schema.ts";
 import { PLATFORM_REBUILDS, platformTracks } from "../src/data/structures/platforms.ts";
 import { resample } from "../src/geo/corridor.ts";
@@ -112,8 +113,8 @@ describe("分層地下構造", () => {
       expect(platform.base, id).toBeCloseTo(floor, 6);
       top = Math.max(top, platform.base! + platform.height!);
     }
-    const airport = baselineById("way/170432840")!;
-    const bottom = Math.min(airport.base!, airport.baseEnd ?? airport.base!);
+    const airport = baselineById("metro/a/north")!;
+    const bottom = Math.min(...vertexElevations(airport));
     expect(bottom - top).toBeGreaterThanOrEqual(5);
   });
 });

@@ -5,7 +5,6 @@
 import {
   BackSide,
   BufferGeometry,
-  CatmullRomCurve3,
   DoubleSide,
   ExtrudeGeometry,
   Float32BufferAttribute,
@@ -13,14 +12,13 @@ import {
   MeshStandardMaterial,
   Shape,
   ShapeUtils,
-  TubeGeometry,
   Vector2,
-  Vector3,
 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { corridorPolygon, offsetPolyline, polylineLength, slicePolyline } from "../geo/offset.ts";
 import { sceneY } from "./depth.ts";
 import type { Local } from "../geo/project.ts";
+import { vertexElevations } from "../data/elevation.ts";
 import { GROUND_EL, type Feature } from "../data/schema.ts";
 import { featureColor } from "./palette.ts";
 import { createPaperMaterial } from "./materials.ts";
@@ -118,51 +116,121 @@ function loft(
   return geometry;
 }
 
-/**
- * 圓形隧道：以軸心折線掃出管狀量體。軸心高程自 `axisStart` 依弧長線性內插到 `axisEnd`。
- * 深度放大逐點作用於軸心高程，半徑維持真實值，否則隧道會被壓成扁管。
- */
-function tube(points: Local[], axisStart: number, axisEnd: number, radius: number): BufferGeometry {
-  const total = polylineLength(points);
-  let along = 0;
-  const axis = points.map(([x, y], i) => {
-    if (i > 0) along += Math.hypot(x - points[i - 1][0], y - points[i - 1][1]);
-    const t = total > 0 ? along / total : 0;
-    return new Vector3(x, sceneY(axisStart + (axisEnd - axisStart) * t), -y);
+/** 圓周的分段數：每一整圈的線段數。 */
+const CIRCLE_SEGMENTS = 16;
+/** 未註明環片厚度的圓管所取的厚度（公尺）。 */
+const DEFAULT_LINING = 0.25;
+/** 雙圓潛盾中央柱（D 型環片）的厚度（公尺）。 */
+const TWIN_COLUMN = 0.3;
+
+/** 圓心 (cu, cv)、半徑 r 的圓弧，θ 自 `from` 遞增至 `to`（含兩端）。 */
+function arc(cu: number, cv: number, r: number, from: number, to: number): Vector2[] {
+  const n = Math.max(2, Math.ceil((CIRCLE_SEGMENTS * (to - from)) / (2 * Math.PI)));
+  return Array.from({ length: n + 1 }, (_, k) => {
+    const t = from + ((to - from) * k) / n;
+    return new Vector2(cu + r * Math.cos(t), cv + r * Math.sin(t));
   });
-  const curve = new CatmullRomCurve3(axis);
-  const segments = Math.max(8, points.length - 1);
-  const geometry = new TubeGeometry(curve, segments, radius, 12, false);
+}
+
+/**
+ * 圓管的斷面（u 為軸線左側的水平距離、v 為高於軸心的距離）：外緣逆時針、內孔順時針。
+ * 單圓為外半徑 `radius`、內半徑扣除環片厚度的圓環；雙圓為兩個相交的圓，
+ * 內孔各自扣除環片厚度，中間留下 {@link TWIN_COLUMN} 厚的中央柱。
+ */
+export function tubeSection(
+  radius: number,
+  lining: number,
+  twinSpacing?: number,
+): { outer: Vector2[]; holes: Vector2[][] } {
+  const inner = radius - lining;
+  if (twinSpacing === undefined) {
+    const outer = arc(0, 0, radius, 0, 2 * Math.PI).slice(0, -1);
+    const hole = arc(0, 0, inner, 0, 2 * Math.PI).slice(0, -1).reverse();
+    return { outer, holes: [hole] };
+  }
+  const s = twinSpacing / 2;
+  const phi = Math.acos(s / radius);
+  // 右圓弧止於上方交點，左圓弧自該點起繞回下方交點；兩處交點各只保留一次
+  const right = arc(s, 0, radius, -(Math.PI - phi), Math.PI - phi);
+  const left = arc(-s, 0, radius, phi, 2 * Math.PI - phi);
+  const outer = [...right, ...left.slice(1, -1)];
+  const psi = Math.acos((s - TWIN_COLUMN / 2) / inner);
+  // 弧的兩端落在 u = ±c/2 的中央柱面上，首尾以弦封閉
+  const leftHole = arc(-s, 0, inner, psi, 2 * Math.PI - psi).reverse();
+  const rightHole = arc(s, 0, inner, -(Math.PI - psi), Math.PI - psi).reverse();
+  return { outer, holes: [leftHole, rightHole] };
+}
+
+/**
+ * 沿軸線掃出斷面：平面切向取前後頂點的連線（兩端取單側），側向為其左法線，垂直方向一律朝上，
+ * 斷面因此保持直立。深度放大只作用於軸心高程，斷面維持真實尺寸，隧道不會被壓扁。
+ * 兩端以斷面三角化封口。
+ */
+function sweep(points: Local[], elevations: number[], section: { outer: Vector2[]; holes: Vector2[][] }): BufferGeometry {
+  const n = points.length;
+  const frames = points.map(([x, y], i) => {
+    const a = points[Math.max(0, i - 1)];
+    const b = points[Math.min(n - 1, i + 1)];
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    return { x, y, z: sceneY(elevations[i]), nx: -(b[1] - a[1]) / length, ny: (b[0] - a[0]) / length };
+  });
+  const positions: number[] = [];
+  const index: number[] = [];
+  const place = (i: number, p: Vector2): number => {
+    const f = frames[i];
+    positions.push(f.x + f.nx * p.x, f.z + p.y, -(f.y + f.ny * p.x));
+    return positions.length / 3 - 1;
+  };
+
+  // 側面：每一環在相鄰兩站之間以四邊形相連
+  for (const ring of [section.outer, ...section.holes]) {
+    const m = ring.length;
+    const start = positions.length / 3;
+    for (let i = 0; i < n; i++) for (const p of ring) place(i, p);
+    const at = (i: number, k: number): number => start + i * m + (k % m);
+    for (let i = 0; i + 1 < n; i++) {
+      for (let k = 0; k < m; k++) {
+        index.push(at(i, k), at(i, k + 1), at(i + 1, k + 1), at(i, k), at(i + 1, k + 1), at(i + 1, k));
+      }
+    }
+  }
+
+  // 端面：斷面上逆時針的三角形法線朝向行進方向，起端反轉
+  const flat = [section.outer, ...section.holes].flat();
+  const triangles = ShapeUtils.triangulateShape(section.outer, section.holes);
+  for (const [station, forward] of [
+    [0, false],
+    [n - 1, true],
+  ] as const) {
+    const offset = positions.length / 3;
+    for (const p of flat) place(station, p);
+    for (const [a, b, c] of triangles) {
+      const ccw = ShapeUtils.area([flat[a], flat[b], flat[c]]) > 0;
+      if (ccw === forward) index.push(offset + a, offset + b, offset + c);
+      else index.push(offset + a, offset + c, offset + b);
+    }
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(index);
   geometry.computeVertexNormals();
   return geometry;
 }
 
 /**
- * 沿線漸變高程的帶狀量體：引道、匝道與疊式隧道的收斂段。
- * 兩端高程依累積弧長線性內插後才各自放大，避免坡度被深度放大扭曲成折線。
+ * 沿線漸變高程的帶狀量體：引道、匝道與依縱斷面起伏的捷運軌道。
+ * 各頂點的高程先求得再各自放大，避免坡度被深度放大扭曲成折線。
  */
-function slopedBand(
-  points: Local[],
-  width: number,
-  thickness: number,
-  baseStart: number,
-  baseEnd: number,
-): BufferGeometry {
+function slopedBand(points: Local[], width: number, thickness: number, elevations: number[]): BufferGeometry {
   const left = offsetPolyline(points, width / 2);
   const right = offsetPolyline(points, -width / 2);
   const n = points.length;
-  const along: number[] = [0];
-  for (let i = 1; i < n; i++) {
-    along.push(along[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
-  }
-  const total = along[n - 1];
 
   const positions: number[] = [];
   for (let i = 0; i < n; i++) {
-    const t = total === 0 ? 0 : along[i] / total;
-    const elevation = baseStart + (baseEnd - baseStart) * t;
-    const lo = sceneY(elevation);
-    const hi = sceneY(elevation + thickness);
+    const lo = sceneY(elevations[i]);
+    const hi = sceneY(elevations[i] + thickness);
     positions.push(left[i][0], lo, -left[i][1]);
     positions.push(right[i][0], lo, -right[i][1]);
     positions.push(left[i][0], hi, -left[i][1]);
@@ -246,12 +314,13 @@ export function buildFeatureMesh(feature: Feature, occluderUnit?: number): Mesh 
   const height = sceneY(trueBase + (feature.height ?? 1)) - base;
 
   let geometry: BufferGeometry;
-  // 傾斜量體的底面高程兩端不同，位移基準取較低的一端
+  // 傾斜量體的底面高程沿線不同，位移基準取最低處
   let meshBase = base;
   if (feature.geometry.tube && feature.geometry.tube.length >= 2) {
-    const axisEnd = feature.baseEnd ?? trueBase;
-    geometry = tube(feature.geometry.tube, trueBase, axisEnd, feature.radius ?? 3);
-    meshBase = Math.min(base, sceneY(axisEnd));
+    const elevations = vertexElevations(feature);
+    const section = tubeSection(feature.radius ?? 3, feature.lining ?? DEFAULT_LINING, feature.twinSpacing);
+    geometry = sweep(feature.geometry.tube, elevations, section);
+    meshBase = sceneY(Math.min(...elevations));
   } else if (feature.geometry.polygon && feature.geometry.polygon.length >= 3) {
     const polygon = feature.geometry.polygon;
     const top = feature.geometry.polygonTop;
@@ -260,19 +329,16 @@ export function buildFeatureMesh(feature: Feature, occluderUnit?: number): Mesh 
         ? loft(polygon, top, height, base)
         : extrude(polygon, height, base);
   } else if (feature.geometry.polyline && feature.geometry.polyline.length >= 2) {
-    if (feature.baseEnd !== undefined && feature.baseEnd !== trueBase) {
-      const band = feature.kind === "stairs" ? steppedBand : slopedBand;
-      geometry = band(
-        feature.geometry.polyline,
-        feature.width ?? 3,
-        feature.height ?? 1,
-        trueBase,
-        feature.baseEnd,
-      );
+    const polyline = feature.geometry.polyline;
+    const elevations = vertexElevations(feature);
+    if (feature.kind === "stairs" && feature.baseEnd !== undefined && feature.baseEnd !== trueBase) {
+      geometry = steppedBand(polyline, feature.width ?? 3, feature.height ?? 1, trueBase, feature.baseEnd);
       meshBase = Math.min(base, sceneY(feature.baseEnd));
+    } else if (elevations.some((e) => e !== elevations[0])) {
+      geometry = slopedBand(polyline, feature.width ?? 3, feature.height ?? 1, elevations);
+      meshBase = sceneY(Math.min(...elevations));
     } else {
-      const band = corridorPolygon(feature.geometry.polyline, feature.width ?? 3);
-      geometry = extrude(band, height, base);
+      geometry = extrude(corridorPolygon(polyline, feature.width ?? 3), height, base);
     }
   } else {
     return null;
@@ -283,10 +349,12 @@ export function buildFeatureMesh(feature: Feature, occluderUnit?: number): Mesh 
   }
 
   const status = feature.status ?? "existing";
-  // 站體外殼只畫背面，做出掀蓋紙盒的效果，使內部月台、股道不被遮住；
+  // 站體外殼與圓管只畫背面，做出掀蓋紙盒的效果，使內部月台、股道不被遮住；
   // 樓板則以半透明呈現，仍能看出層層相疊的關係。
   const shell =
-    feature.kind === "station-box" || (feature.layer === "station-box" && feature.kind !== "slab");
+    feature.kind === "station-box" ||
+    (feature.layer === "station-box" && feature.kind !== "slab") ||
+    feature.geometry.tube !== undefined;
   const slab = feature.kind === "slab";
   // 分層大廳同樣半透明，否則會遮住同一構造物下層的月台與股道。
   const room = feature.kind === "station" && !shell;

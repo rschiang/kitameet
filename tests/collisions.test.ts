@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildBaseline } from "../src/data/scene.ts";
+import { elevationAt } from "../src/data/elevation.ts";
 import { GROUND_EL, type Feature, type FeatureKind } from "../src/data/schema.ts";
 import { resample } from "../src/geo/corridor.ts";
 import { pointInPolygon } from "../src/geo/measure.ts";
@@ -48,34 +49,38 @@ interface Prism {
   hi: number;
 }
 
-/** 折線各頂點的沿線弧長比例。 */
-function fractions(line: Local[]): number[] {
+/** 折線各頂點的沿線弧長（公尺）。 */
+function arcs(line: Local[]): number[] {
   const along = [0];
   for (let i = 1; i < line.length; i++) {
     along.push(along[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]));
   }
-  const total = along[along.length - 1];
-  return total < 1e-9 ? along.map(() => 0) : along.map((d) => d / total);
+  return along;
 }
 
-/** 著色量體的取樣點：帶狀量體取中心線與兩側邊線，平面量體取格點。 */
+/**
+ * 著色量體的取樣點：帶狀量體取中心線與兩側邊線，平面量體取格點。
+ * 圓管以外半徑取實心；雙圓潛盾取左右兩圓的軸線，各以外半徑展開。
+ */
 function samplesOf(f: Feature): Sample[] {
   const base = f.base ?? GROUND_EL;
   const height = f.height ?? 0;
-  const end = f.baseEnd ?? base;
   const line = f.geometry.polyline ?? f.geometry.tube;
   if (line && line.length >= 2) {
     const tube = f.geometry.tube !== undefined;
     const half = tube ? (f.radius ?? 3) : (f.width ?? 3) / 2;
     const centre = resample(line, SAMPLE_STEP);
-    const u = fractions(centre);
+    const z = arcs(centre).map(elevationAt(f));
     const offset = Math.max(0, half - 0.1);
-    const lines = [centre, offsetPolyline(centre, offset), offsetPolyline(centre, -offset)];
+    const axes =
+      tube && f.twinSpacing !== undefined
+        ? [offsetPolyline(centre, f.twinSpacing / 2), offsetPolyline(centre, -f.twinSpacing / 2)]
+        : [centre];
+    const lines = axes.flatMap((axis) => [axis, offsetPolyline(axis, offset), offsetPolyline(axis, -offset)]);
     const out: Sample[] = [];
     for (const pts of lines) {
       pts.forEach((p, i) => {
-        const z = base + (end - base) * u[i];
-        out.push(tube ? { p, lo: z - half, hi: z + half } : { p, lo: z, hi: z + height });
+        out.push(tube ? { p, lo: z[i] - half, hi: z[i] + half } : { p, lo: z[i], hi: z[i] + height });
       });
     }
     return out;
@@ -105,19 +110,16 @@ function prismsOf(f: Feature): Prism[] {
   const line = f.geometry.polyline;
   if (!line || line.length < 2) return [];
   const width = f.width ?? 3;
-  const end = f.baseEnd ?? base;
-  if (end === base) return [{ ring: corridorPolygon(line, width), lo: base, hi: base + height }];
-
   const pts = resample(line, SEGMENT_STEP);
-  const u = fractions(pts);
+  const z = arcs(pts).map(elevationAt(f));
+  if (z.every((e) => e === z[0])) return [{ ring: corridorPolygon(line, width), lo: z[0], hi: z[0] + height }];
+
   const out: Prism[] = [];
   for (let i = 1; i < pts.length; i++) {
-    const za = base + (end - base) * u[i - 1];
-    const zb = base + (end - base) * u[i];
     out.push({
       ring: corridorPolygon([pts[i - 1], pts[i]], width),
-      lo: Math.min(za, zb),
-      hi: Math.max(za, zb) + height,
+      lo: Math.min(z[i - 1], z[i]),
+      hi: Math.max(z[i - 1], z[i]) + height,
     });
   }
   return out;

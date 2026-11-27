@@ -98,10 +98,23 @@ export interface Feature {
   base?: number;
   /** 折線與圓形隧道量體末端的底面高程（隧道為軸心）；省略時全段與 `base` 同高。 */
   baseEnd?: number;
+  /**
+   * 折線或圓管軸線各頂點的底面高程（圓管為軸心），長度與頂點數相同；
+   * 有此欄位者不設 `baseEnd`，`base` 為首點高程。
+   */
+  elevations?: number[];
   /** 折線量體的寬度（公尺）；`tube` 量體則為半徑。 */
   width?: number;
   /** 圓形隧道的半徑（公尺）。 */
   radius?: number;
+  /** 圓管量體的環片厚度（公尺）；外半徑為 `radius`。 */
+  lining?: number;
+  /** 雙圓潛盾兩圓心的水平間距（公尺）；有此欄位者斷面為兩個半徑 `radius` 的圓。 */
+  twinSpacing?: number;
+  /** 捷運軌道在路網中的角色：正線、同線渡線、跨線聯絡線、中線折返軌、側線、機廠線。 */
+  trackRole?: "main" | "crossover" | "connector" | "pocket" | "siding" | "yard";
+  /** 配線首、末端銜接的軌道 id；`null` 為不銜接（伸出涵蓋範圍或孤立的機廠線）。 */
+  joins?: [string | null, string | null];
   confidence: Confidence;
   sourceNote?: string;
   status?: FeatureStatus;

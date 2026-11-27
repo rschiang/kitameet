@@ -1,5 +1,6 @@
 /**
- * 禁限建公告圖的量體：捷運結構、軌道中心線、限建線，以及 1/1000 地形圖的建物與道路邊線。
+ * 禁限建公告圖的量體：捷運結構、限建線，以及 1/1000 地形圖的建物與道路邊線。
+ * 軌道中心線不直接成為量體，由 {@link dortsTrackPolylines} 交給 `structures/metro-network.ts` 組成正線。
  *
  * 幾何全部來自 `scripts/fetch-dorts.ts` 的產出，精度高於 OSM；
  * 深度則一律由 `levels.ts` 的路線軌道面推算，公告圖本身沒有縱剖面。
@@ -19,7 +20,7 @@ import structuresJson from "./dorts/structures.json";
 import type { DortsBasemap, DortsLineCode, DortsStructures } from "./dorts-types.ts";
 import { METRO_LINES, levelLabelFor, type MetroLineId, type StructureId } from "./levels.ts";
 import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "./overrides.ts";
-import { GROUND_EL, TRACK_BAND_WIDTH, aboveGround, type Feature } from "./schema.ts";
+import { GROUND_EL, aboveGround, type Feature } from "./schema.ts";
 
 const structures = structuresJson as unknown as DortsStructures;
 const basemap = basemapJson as unknown as DortsBasemap;
@@ -218,19 +219,16 @@ export function dortsStationBoxAt(point: Local): Local[] {
   return boxes.reduce((a, b) => (Math.abs(polygonArea(b)) < Math.abs(polygonArea(a)) ? b : a));
 }
 
-let trackEnds: { line: MetroLineId; point: Local }[] | null = null;
+let trackPolylines: Local[][] | null = null;
 
-/** 公告圖軌道中心線的兩端與所屬路線；正線鏈在此切段，才不會有一段同時由 OSM 與公告圖呈現。 */
-export function dortsTrackEnds(): { line: MetroLineId; point: Local }[] {
-  trackEnds ??= dedupePolylines(
+/** 公告圖的軌道中心線（去除相鄰圖幅與鄰線參考畫法的重複）；為筆畫，不是一條條軌道。 */
+export function dortsTrackPolylines(): Local[][] {
+  trackPolylines ??= dedupePolylines(
     structures.tracks,
     (t) => t.line,
     (t) => t.id,
-  ).flatMap((track) => {
-    const line = lineOf(track.lineCode, track.line).id;
-    return [track.line[0], track.line[track.line.length - 1]].map((point) => ({ line, point }));
-  });
-  return trackEnds;
+  ).map((track) => track.line);
+  return trackPolylines;
 }
 
 /** 以格網索引點集合，供最近鄰與包含判定。 */
@@ -349,51 +347,6 @@ export function matchDortsBuildings(osm: OsmBuildingRef[]): {
     });
   }
   return { replaced, attributes };
-}
-
-/** 捷運正線的全部頂點是否都在公告圖軌道中心線的 20 公尺內。 */
-export function dortsReplacesMetroTrack(polyline: Local[]): boolean {
-  if (polyline.length < 2) return false;
-  return polyline.every((p) => nearestTrackDistance(p) <= TRACK_MATCH_DISTANCE);
-}
-
-/** 捷運正線視為同一條的距離上限（公尺）。 */
-const TRACK_MATCH_DISTANCE = 20;
-
-let trackIndex: Map<string, [Local, Local][]> | null = null;
-
-/** 某點到最近的公告圖軌道中心線的距離（公尺）。 */
-function nearestTrackDistance(point: Local): number {
-  const cell = TRACK_MATCH_DISTANCE;
-  if (trackIndex === null) {
-    trackIndex = new Map();
-    for (const track of structures.tracks) {
-      for (let i = 1; i < track.line.length; i++) {
-        const seg: [Local, Local] = [track.line[i - 1], track.line[i]];
-        const [min, max] = boundsOf(seg);
-        for (const key of cellsOf(min, max, cell)) {
-          const list = trackIndex.get(key);
-          if (list) list.push(seg);
-          else trackIndex.set(key, [seg]);
-        }
-      }
-    }
-  }
-  let best = Infinity;
-  const gx = Math.floor(point[0] / cell);
-  const gy = Math.floor(point[1] / cell);
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dy = -1; dy <= 1; dy++) {
-      for (const [a, b] of trackIndex.get(`${gx + dx},${gy + dy}`) ?? []) {
-        const vx = b[0] - a[0];
-        const vy = b[1] - a[1];
-        const len2 = vx * vx + vy * vy;
-        const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, ((point[0] - a[0]) * vx + (point[1] - a[1]) * vy) / len2));
-        best = Math.min(best, Math.hypot(point[0] - a[0] - vx * t, point[1] - a[1] - vy * t));
-      }
-    }
-  }
-  return best;
 }
 
 const DEFAULT_HEIGHT = DEFAULT_BUILDING_LEVELS * BUILDING_LEVEL_HEIGHT;
@@ -522,31 +475,6 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
       height: station ? STATION_TOP - base : BOX_HEIGHT,
       confidence: "estimated",
       sourceNote: `${SOURCE}；深度依${line.label}軌道面 EL ${line.rail} 公尺推估。`,
-      status: "existing",
-    });
-  }
-
-  const tracks = dedupePolylines(
-    structures.tracks,
-    (t) => t.line,
-    (t) => t.id,
-  );
-  for (const track of tracks) {
-    const line = lineOf(track.lineCode, track.line);
-    features.push({
-      id: track.id,
-      kind: "track-metro",
-      name: `捷運${line.label}正線`,
-      level: levelLabelFor(line.rail),
-      structure: line.structure,
-      line: line.id,
-      layer: "track",
-      geometry: { polyline: track.line },
-      base: line.rail,
-      height: 0.3,
-      width: TRACK_BAND_WIDTH,
-      confidence: "estimated",
-      sourceNote: `${SOURCE}；軌道面高程依${line.label}推估。`,
       status: "existing",
     });
   }

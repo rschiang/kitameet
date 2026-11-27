@@ -7,7 +7,9 @@
  */
 import { clipPolygonToRing, splitPolylineByRing } from "../geo/clip.ts";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geo/measure.ts";
+import { polylineLength } from "../geo/offset.ts";
 import { toLocal, type Local } from "../geo/project.ts";
+import { elevationAt } from "./elevation.ts";
 import { GROUND_EL, type Feature, type LayerId } from "./schema.ts";
 
 /** 地塊厚度（公尺）：深於最深的 B4 樓板與潛盾段。 */
@@ -162,7 +164,7 @@ function outsideBounds(points: Local[], ring: Local[]): boolean {
 }
 
 /** 切出的各塊各成一項；只有一塊時沿用原 id。 */
-function pieces(feature: Feature, parts: Local[][], key: "polygon" | "polyline"): Feature[] {
+function pieces(feature: Feature, parts: Local[][], key: "polygon" | "polyline" | "tube"): Feature[] {
   return parts.map((part, n) => ({
     ...feature,
     id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
@@ -204,6 +206,7 @@ function fractionAlong(line: Local[], point: Local): number {
  * 量體裁切至所屬涵蓋範圍；完全落在範圍外時回傳空陣列。
  *
  * 上緣輪廓（`polygonTop`）只做形心判定：其頂點需與 `polygon` 一一對應，切開會失真。
+ * 帶 `elevations` 的折線與圓管，切出的各段逐頂點取原縱斷面的高程；
  * 兩端高程不同的斜帶量體照切，切出的各段依弧長內插自己那一段的兩端高程。
  */
 export function clipToCoverage(feature: Feature): Feature[] {
@@ -216,39 +219,34 @@ export function clipToCoverage(feature: Feature): Feature[] {
     if (polygonTop) return insideRing(polygonCentroid(polygon), ring) ? [feature] : [];
     return pieces(feature, clipPolygonToRing(polygon, ring), "polygon");
   }
-  if (polyline && polyline.length >= 2) {
-    if (outsideBounds(polyline, ring)) return [];
-    const parts = splitPolylineByRing(polyline, ring).inside;
-    if (feature.baseEnd === undefined) return pieces(feature, parts, "polyline");
-    // 兩端高程依弧長線性內插，切出的各段各自保留自己那一段的坡度
-    const base = feature.base ?? GROUND_EL;
-    const span = feature.baseEnd - base;
-    return parts.map((part, n) => ({
-      ...feature,
-      id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
-      geometry: { ...feature.geometry, polyline: part },
-      base: base + span * fractionAlong(polyline, part[0]),
-      baseEnd: base + span * fractionAlong(polyline, part[part.length - 1]),
-    }));
-  }
-  if (tube && tube.length >= 2) {
-    if (outsideBounds(tube, ring)) return [];
-    const parts = splitPolylineByRing(tube, ring).inside;
-    const base = feature.base ?? GROUND_EL;
-    const span = feature.baseEnd === undefined ? 0 : feature.baseEnd - base;
+  const line = polyline && polyline.length >= 2 ? polyline : tube && tube.length >= 2 ? tube : undefined;
+  if (!line) return [feature];
+  const key = line === polyline ? "polyline" : "tube";
+  if (outsideBounds(line, ring)) return [];
+  const parts = splitPolylineByRing(line, ring).inside;
+  if (feature.elevations !== undefined) {
+    const at = elevationAt(feature);
+    const length = polylineLength(line);
     return parts.map((part, n) => {
-      const piece: Feature = {
+      const elevations = part.map((p) => at(fractionAlong(line, p) * length));
+      return {
         ...feature,
         id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
-        geometry: { ...feature.geometry, tube: part },
+        geometry: { ...feature.geometry, [key]: part },
+        elevations,
+        base: elevations[0],
       };
-      // 軸心高程與折線相同，依弧長線性內插
-      if (feature.baseEnd !== undefined) {
-        piece.base = base + span * fractionAlong(tube, part[0]);
-        piece.baseEnd = base + span * fractionAlong(tube, part[part.length - 1]);
-      }
-      return piece;
     });
   }
-  return [feature];
+  if (feature.baseEnd === undefined) return pieces(feature, parts, key);
+  // 兩端高程依弧長線性內插，切出的各段各自保留自己那一段的坡度；圓管的軸心高程同理
+  const base = feature.base ?? GROUND_EL;
+  const span = feature.baseEnd - base;
+  return parts.map((part, n) => ({
+    ...feature,
+    id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
+    geometry: { ...feature.geometry, [key]: part },
+    base: base + span * fractionAlong(line, part[0]),
+    baseEnd: base + span * fractionAlong(line, part[part.length - 1]),
+  }));
 }

@@ -324,27 +324,6 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
       "原臺北車站地下化專案引道，今為緊急搶修基地；OSM 標 `layer=-1`，" +
       "實為自 B2 月台層爬升至地面的引道，全長約 410 公尺、坡度約 3.3%，高程為推估。",
   }),
-  ...assign(
-    [
-      "way/1558102738",
-      "way/1558102739",
-      "way/619251068",
-      "way/619251069",
-      "way/170432840",
-      "way/198163706",
-      "way/619251066",
-      "way/619251067",
-      "way/871105040",
-      "way/748971523",
-    ],
-    {
-      layer: "metro",
-      level: "B3",
-      structure: "airport-mrt-a1",
-      confidence: "estimated",
-      sourceNote: `機場捷運 A1 進站段。${DORTS}：A1 車站 B3 為捷運月台層。OSM 原圖徵標 level=-1 或無標籤，與月台層不符。`,
-    },
-  ),
   ...assign(["way/871105041", "way/871105042"], {
     name: "機場捷運台北車站月台",
     layer: "platform",
