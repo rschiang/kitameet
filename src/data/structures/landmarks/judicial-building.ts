@@ -1,15 +1,17 @@
 /** 司法大廈：日字形的四層廳舍、淺綠面磚牆身與中央塔的興亞式屋頂。 */
+import { decompose } from "../../../geo/measure.ts";
 import type { Local } from "../../../geo/project.ts";
 import type { Feature } from "../../schema.ts";
 import {
   faceFrame,
   insetRing,
-  minAreaRect,
   outline,
   part,
+  point,
   rect,
   shift,
   towards,
+  type Frame,
   type PartInput,
 } from "./frame.ts";
 
@@ -66,17 +68,22 @@ const JUDICIAL_NOTE =
   "中央塔覆八角形的興亞式屋頂。平面取自 OSM 的 relation/2609653 輪廓，" +
   "日字形的四面外翼與中央翼依翼深取正面長度的 0.16 放樣，各層樓地板面積因而約 1,870 坪，" +
   "與條目所載「各層樓面積都達到 1,800 餘坪」相符。" +
+  "正面朝東面向重慶南路；輪廓東側中央凸出約 14 公尺的量體即門廊與中央塔所在，各翼進深取西牆至東側主牆的距離。" +
   "全高依條目所載中央塔興亞式屋頂的 31.8 公尺定案，寶瓶頂面即為該值；" +
   "1934 年落成時的三層簷口、1977 年增建的四層與塔身各段高程，則依正立面照片量得各段與正面長度的比值後換算，為推估值。" +
   "八角形的塔頂以四坡屋頂加四角翹起的簷角近似，兩座採光天井則以各翼之間的空隙呈現。";
 
 export function buildJudicialBuilding(): Feature[] {
   const ring = outline(JUDICIAL_BUILDING);
-  const axis = minAreaRect(ring);
-  // 正面朝西，面向重慶南路；frame 的 lateral 朝西、along 朝北
-  const { frame, length: facade } = faceFrame(ring, towards(ring, 180), 20);
-  // 正面為輪廓的長邊，進深即最小外接矩形的短邊
-  const depth = axis.width;
+  // 正面朝東，面向重慶南路。西牆為輪廓最長的直邊，以它量出各翼進深與東側中央的凸出量
+  const { frame: west, length: facade } = faceFrame(ring, towards(ring, 180), 20); // 西牆 100.5 m，along 朝北、lateral 朝西
+  const { frame: eastWall } = faceFrame(ring, towards(ring, 0), 20); // 東側主牆（43.7 m 段）
+  const bodyDepth = -decompose(west.origin, west.bearing, eastWall.origin).lateral; // ≈ 78.6
+  const projection =
+    Math.max(...ring.map((p) => -decompose(west.origin, west.bearing, p).lateral)) - bodyDepth; // ≈ 14.4
+  // 正面：東側主牆，along 朝南、lateral 朝東
+  const frame: Frame = { origin: point(west, 0, -bodyDepth), bearing: west.bearing + 180 };
+  const porchFace = projection - PORCH_DEPTH; // 中央凸出量體（塔基）的正面，門廊立於其前
   const wing = facade * WING_RATIO;
   const name = "司法大廈";
   const parts: Feature[] = [];
@@ -95,11 +102,11 @@ export function buildJudicialBuilding(): Feature[] {
 
   // 日字形的五道翼：四面外翼圍成口字，中央翼貫通東西，兩側各留一座天井
   const wings: { id: string; name: string; frameArgs: [number, number, number, number] }[] = [
-    { id: "west", name: "正面翼", frameArgs: [0, -wing / 2, facade, wing] },
-    { id: "east", name: "背面翼", frameArgs: [0, -(depth - wing / 2), facade, wing] },
-    { id: "north", name: "北翼", frameArgs: [(facade - wing) / 2, -depth / 2, wing, depth] },
-    { id: "south", name: "南翼", frameArgs: [-(facade - wing) / 2, -depth / 2, wing, depth] },
-    { id: "centre", name: "中央翼", frameArgs: [0, -depth / 2, wing, depth] },
+    { id: "east", name: "正面翼", frameArgs: [0, -wing / 2, facade, wing] },
+    { id: "west", name: "背面翼", frameArgs: [0, -(bodyDepth - wing / 2), facade, wing] },
+    { id: "south", name: "南翼", frameArgs: [(facade - wing) / 2, -bodyDepth / 2, wing, bodyDepth] },
+    { id: "north", name: "北翼", frameArgs: [-(facade - wing) / 2, -bodyDepth / 2, wing, bodyDepth] },
+    { id: "centre", name: "中央翼", frameArgs: [0, -bodyDepth / 2, wing, bodyDepth] },
   ];
   for (const w of wings) {
     const [along, lateral, length, width] = w.frameArgs;
@@ -124,6 +131,16 @@ export function buildJudicialBuilding(): Feature[] {
       height: FOURTH_TOP - CORNICE_TOP,
     });
   }
+
+  // 東側中央凸出的量體：門廊與中央塔的塔基
+  const towerSide = wing;
+  add({
+    id: "body/lower/projection",
+    name: `${name} 中央塔基`,
+    polygon: rect(frame, 0, porchFace / 2, towerSide, porchFace),
+    base: PLINTH_TOP,
+    height: THIRD_TOP - PLINTH_TOP,
+  });
 
   // 水平腰線：一二層之間、二樓窗台（桂冠花環與竹節飾帶）、二三層之間
   add({
@@ -165,7 +182,6 @@ export function buildJudicialBuilding(): Feature[] {
   });
 
   // 正面的垂直壁柱：貫通二三層，中央塔所佔的開間不設柱
-  const towerSide = wing;
   const pilasterBay = facade / PILASTER_BAYS;
   for (let i = 0; i <= PILASTER_BAYS; i++) {
     const along = -facade / 2 + i * pilasterBay;
@@ -182,7 +198,7 @@ export function buildJudicialBuilding(): Feature[] {
   // 正面中央的門廊：台階、三開間的雙柱與三圓心弧拱
   const porchBay = towerSide / PORCH_BAYS;
   const porchWidth = towerSide;
-  const porchLateral = PORCH_DEPTH / 2;
+  const porchLateral = porchFace + PORCH_DEPTH / 2;
   add({
     id: "porch/deck",
     name: `${name} 門廊台階`,
@@ -253,13 +269,13 @@ export function buildJudicialBuilding(): Feature[] {
     height: PORCH_BALUSTRADE_TOP - PORCH_LINTEL_TOP,
   });
 
-  // 中央塔：塔身坐落於中央翼之上，平面取中央翼的翼寬
-  const towerLateral = -towerSide / 2;
+  // 中央塔：塔身坐落於東側中央的塔基與中央翼之上，平面取中央翼的翼寬
+  const towerLateral = porchFace - towerSide / 2;
   add({
     id: "tower/gable",
     name: `${name} 塔基山牆`,
-    polygon: rect(frame, 0, 0.3, towerSide * 0.86, 0.6),
-    polygonTop: rect(frame, 0, 0.3, towerSide * 0.42, 0.6),
+    polygon: rect(frame, 0, porchFace + 0.3, towerSide * 0.86, 0.6),
+    polygonTop: rect(frame, 0, porchFace + 0.3, towerSide * 0.42, 0.6),
     base: CORNICE_TOP + 0.4,
     height: PARAPET_TOP - CORNICE_TOP - 0.4,
   });
@@ -314,7 +330,7 @@ export function buildJudicialBuilding(): Feature[] {
       const along = sa * (eaveSide / 2 - 1.0);
       const lateral = towerLateral + sl * (eaveSide / 2 - 1.0);
       add({
-        id: `roof/corner/${sa < 0 ? "s" : "n"}${sl < 0 ? "e" : "w"}`,
+        id: `roof/corner/${sa < 0 ? "n" : "s"}${sl < 0 ? "w" : "e"}`,
         name: `${name} 簷角`,
         polygon: rect(frame, along, lateral, 2.0, 2.0),
         polygonTop: shift(rect(frame, along, lateral, 1.1, 1.1), frame, sa * 1.2, sl * 1.2),

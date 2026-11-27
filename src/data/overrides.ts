@@ -43,7 +43,7 @@ export const STATION_OUTLINE_ID = "way/23641610";
 export const DEFAULT_BUILDING_LEVELS = 4;
 export const BUILDING_LEVEL_HEIGHT = 3.5;
 
-/** 列為地標的建物，與一般建物分屬不同圖層。細部建模的二十座地標見 `structures/landmarks/`。 */
+/** 列為地標的建物，與一般建物分屬不同圖層。細部建模的二十八座地標見 `structures/landmarks/`。 */
 export const LANDMARK_IDS: Record<string, string> = {
   "way/204711207": "亞洲廣場大樓",
   "way/605982572": "京站時尚廣場",

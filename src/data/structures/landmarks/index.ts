@@ -1,5 +1,5 @@
 /**
- * 二十座地標建物的細部量體。
+ * 二十八座地標建物的細部量體。
  *
  * OSM 與禁限建公告圖都只有 2D 輪廓，拉高後是一塊塊方盒子，看不出哪一棟是哪一棟。
  * 本目錄逐座一檔，依現場照片的立面比例把每座地標拆成台基、柱列、腰線、簷口、
@@ -11,13 +11,21 @@
  */
 import type { Local } from "../../../geo/project.ts";
 import type { Feature } from "../../schema.ts";
+import { buildBankOfTaiwan, claim as bankOfTaiwanClaim } from "./bank-of-taiwan.ts";
+import { buildBoaiBuilding, claim as boaiBuildingClaim } from "./boai-building.ts";
+import { buildBoaiShophouse, claim as boaiShophouseClaim } from "./boai-shophouse.ts";
 import { buildControlYuan, claim as controlYuanClaim } from "./control-yuan.ts";
 import { buildExecutiveYuan, claim as executiveYuanClaim } from "./executive-yuan.ts";
+import { buildFutaiMansion, claim as futaiMansionClaim } from "./futai-mansion.ts";
+import { buildImperialLife, claim as imperialLifeClaim } from "./imperial-life.ts";
 import { buildJianchengCircle, claim as jianchengCircleClaim } from "./jiancheng-circle.ts";
 import { buildJudicialBuilding, claim as judicialBuildingClaim } from "./judicial-building.ts";
+import { buildKangyoBank, claim as kangyoBankClaim } from "./kangyo-bank.ts";
+import { buildLandBank, claim as landBankClaim } from "./land-bank.ts";
 import { buildLongshanTemple, claim as longshanTempleClaim } from "./longshan-temple.ts";
 import { buildMitsuiWarehouse, claim as mitsuiWarehouseClaim } from "./mitsui-warehouse.ts";
 import { buildMocaTaipei, claim as mocaTaipeiClaim } from "./moca-taipei.ts";
+import { buildNcppTaipei, claim as ncppTaipeiClaim } from "./ncpp-taipei.ts";
 import { NORTH_GATE, buildNorthGate, claim as northGateClaim } from "./north-gate.ts";
 import { buildPeaceMonument, claim as peaceMonumentClaim } from "./peace-monument.ts";
 import { POST_OFFICE, buildPostOffice, claim as postOfficeClaim } from "./post-office.ts";
@@ -41,11 +49,11 @@ import { buildZhongshanHall, claim as zhongshanHallClaim } from "./zhongshan-hal
 
 /**
  * 由本目錄建模、因而於覆寫表標為 `exclude` 的 OSM 建物。
- * 其餘十六座靠認領範圍移除重疊量體，不需覆寫。
+ * 其餘二十四座靠認領範圍移除重疊量體，不需覆寫。
  */
 export const LANDMARK_MODEL_IDS = [NORTH_GATE, POST_OFFICE, SHIN_KONG, TAIPEI_STATION] as const;
 
-/** 二十座地標的建模函式與認領範圍，順序即量體在場景中的順序。 */
+/** 二十八座地標的建模函式與認領範圍，順序即量體在場景中的順序。 */
 const LANDMARKS: { build: () => Feature[]; claim: () => Local[] }[] = [
   { build: buildTaipeiStation, claim: taipeiStationClaim },
   { build: buildPostOffice, claim: postOfficeClaim },
@@ -67,11 +75,19 @@ const LANDMARKS: { build: () => Feature[]; claim: () => Local[] }[] = [
   { build: buildControlYuan, claim: controlYuanClaim },
   { build: buildJianchengCircle, claim: jianchengCircleClaim },
   { build: buildSouthGate, claim: southGateClaim },
+  { build: buildNcppTaipei, claim: ncppTaipeiClaim },
+  { build: buildFutaiMansion, claim: futaiMansionClaim },
+  { build: buildBoaiShophouse, claim: boaiShophouseClaim },
+  { build: buildLandBank, claim: landBankClaim },
+  { build: buildKangyoBank, claim: kangyoBankClaim },
+  { build: buildBankOfTaiwan, claim: bankOfTaiwanClaim },
+  { build: buildImperialLife, claim: imperialLifeClaim },
+  { build: buildBoaiBuilding, claim: boaiBuildingClaim },
 ];
 
 let cached: Feature[] | null = null;
 
-/** 二十座地標的細部量體。 */
+/** 二十八座地標的細部量體。 */
 export function buildLandmarks(): Feature[] {
   if (cached) return cached;
   cached = LANDMARKS.flatMap((landmark) => landmark.build());

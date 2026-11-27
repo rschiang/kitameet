@@ -41,9 +41,17 @@ describe("地標細部量體", () => {
     "control-yuan",
     "jiancheng-circle",
     "south-gate",
+    "ncpp-taipei",
+    "futai-mansion",
+    "boai-shophouse",
+    "land-bank",
+    "kangyo-bank",
+    "bank-of-taiwan",
+    "imperial-life",
+    "boai-building",
   ];
 
-  it("二十座地標各有細部量體，最高點合於文獻或照片比例", () => {
+  it("二十八座地標各有細部量體，最高點合於文獻或照片比例", () => {
     for (const id of SLUGS) {
       expect(parts.filter((f) => f.id.startsWith(`landmark/${id}/`)).length, id).toBeGreaterThan(10);
     }
@@ -61,6 +69,20 @@ describe("地標細部量體", () => {
       expect(groupTop(id), id).toBeGreaterThan(0.5);
       expect(groupTop(id), id).toBeLessThan(250);
     }
+  });
+
+  it("司法大廈正面、門廊與中央塔朝東，面向重慶南路", () => {
+    const centre = (id: string): Local => {
+      const feature = parts.find((f) => f.id === `landmark/judicial-building/${id}`);
+      expect(feature, id).toBeDefined();
+      return polygonCentroid(feature!.geometry.polygon!);
+    };
+    const plinth = centre("base/plinth");
+    const deck = centre("porch/deck");
+    const tower = centre("tower/shaft");
+    // 舊模型門廊與塔在西側，兩者差值約 −45 公尺
+    expect(deck[0] - plinth[0]).toBeGreaterThan(30);
+    expect(tower[0] - plinth[0]).toBeGreaterThan(20);
   });
 
   it("地標量體一律歸入地標圖層的地面層，並附來源說明", () => {
