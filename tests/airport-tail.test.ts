@@ -1,17 +1,20 @@
 /**
  * 機場捷運 A1 直通化：兩座島式月台的四條股道皆可東行，北側正線與北側外側側線匯入北尾軌、
- * 南側正線與南側外側側線匯入南尾軌。方案 B 的尾軌下穿淡水信義線車站與其基礎後止於中山北路一段西側；
- * 方案 C 的尾軌維持坡度 0，止於淡水信義線車站箱涵前。
- * 方案幾何疊加在現況路網上：起點、方位、軌道面與所跨越構造物的深度一律於測試時自現況路網讀取，
+ * 南側正線與南側外側側線匯入南尾軌。方案 B 的尾軌以股道垂直淨距自淡水信義線正線下方通過後止於中山北路一段西側，
+ * 側線道岔與渡線皆設於水平段；方案 C 的尾軌維持坡度 0，止於淡水信義線車站箱涵前。
+ * 方案幾何疊加在現況路網上：起點、方位、軌道面與所跨越正線的軌道面一律於測試時自現況路網讀取，
  * 現況路網一變動，方案幾何須隨之更新，否則本檔失敗。
  */
 import { describe, expect, it } from "vitest";
 import { featuresFor } from "../src/app/scenario.ts";
-import { BOX_BASE_DROP, BOX_HEIGHT } from "../src/data/dorts.ts";
 import { elevationAt, vertexElevations } from "../src/data/elevation.ts";
-import { STRUCTURES } from "../src/data/levels.ts";
-import { baselineById, buildBaseline } from "../src/data/scene.ts";
-import { A1_TERRAIN_GRADE, WORKS_CLEARANCE, platform1Axis } from "../src/data/scenarios/shared.ts";
+import { baselineById } from "../src/data/scene.ts";
+import {
+  A1_MAX_GRADE,
+  A1_TURNOUT_LENGTH,
+  WORKS_CLEARANCE,
+  platform1Axis,
+} from "../src/data/scenarios/shared.ts";
 import type { Feature } from "../src/data/schema.ts";
 import { arcLengths, MIN_TRACK_SEPARATION, nearestArc } from "../src/data/structures/metro-profile.ts";
 import { sideOfPolyline } from "../src/geo/clip.ts";
@@ -29,15 +32,24 @@ const TAIL_END = 309;
 /** 淡水信義線台北車站箱涵。 */
 const RED_BOX = "dorts/T/box/1";
 
-/** 折線的最小曲率半徑（公尺）；直線段略過。 */
-function minRadius(points: Local[]): number {
+const triangleArea = (a: Local, b: Local, c: Local): number =>
+  Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
+
+/**
+ * 折線的最小曲率半徑（公尺）；直線段略過。縱斷面轉折處插入的頂點落在原有弦上，
+ * 會使隔點取三點的估計失真，先剔除與前後頂點共線者。
+ */
+function minRadius(line: Local[]): number {
+  const points = line.filter(
+    (p, i) => i === 0 || i === line.length - 1 || triangleArea(line[i - 1], p, line[i + 1]) >= 1e-6,
+  );
   let min = Infinity;
   for (let i = 2; i < points.length - 2; i++) {
     const [a, b, c] = [points[i - 2], points[i], points[i + 2]];
     const ab = Math.hypot(a[0] - b[0], a[1] - b[1]);
     const bc = Math.hypot(b[0] - c[0], b[1] - c[1]);
     const ca = Math.hypot(c[0] - a[0], c[1] - a[1]);
-    const area = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
+    const area = triangleArea(a, b, c);
     if (area < 1e-6) continue;
     min = Math.min(min, (ab * bc * ca) / (4 * area));
   }
@@ -141,18 +153,15 @@ describe.each([
     const [from, to] = lineOf(link);
     expect(vertexElevations(link)[0], "X1 南端高程").toBeCloseTo(railAt(tail("南"), from), 6);
     expect(vertexElevations(link)[1], "X1 北端高程").toBeCloseTo(railAt(tail("北"), to), 6);
-    // 下穿援用地形限制段的特例上限；止於箱涵前者全段水平
-    const limit = mode === "underpass" ? A1_TERRAIN_GRADE : 0;
+    // 下穿以設計最大坡度為上限；止於箱涵前者全段水平
+    const limit = mode === "underpass" ? A1_MAX_GRADE : 0;
     for (const feature of [tail("北"), tail("南"), branch("北"), branch("南"), link]) {
       expect(Math.max(...grades(feature)), feature.id).toBeLessThanOrEqual(limit + 1e-9);
     }
   });
 
-  it.runIf(mode === "underpass")("尾軌自淡水信義線正線與車站構造物的結構底下方通過", () => {
+  it.runIf(mode === "underpass")("尾軌以股道垂直淨距自淡水信義線正線下方通過", () => {
     const red = features.filter((f) => f.kind === "track-metro" && f.line === "r" && f.trackRole === "main");
-    const structures = buildBaseline().filter(
-      (f) => f.line === "r" && f.layer === "metro" && f.structure !== undefined && f.geometry.polygon,
-    );
     for (const group of GROUPS) {
       const t = tail(group.side);
       const line = lineOf(t);
@@ -168,20 +177,51 @@ describe.each([
         }
       }
       expect(crossed, `${t.id} 橫越的淡水信義線正線`).toBeGreaterThanOrEqual(2);
-
-      const samples = resample(line, 0.5);
-      const arcs = arcLengths(samples);
-      const entered = new Set<string>();
-      for (const s of structures) {
-        const bottom = STRUCTURES[s.structure!].bottom;
-        samples.forEach((p, i) => {
-          if (!pointInPolygon(p, s.geometry.polygon!)) return;
-          entered.add(s.id);
-          expect(at(arcs[i]) + (BOX_HEIGHT - BOX_BASE_DROP), `${t.id} 箱頂於 ${s.id}`).toBeLessThanOrEqual(bottom + 1e-6);
-        });
-      }
-      expect(entered.has(RED_BOX), `${t.id} 穿越 ${RED_BOX}`).toBe(true);
     }
+  });
+
+  /** 量體在弧長區間 [from, to] 內每 1 公尺與終點的軌道面皆等於起點者。 */
+  const levelOver = (feature: Feature, from: number, to: number) => {
+    const at = elevationAt(feature);
+    const base = at(from);
+    for (let s = from; s < to; s += 1) expect(at(s), `${feature.id} 於弧長 ${s.toFixed(1)}`).toBeCloseTo(base, 9);
+    expect(at(to), `${feature.id} 於弧長 ${to.toFixed(1)}`).toBeCloseTo(base, 9);
+  };
+
+  it("道岔與渡線皆位於水平段", () => {
+    for (const group of GROUPS) {
+      const t = tail(group.side);
+      const b = branch(group.side);
+      const tLine = lineOf(t);
+      const bLine = lineOf(b);
+      const mergeArc = nearestArc(tLine, arcLengths(tLine), bLine.at(-1)!).arc;
+      levelOver(t, mergeArc - A1_TURNOUT_LENGTH, mergeArc);
+      const len = arcLengths(bLine).at(-1)!;
+      levelOver(b, len - A1_TURNOUT_LENGTH, len);
+    }
+    const link = get(`${scenario}/a1/link/X1`);
+    const [e0, e1] = vertexElevations(link);
+    expect(Math.abs(e0 - e1), "X1 兩端高程").toBeLessThanOrEqual(1e-9);
+    for (const t of [tail("北"), tail("南")]) {
+      const line = lineOf(t);
+      const arcs = arcLengths(line);
+      const [s0, s1] = lineOf(link).map((p) => nearestArc(line, arcs, p).arc);
+      levelOver(t, Math.min(s0, s1), Math.max(s0, s1));
+    }
+  });
+
+  it.runIf(mode === "underpass")("渡線位於淡水信義線車站箱涵以東", () => {
+    const ring = baselineById(RED_BOX)!.geometry.polygon!;
+    const outline = [...ring, ring[0]];
+    const axis = platform1Axis();
+    const alongOf = (p: Local) => decompose(axis.center, axis.bearing, p).along;
+    const alongs = [tail("北"), tail("南")].flatMap((t) =>
+      resample(lineOf(t), 0.5)
+        .filter((p) => pointInPolygon(p, ring) || nearestOnPolyline(p, outline).distance < WORKS_CLEARANCE)
+        .map(alongOf),
+    );
+    expect(alongs.length, `尾軌跨越 ${RED_BOX}`).toBeGreaterThan(0);
+    expect(alongOf(lineOf(get(`${scenario}/a1/link/X1`))[0]), "X1 西端").toBeGreaterThanOrEqual(Math.max(...alongs));
   });
 
   it.runIf(mode === "stub")("尾軌止於淡水信義線車站箱涵前，不跨越淡水信義線", () => {

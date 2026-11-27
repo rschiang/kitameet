@@ -4,7 +4,7 @@
  * 共用的量體建構見 `shared.ts`，本檔只給定方案 B 專屬的參數。
  */
 import { tangentConnector } from "../../geo/alignment.ts";
-import { A1_TERRAIN_GRADE, MIN_RADIUS, buildScenario } from "./shared.ts";
+import { MIN_RADIUS, buildScenario } from "./shared.ts";
 
 /**
  * 東側相切連接器的標稱半徑上限（公尺）；四股道共用同一半徑，自此往下試到 {@link MIN_RADIUS}，
@@ -55,7 +55,6 @@ export const proposalB = buildScenario({
   },
   rebuiltWest: ["way/13991375", "way/323105864"],
   hsrNote: "方案 B 改建區間（北門至北平東路）內之既有高鐵隧道。",
-  // 機場捷運尾軌下穿淡水信義線車站與其基礎，所需坡度約 4.8%，超過設計最大坡度 3%；
-  // 暫援用地形限制段的特例上限 4.92%，待與方案 B 作者討論
-  a1Tail: { kind: "underpass", maxGrade: A1_TERRAIN_GRADE },
+  // 機場捷運尾軌以股道垂直淨距自淡水信義線正線下方通過（穿越其站體基礎），道岔與渡線設於水平段
+  a1Tail: "underpass",
 });

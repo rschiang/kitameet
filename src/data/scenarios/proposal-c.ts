@@ -58,5 +58,5 @@ export const proposalC = buildScenario({
   rebuiltWest: ["way/199771201", "way/199771202", "way/13991375", "way/323105864"],
   hsrNote: "方案 C 改建區間（中華路一段至北平東路）內之既有高鐵隧道。",
   // 機場捷運尾軌維持坡度 0，止於淡水信義線車站箱涵前
-  a1Tail: { kind: "stub" },
+  a1Tail: "stub",
 });
