@@ -64,6 +64,28 @@ function projectArc(line: Local[], p: Local): { distance: number; arc: number } 
   return best;
 }
 
+/** 折線的累計弧長與線段格網索引，供交會偵測篩候選。 */
+const CROSS_CELL = 25;
+function segmentGrid(line: Local[]): { arc: number[]; cells: Map<string, number[]> } {
+  const arc = [0];
+  const cells = new Map<string, number[]>();
+  for (let s = 0; s + 1 < line.length; s++) {
+    const [a, b] = [line[s], line[s + 1]];
+    arc.push(arc[s] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+    const [gx0, gx1] = [Math.floor(Math.min(a[0], b[0]) / CROSS_CELL), Math.floor(Math.max(a[0], b[0]) / CROSS_CELL)];
+    const [gy0, gy1] = [Math.floor(Math.min(a[1], b[1]) / CROSS_CELL), Math.floor(Math.max(a[1], b[1]) / CROSS_CELL)];
+    for (let gx = gx0; gx <= gx1; gx++) {
+      for (let gy = gy0; gy <= gy1; gy++) {
+        const key = `${gx},${gy}`;
+        const bucket = cells.get(key);
+        if (bucket) bucket.push(s);
+        else cells.set(key, [s]);
+      }
+    }
+  }
+  return { arc, cells };
+}
+
 const metroTracks = features.filter(
   (f) => f.kind === "track-metro" && f.line !== undefined && (f.geometry.polyline?.length ?? 0) >= 2,
 );
@@ -284,6 +306,7 @@ describe("現況場景", () => {
       at: elevationAt(f),
       line: f.geometry.polyline!,
       box: boxOf(f.geometry.polyline!),
+      grid: segmentGrid(f.geometry.polyline!),
     }));
     /** 配線與其銜接的軌道、同一條 OSM way 拆出的上下兩條配線，本就相接或上下重疊。 */
     const related = (a: (typeof items)[number]["f"], b: (typeof items)[number]["f"]): boolean =>
@@ -298,28 +321,38 @@ describe("現況場景", () => {
         const [a, b] = [items[i], items[j]];
         if (a.f.line === b.f.line || related(a.f, b.f)) continue;
         if (a.box[0] > b.box[2] || b.box[0] > a.box[2] || a.box[1] > b.box[3] || b.box[1] > a.box[3]) continue;
-        let arcA = 0;
-        for (let p = 1; p < a.line.length; p++) {
-          const [p0, p1] = [a.line[p - 1], a.line[p]];
-          const lenA = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
-          let arcB = 0;
-          for (let q = 1; q < b.line.length; q++) {
-            const [q0, q1] = [b.line[q - 1], b.line[q]];
-            const lenB = Math.hypot(q1[0] - q0[0], q1[1] - q0[1]);
-            const [rx, ry, sx, sy] = [p1[0] - p0[0], p1[1] - p0[1], q1[0] - q0[0], q1[1] - q0[1]];
-            const denom = rx * sy - ry * sx;
-            if (denom !== 0) {
-              const t = ((q0[0] - p0[0]) * sy - (q0[1] - p0[1]) * sx) / denom;
-              const u = ((q0[0] - p0[0]) * ry - (q0[1] - p0[1]) * rx) / denom;
-              if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        const stamp = new Int32Array(b.line.length - 1).fill(-1);
+        for (let p = 0; p + 1 < a.line.length; p++) {
+          const [p0x, p0y, p1x, p1y] = [a.line[p][0], a.line[p][1], a.line[p + 1][0], a.line[p + 1][1]];
+          const [rx, ry] = [p1x - p0x, p1y - p0y];
+          const lenA = a.grid.arc[p + 1] - a.grid.arc[p];
+          const gx0 = Math.floor(Math.min(p0x, p1x) / CROSS_CELL);
+          const gx1 = Math.floor(Math.max(p0x, p1x) / CROSS_CELL);
+          const gy0 = Math.floor(Math.min(p0y, p1y) / CROSS_CELL);
+          const gy1 = Math.floor(Math.max(p0y, p1y) / CROSS_CELL);
+          for (let gx = gx0; gx <= gx1; gx++) {
+            for (let gy = gy0; gy <= gy1; gy++) {
+              const candidates = b.grid.cells.get(`${gx},${gy}`);
+              if (!candidates) continue;
+              for (const q of candidates) {
+                if (stamp[q] === p) continue;
+                stamp[q] = p;
+                const q0x = b.line[q][0];
+                const q0y = b.line[q][1];
+                const sx = b.line[q + 1][0] - q0x;
+                const sy = b.line[q + 1][1] - q0y;
+                const denom = rx * sy - ry * sx;
+                if (denom === 0) continue;
+                const t = ((q0x - p0x) * sy - (q0y - p0y) * sx) / denom;
+                const u = ((q0x - p0x) * ry - (q0y - p0y) * rx) / denom;
+                if (t < 0 || t > 1 || u < 0 || u > 1) continue;
                 crossings++;
-                const gap = Math.abs(a.at(arcA + t * lenA) - b.at(arcB + u * lenB));
+                const lenB = b.grid.arc[q + 1] - b.grid.arc[q];
+                const gap = Math.abs(a.at(a.grid.arc[p] + t * lenA) - b.at(b.grid.arc[q] + u * lenB));
                 expect(gap, `${a.f.id} × ${b.f.id}`).toBeGreaterThanOrEqual(MIN_TRACK_SEPARATION - 1e-6);
               }
             }
-            arcB += lenB;
           }
-          arcA += lenA;
         }
       }
     }
