@@ -119,6 +119,12 @@ export function nearestOnPolyline(
   return best;
 }
 
+/** 點到多邊形的距離（公尺）；點在界內回傳 0。環為開放式，首尾不重複。 */
+export function distanceToPolygon(point: Local, ring: Local[]): number {
+  if (pointInPolygon(point, ring)) return 0;
+  return nearestOnPolyline(point, [...ring, ring[0]]).distance;
+}
+
 /** 多邊形的有向面積（平方公尺），逆時針為正。環為開放式，首尾不重複。 */
 export function polygonArea(ring: Local[]): number {
   let sum = 0;

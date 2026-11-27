@@ -47,4 +47,4 @@ npm run fetch:osm
 
 本專案以 [GNU AGPL 3.0](LICENSE.md) 自由軟體授權釋出。
 
-幾何資料來自 OpenStreetMap contributors，授權為 ODbL。樓層高程、地下街樓層歸屬與方案位置皆為推估值，詳見各文件中的可信度標示。
+幾何資料來自 OpenStreetMap contributors，授權為 ODbL。高程一律為 EL（基隆平均海水面起算）；臺北車站站體與機場捷運 A1 車站的樓層高程出自工程文獻，其餘樓層高程、地下街樓層歸屬與方案位置為推估值，詳見各文件中的可信度標示。

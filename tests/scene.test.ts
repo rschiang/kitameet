@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildBaseline, baselineById } from "../src/data/scene.ts";
 import {
   METRO_LINES,
+  STRUCTURES,
   levelOf,
   railLevelOf,
   type MetroLineId,
@@ -14,8 +15,9 @@ import {
 } from "../src/data/structures/elevated.ts";
 import { STACKED_TRACK_IDS } from "../src/data/structures/stacked-station.ts";
 import { nearestOnPolyline, pointInPolygon } from "../src/geo/measure.ts";
+import { polylineLength } from "../src/geo/offset.ts";
 import { OVERGROUND_RING } from "../src/data/coverage.ts";
-import { PARKING_FLOOR_THICKNESS, PLATFORM_RISE } from "../src/data/schema.ts";
+import { GROUND_EL, PARKING_FLOOR_THICKNESS, PLATFORM_RISE, aboveGround } from "../src/data/schema.ts";
 import { featureColor } from "../src/render/palette.ts";
 
 const features = buildBaseline();
@@ -39,7 +41,8 @@ describe("現況場景", () => {
       expect(f, id).toBeDefined();
       expect(f!.level).toBe("B2");
       expect(f!.layer).toBe("platform");
-      expect(longestSpan(f!.geometry.polygon!)).toBeGreaterThan(325);
+      // 月台長邊依相鄰軌道重建，伸入道岔區的端部裁去：第 1 月台約短 13 公尺
+      expect(longestSpan(f!.geometry.polygon!)).toBeGreaterThan(315);
       expect(longestSpan(f!.geometry.polygon!)).toBeLessThan(336);
       // 月台自 B2 樓板面長高 1.1 公尺
       expect(f!.structure, id).toBe("tra-hsr-station");
@@ -51,8 +54,8 @@ describe("現況場景", () => {
   it("站體地上量體為細部模型，最高點合於文獻的 48 公尺", () => {
     const parts = features.filter((f) => f.id.startsWith("landmark/taipei-station/"));
     expect(parts.length).toBeGreaterThan(20);
-    const top = Math.max(...parts.map((f) => (f.base ?? 0) + (f.height ?? 0)));
-    expect(top).toBeCloseTo(48, 6);
+    const top = Math.max(...parts.map((f) => (f.base ?? GROUND_EL) + (f.height ?? 0)));
+    expect(top).toBeCloseTo(aboveGround(48), 6);
     expect(parts.every((f) => f.layer === "landmark")).toBe(true);
     expect(parts[0].sourceNote).toContain("維基百科");
     // OSM 的 height=30 不再直接成為量體
@@ -95,7 +98,7 @@ describe("現況場景", () => {
   });
 
   it("站體產生地下量體與 B1–B4 樓板", () => {
-    expect(baselineById("station/box")?.base).toBeLessThan(-30);
+    expect(baselineById("station/box")?.base).toBe(STRUCTURES["tra-hsr-station"].bottom);
     for (const level of ["B1", "B2", "B3", "B4"]) {
       expect(baselineById(`station/slab/${level}`)?.level).toBe(level);
     }
@@ -117,7 +120,7 @@ describe("現況場景", () => {
     for (const id of ["way/542501098", "way/542501099"]) {
       const feature = baselineById(id);
       expect(feature, id).toBeDefined();
-      expect(feature!.base, id).toBeCloseTo(-1.0, 6);
+      expect(feature!.base, id).toBeCloseTo(aboveGround(-1.0), 6);
       expect(feature!.baseEnd!, id).toBeCloseTo(railLevelOf("tra-hsr-station", "B2"), 6);
     }
   });
@@ -148,7 +151,7 @@ describe("現況場景", () => {
       // 兩條路線各一組上下行正線；站區跨 OSM way 交界處會再切段，故以路線與深度的組合比對
       const pairs = new Set(tracks.map((f) => `${f.line}@${f.base}`));
       expect(pairs, structure).toEqual(
-        new Set(lines.flatMap((line) => [`${line}@-14.5`, `${line}@-22`])),
+        new Set(lines.flatMap((line) => [`${line}@${aboveGround(-14.5)}`, `${line}@${aboveGround(-22)}`])),
       );
       for (const track of tracks) {
         expect(track.base!, track.id).toBeCloseTo(railLevelOf(structure, track.level), 6);
@@ -163,17 +166,15 @@ describe("現況場景", () => {
   });
 
   it("疊式站區外的正線以不陡於 3.5% 的坡度接回本線軌道面", () => {
-    const parts = features.filter((f) => f.id.startsWith("way/194585058#"));
-    const slope = parts.filter((f) => f.baseEnd !== undefined);
-    expect(slope.length).toBe(1);
-    const [from, to] = [slope[0].base!, slope[0].baseEnd!];
-    expect(new Set([from, to])).toEqual(new Set([-14.5, -22.0]));
-    const line = slope[0].geometry.polyline!;
-    const length = line.reduce(
-      (sum, p, i) => (i === 0 ? 0 : sum + Math.hypot(p[0] - line[i - 1][0], p[1] - line[i - 1][1])),
-      0,
+    const slopes = features.filter(
+      (f) => STACKED_TRACK_IDS.has(f.id.replace(/#\d+$/, "")) && f.baseEnd !== undefined,
     );
-    expect(Math.abs(to - from) / length).toBeLessThanOrEqual(0.035 + 1e-6);
+    expect(slopes.length).toBeGreaterThan(0);
+    for (const f of slopes) {
+      // 縱斷面以 3.5% 設計；公告圖交接的平面漸移會使彎道上的段落略為縮短，容許 0.5%
+      const grade = Math.abs(f.baseEnd! - f.base!) / polylineLength(f.geometry.polyline!);
+      expect(grade, f.id).toBeLessThanOrEqual(0.035 * 1.005);
+    }
   });
 
   it("台北雙星依新聞稿高度，且高於新光人壽", () => {
@@ -189,7 +190,7 @@ describe("現況場景", () => {
     const canopy = baselineById("way/197917727");
     expect(canopy, "way/197917727").toBeDefined();
     // 架高的薄頂板，不是自地面長起的量體
-    expect(canopy!.base!).toBeGreaterThan(3);
+    expect(canopy!.base!).toBeGreaterThan(aboveGround(3));
     expect(canopy!.height!).toBeLessThan(1);
   });
 
@@ -213,7 +214,7 @@ describe("現況場景", () => {
       expect(top, pier.id).toBeGreaterThanOrEqual(Math.min(profile.base, profile.baseEnd) - 0.05);
       expect(top, pier.id).toBeLessThanOrEqual(Math.max(profile.base, profile.baseEnd) + 0.05);
       // 河道內的柱底伸至河床，陸上的自地面起算
-      expect([0, -9.5], pier.id).toContain(pier.base);
+      expect([GROUND_EL, aboveGround(-9.5)], pier.id).toContain(pier.base);
     }
   });
 
@@ -253,29 +254,29 @@ describe("現況場景", () => {
     // bridge=viaduct 的環河南路快速道路不再掉成地面路
     const viaduct = baselineById("way/52168897");
     expect(viaduct?.kind).toBe("elevated-road");
-    expect(viaduct!.base!).toBeGreaterThan(1);
+    expect(viaduct!.base!).toBeGreaterThan(aboveGround(1));
   });
 
   it("無 bridge 標籤的落地段自橋面斜降至地面，不再掉成地面路", () => {
     const ramp = baselineById("way/51285123");
     expect(ramp?.kind).toBe("elevated-road");
     expect(ramp?.name).toBe("新生高架道路");
-    expect(ramp?.base).toBeCloseTo(0.1, 6);
-    expect(ramp!.baseEnd!).toBeCloseTo(8.0 - 1.0, 6);
+    expect(ramp?.base).toBeCloseTo(aboveGround(0.1), 6);
+    expect(ramp!.baseEnd!).toBeCloseTo(aboveGround(8.0 - 1.0), 6);
   });
 
   it("淡水河沙洲浮出水面，其上的量體以沙洲頂面為地面", () => {
     const sandbar = baselineById("way/25887255");
     expect(sandbar?.kind).toBe("sand");
     expect(sandbar?.name).toBe("中興新洲");
-    expect(sandbar!.base! + sandbar!.height!).toBeCloseTo(-2.0, 6);
+    expect(sandbar!.base! + sandbar!.height!).toBeCloseTo(aboveGround(-2.0), 6);
     // 島上的倉庫與小廟無樓層標籤，不適用一般建物的預設樓層數
     for (const id of ["way/1473629794", "way/1473629795", "way/1473629797"]) {
       const shed = baselineById(id);
-      expect(shed?.base, id).toBeCloseTo(-2.0, 6);
+      expect(shed?.base, id).toBeCloseTo(aboveGround(-2.0), 6);
       expect(shed?.height, id).toBeCloseTo(2.0, 6);
     }
-    expect(baselineById("way/1053487007")?.base).toBeCloseTo(-2.0, 6);
+    expect(baselineById("way/1053487007")?.base).toBeCloseTo(aboveGround(-2.0), 6);
   });
 
   it("臺鐵萬華站月台與股道同深，不浮在地面", () => {

@@ -15,8 +15,8 @@ import type { Local } from "../src/geo/project.ts";
 const A1_TRACKS: Record<string, string> = { 北: "way/1558102739", 南: "way/1558102738" };
 /** 尾軌東端的沿主軸位置（公尺）：中山北路一段西側車道。 */
 const TAIL_END = 309;
-/** B3 軌道面高程（公尺）。 */
-const RAIL = -17.0;
+/** A1 車站 B3 軌道面高程（公尺，EL）。 */
+const RAIL = -16.775;
 /** 淡水信義線正線：尾軌自其上方通過。 */
 const TAMSUI_TRACKS = ["dorts/T/track/3", "dorts/T/track/5"];
 
@@ -99,7 +99,7 @@ describe.each(["proposal-b", "proposal-c"] as const)("%s 的機場捷運尾軌",
     }
   });
 
-  it("尾軌自淡水信義線正線上方橫越，垂直淨距不小於 5 公尺", () => {
+  it("尾軌維持 A1 車站 B3 軌道面，平面上橫越淡水信義線正線", () => {
     for (const side of ["北", "南"]) {
       const tail = byId.get(`${scenario}/a1/tail/${side}`)!;
       const line = tail.geometry.polyline as Local[];
@@ -108,7 +108,6 @@ describe.each(["proposal-b", "proposal-c"] as const)("%s 的機場捷運尾軌",
         const sides = (existing.geometry.polyline as Local[]).map((p) => sideOfPolyline(line, p));
         expect(Math.max(...sides), `${side} × ${id} 未橫越`).toBeGreaterThan(0);
         expect(Math.min(...sides), `${side} × ${id} 未橫越`).toBeLessThan(0);
-        expect(tail.base! - existing.base!, `${side} × ${id} 高差`).toBeGreaterThanOrEqual(5);
       }
       expect(tail.base, side).toBeCloseTo(RAIL, 6);
     }

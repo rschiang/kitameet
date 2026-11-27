@@ -3,14 +3,15 @@
  * 另含月台層下方的 B3 共用穿堂、捷運板南線大廳北側延伸段，以及捷運站內依資訊圖配置的梯組。
  *
  * 平面取自 OSM 的室內圖資（`osm/indoor.json`）；哪些通道屬於哪一層、階梯兩端各接到哪裡，
- * 則依站內張貼的兩份地下一層平面圖核對。樓層分三階：站體 B1 最高、捷運 B1 次之、
- * Y、K、Z 區地下街最低，高程一律取 `levels.ts` 的樓層表。
+ * 則依站內張貼的兩份地下一層平面圖核對。樓層分四階：站體 B1 最高、捷運 B1 次之、
+ * K 區再次、Z 區與 Y 區地下街最低，高程一律取 `levels.ts` 的樓層表。
  */
 import { clipPolygonToRing, splitPolylineByRing } from "../../geo/clip.ts";
 import {
   advance,
   convexHull,
   decompose,
+  distanceToPolygon,
   nearestOnPolyline,
   pointInPolygon,
   polygonArea,
@@ -26,9 +27,11 @@ import type { IndoorDataset, IndoorFeature, OsmDataset } from "../osm-types.ts";
 import { STRUCTURES, levelOf, railLevelOf, type StructureId } from "../levels.ts";
 import { OVERRIDES } from "../overrides.ts";
 import {
+  GROUND_EL,
   PARKING_FLOOR_THICKNESS,
   PLATFORM_RISE,
   SLAB_THICKNESS,
+  atGround,
   type Feature,
   type LevelId,
 } from "../schema.ts";
@@ -39,6 +42,35 @@ const surface = surfaceJson as unknown as OsmDataset;
 
 const STATION_OUTLINE = "way/23641610";
 const WEST_PARKING = "way/204616541";
+
+const FOOTPRINT_NOTE =
+  "外牆範圍描自網路資料的地下一層平面圖，以禁限建公告圖的板南線、淡水信義線車站箱涵套合（0.373 公尺／像素，殘差約 2 公尺）。" +
+  "南北寬 130.8 公尺、西停車場東牆至東端 349 公尺，與《工藝精進》第 30 頁所載第 1 標範圍（東西約 350 公尺、南北約 130 公尺）相符。";
+
+/**
+ * 站體 B1 的外牆範圍（局部公尺座標，逆時針）：西停車場西牆至東停車場東牆，
+ * 東北角內縮一階、東南角為斜切。
+ */
+export const STATION_B1_FOOTPRINT: Local[] = [
+  [-232.3, -33.8],
+  [165.4, -107.6],
+  [223.2, -68.0],
+  [236.2, 2.0],
+  [165.4, 15.2],
+  [167.2, 25.1],
+  [-208.4, 94.8],
+];
+
+/** 東停車場的範圍：站體 B1 外牆範圍中，東區付費區東側梯廳以東的部分。 */
+const EAST_PARKING_FOOTPRINT: Local[] = [
+  [82.4, -92.2],
+  [165.4, -107.6],
+  [223.2, -68.0],
+  [236.2, 2.0],
+  [165.4, 15.2],
+  [167.2, 25.1],
+  [98.0, 37.9],
+];
 const MALLS = [
   { outline: "way/450732441", structure: "mall-k" },
   { outline: "way/328691510", structure: "mall-z" },
@@ -115,8 +147,25 @@ interface Network {
   corridors: Corridor[];
   /** 頂點座標鍵對應到經過該頂點的通道樓板高程。 */
   floorsAt: Map<string, number[]>;
-  floors: Record<Tier, number>;
+  floors: { station: number; metro: number };
   station: Local[];
+}
+
+/**
+ * 地下街層通道的樓板：各地下街的 B1 並不等高，取各頂點到輪廓的平均距離最小的那一座地下街。
+ */
+function mallFloor(points: Local[]): number {
+  let best: { distance: number; floor: number } | undefined;
+  for (const mall of MALLS) {
+    const polygon = outline(mall.outline);
+    const distance =
+      points.reduce((sum, p) => sum + distanceToPolygon(p, polygon), 0) / points.length;
+    if (!best || distance < best.distance) {
+      best = { distance, floor: levelOf(mall.structure, "B1").floor };
+    }
+  }
+  if (!best) throw new Error("沒有可供判定樓板的地下街輪廓");
+  return best.floor;
 }
 
 let cachedNetwork: Network | undefined;
@@ -125,10 +174,9 @@ let cachedNetwork: Network | undefined;
 function network(): Network {
   if (cachedNetwork) return cachedNetwork;
   const station = outline(STATION_OUTLINE);
-  const floors: Record<Tier, number> = {
+  const floors = {
     station: levelOf("tra-hsr-station", "B1").floor,
     metro: levelOf("metro-station", "B1").floor,
-    mall: levelOf("mall-z", "B1").floor,
   };
 
   const raw = indoor.features.flatMap((f) => {
@@ -167,7 +215,12 @@ function network(): Network {
 
   const corridors = raw.map(({ feature, points, level }): Corridor => {
     const tier: Tier = level === -2 ? "mall" : find(key(points[0])) === ring ? "station" : "metro";
-    const corridor: Corridor = { id: feature.id, points, tier, floor: floors[tier] };
+    const corridor: Corridor = {
+      id: feature.id,
+      points,
+      tier,
+      floor: tier === "mall" ? mallFloor(points) : floors[tier],
+    };
     if (feature.tags.name !== undefined) corridor.name = feature.tags.name;
     return corridor;
   });
@@ -329,7 +382,7 @@ function stepFeatures(net: Network): Feature[] {
       upper = net.floors.station;
     } else {
       lower = sharedLo.length > 0 ? Math.min(...sharedLo) : deepest <= -3 ? metroB3 : snap(lo);
-      upper = sharedHi.length > 0 ? Math.max(...sharedHi) : highest >= 0 ? 0 : snap(hi);
+      upper = sharedHi.length > 0 ? Math.max(...sharedHi) : highest >= 0 ? GROUND_EL : snap(hi);
     }
     if (lower === null || upper === null) continue;
 
@@ -365,7 +418,7 @@ function nameExits(stairs: Feature[]): void {
     let best: { distance: number; stair: Feature } | undefined;
     for (const stair of stairs) {
       const line = stair.geometry.polyline;
-      if (stair.baseEnd !== 0 || !line) continue;
+      if (!atGround(stair.baseEnd) || !line) continue;
       const top = line[line.length - 1];
       const distance = Math.hypot(top[0] - f.point[0], top[1] - f.point[1]);
       if (distance <= EXIT_REACH && (!best || distance < best.distance)) best = { distance, stair };
@@ -390,7 +443,7 @@ function elevatorFeatures(net: Network): Feature[] {
     if (levels.length > 0 && Math.min(...levels) <= -2 && pointInPolygon(f.point, net.station)) {
       // 站體內通往月台的電梯
       bottom = platformTop;
-      top = reachesGround ? 0 : net.floors.station;
+      top = reachesGround ? GROUND_EL : net.floors.station;
     } else {
       const candidates = net.corridors
         .filter((c) => nearestOnPolyline(f.point as Local, c.points).distance <= ELEVATOR_REACH)
@@ -400,7 +453,7 @@ function elevatorFeatures(net: Network): Feature[] {
       const parking = mall ? STRUCTURES[mall.structure].levels.B2 : undefined;
       // 地下街內標到 level −3 的電梯通到地下街下方的停車場層（OSM 的 K 區停車場標 layer −3）
       bottom = Math.min(...levels) <= -3 && parking ? parking.floor : Math.min(...candidates);
-      top = reachesGround ? 0 : Math.max(...candidates);
+      top = reachesGround ? GROUND_EL : Math.max(...candidates);
     }
     if (top - bottom < MIN_RISE) continue;
 
@@ -478,19 +531,22 @@ function westParkingFeature(): Feature {
   };
 }
 
-/**
- * 站體 B1 樓板的範圍：環廊繞過西停車場、伸出站體建物輪廓之外，
- * 因此取站體輪廓、西停車場與站體層通道的凸包。
- */
-export function stationConcourseFootprint(): Local[] {
-  const net = network();
-  return convexHull([
-    ...net.station,
-    ...westParkingPolygon(),
-    ...net.corridors
-      .filter((c) => c.tier === "station")
-      .flatMap((c) => corridorPolygon(c.points, CORRIDOR_WIDTH.station)),
-  ]);
+function eastParkingFeature(): Feature {
+  const info = levelOf("parking-east", "B1");
+  return {
+    id: "station/parking/east",
+    kind: "parking",
+    name: "臺北車站東地下停車場",
+    level: "B1",
+    structure: "parking-east",
+    layer: "mall",
+    geometry: { polygon: EAST_PARKING_FOOTPRINT },
+    base: info.floor,
+    height: PARKING_FLOOR_THICKNESS,
+    confidence: "estimated",
+    sourceNote: FOOTPRINT_NOTE,
+    status: "existing",
+  };
 }
 
 /** 臺北車站 B1 的動線量體。 */
@@ -504,6 +560,7 @@ export function buildConcourse(): Feature[] {
     ...elevatorFeatures(net),
     ...paidAreaFeatures(net),
     westParkingFeature(),
+    eastParkingFeature(),
   ];
 }
 

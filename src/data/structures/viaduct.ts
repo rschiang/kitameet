@@ -7,9 +7,9 @@
 import { pointInPolygon } from "../../geo/measure.ts";
 import { polylineLength, truncatePolyline } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
-import { type Feature } from "../schema.ts";
+import { GROUND_EL, type Feature } from "../schema.ts";
 
-/** 主線橋面的梁深（公尺）：橋面頂維持 {@link LEVELS}.elevated 的 8.0 公尺。 */
+/** 主線橋面的梁深（公尺）：橋面頂維持 {@link LEVELS}.elevated 的離地 8.0 公尺。 */
 export const VIADUCT_GIRDER = 1.8;
 /** 匝道橋面的梁深（公尺）；單車道橋面較主線淺。 */
 export const RAMP_GIRDER = 1.0;
@@ -55,8 +55,8 @@ export function buildViaduct(decks: Feature[], waters: Local[][], channelBed: nu
           id: deck.id,
           name: deck.name,
           points,
-          base: deck.base ?? 0,
-          baseEnd: deck.baseEnd ?? deck.base ?? 0,
+          base: deck.base ?? GROUND_EL,
+          baseEnd: deck.baseEnd ?? deck.base ?? GROUND_EL,
         },
       ];
     })
@@ -83,7 +83,7 @@ export function buildViaduct(decks: Feature[], waters: Local[][], channelBed: nu
         continue;
       }
       placed.push({ centre, top });
-      const bottom = waters.some((water) => pointInPolygon(centre, water)) ? channelBed : 0;
+      const bottom = waters.some((water) => pointInPolygon(centre, water)) ? channelBed : GROUND_EL;
       piers.push({
         id: `${deck.id}/pier/${index}`,
         kind: "elevated-road",

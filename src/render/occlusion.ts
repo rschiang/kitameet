@@ -4,10 +4,10 @@
  * 本模組不依賴 WebGL，可直接以 vitest 驗證。
  */
 import { Box3, Frustum, Matrix4, Vector3, type PerspectiveCamera, type Plane } from "three";
-import type { Feature, LayerId } from "../data/schema.ts";
+import { GROUND_EL, type Feature, type LayerId } from "../data/schema.ts";
 import { convexHull, pointInPolygon, polygonCentroid } from "../geo/measure.ts";
 import type { Local } from "../geo/project.ts";
-import { exaggerate } from "./depth.ts";
+import { sceneY } from "./depth.ts";
 
 /** 會轉為半透明的圖層。 */
 export const OCCLUDER_LAYERS: readonly LayerId[] = ["building", "landmark"];
@@ -147,14 +147,14 @@ function sampleLine(line: Local[], closed: boolean, elevation: (s: number) => nu
     for (let k = 0; k <= last; k++) {
       const u = k / pieces;
       const s = total > 0 ? (travelled + u * length) / total : 0;
-      out.push(ax + (bx - ax) * u, exaggerate(elevation(s)), -(ay + (by - ay) * u));
+      out.push(ax + (bx - ax) * u, sceneY(elevation(s)), -(ay + (by - ay) * u));
     }
     travelled += length;
   }
 }
 
 function sampleTarget(feature: Feature, out: number[]): void {
-  const base = feature.base ?? 0;
+  const base = feature.base ?? GROUND_EL;
   const height = feature.height ?? 1;
   const { tube, polygon, polyline } = feature.geometry;
   if (tube && tube.length >= 2) {
@@ -171,7 +171,7 @@ function sampleTarget(feature: Feature, out: number[]): void {
       maxX = Math.max(maxX, x);
       maxY = Math.max(maxY, y);
     }
-    const top = exaggerate(base + height);
+    const top = sceneY(base + height);
     for (let x = minX + TARGET_STEP / 2; x < maxX; x += TARGET_STEP) {
       for (let y = minY + TARGET_STEP / 2; y < maxY; y += TARGET_STEP) {
         if (pointInPolygon([x, y], polygon)) out.push(x, top, -y);
@@ -218,9 +218,9 @@ export function buildOcclusionIndex(features: Feature[]): OcclusionIndex {
     const bottom = hullRing(polygon);
     if (bottom.length < 6) continue;
     const top = polygonTop && polygonTop.length === polygon.length ? hullRing(polygonTop) : bottom;
-    const base = feature.base ?? 0;
-    const lo = exaggerate(base);
-    const hi = exaggerate(base + (feature.height ?? 1));
+    const base = feature.base ?? GROUND_EL;
+    const lo = sceneY(base);
+    const hi = sceneY(base + (feature.height ?? 1));
     const box = new Box3();
     const corner = new Vector3();
     for (const ring of [bottom, top]) {

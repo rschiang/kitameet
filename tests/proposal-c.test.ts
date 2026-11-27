@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { featuresFor } from "../src/app/scenario.ts";
-import { baselineById } from "../src/data/scene.ts";
+import { baselineById, buildBaseline } from "../src/data/scene.ts";
 import { REBUILD_ZONE } from "../src/data/scenarios/proposal-c.ts";
 import {
   NEW_PLATFORM_LENGTH,
   PLATFORM_OFFSETS,
   WORKS_CLEARANCE,
+  platform1Axis,
 } from "../src/data/scenarios/shared.ts";
 import { sideOfPolyline } from "../src/geo/clip.ts";
 import { nearestOnPolyline, polygonAxis } from "../src/geo/measure.ts";
@@ -16,7 +17,6 @@ import { PLATFORM_WIDTH } from "../src/data/schema.ts";
 const features = featuresFor("proposal-c");
 const byId = new Map(features.map((f) => [f.id, f]));
 
-const PLATFORM1 = "way/584167409";
 const MALL_Z = "way/328691510";
 const MALL_Z_PASSAGE = "way/1174010641";
 /** 西側接軌對象：甲接北線、乙接南線。 */
@@ -104,7 +104,7 @@ const trackLine = (id: string): Local[] => byId.get(id)!.geometry.polyline!;
 
 describe("方案 C 幾何", () => {
   it("兩座新月台為 410 公尺、寬 12 公尺的島式月台，較既有第一月台順時針轉 5 度", () => {
-    const existing = polygonAxis(baselineById(PLATFORM1)!.geometry.polygon!);
+    const existing = platform1Axis();
     for (const name of names) {
       const platform = byId.get(`proposal-c/platform/${name}`);
       expect(platform, name).toBeDefined();
@@ -191,8 +191,11 @@ describe("方案 C 幾何", () => {
 
   it("新建股道與捷運板南線公告圖正線淨距不小於 20 公尺", () => {
     for (const id of trackIds) {
-      for (const bannan of ["dorts/N/track/4", "dorts/N/track/8"]) {
-        expect(clearance(trackLine(id), outlineOf(bannan)), id).toBeGreaterThan(20);
+      // 公告圖正線可能在疊式站區的影響範圍切成數段（`#n`），逐段檢查
+      const bannan = buildBaseline().filter((f) => /^dorts\/N\/track\/[48](#\d+)?$/.test(f.id));
+      expect(bannan.length).toBeGreaterThanOrEqual(2);
+      for (const track of bannan) {
+        expect(clearance(trackLine(id), outlineOf(track.id)), `${id} × ${track.id}`).toBeGreaterThan(20);
       }
     }
   });

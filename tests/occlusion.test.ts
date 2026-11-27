@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PerspectiveCamera, Plane, Vector3 } from "three";
 import { featuresFor } from "../src/app/scenario.ts";
-import type { Feature } from "../src/data/schema.ts";
+import { GROUND_EL, aboveGround, type Feature } from "../src/data/schema.ts";
 import type { Local } from "../src/geo/project.ts";
 import {
   addGhostPasses,
@@ -34,7 +34,7 @@ const building = (
   level: "G",
   layer,
   geometry: { polygon: square(cx, cy) },
-  base: 0,
+  base: GROUND_EL,
   height: 20,
   confidence: "derived",
 });
@@ -51,7 +51,7 @@ const track: Feature = {
       [100, 0],
     ],
   },
-  base: -14.5,
+  base: aboveGround(-14.5),
   height: 0.3,
   width: 3,
   confidence: "derived",
@@ -69,7 +69,7 @@ const metroTrack: Feature = {
       [-180, 60],
     ],
   },
-  base: -16.5,
+  base: aboveGround(-16.5),
   height: 0.3,
   width: 3,
   confidence: "derived",

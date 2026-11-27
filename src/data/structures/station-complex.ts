@@ -16,6 +16,7 @@ import type { OsmDataset } from "../osm-types.ts";
 import { STRUCTURES, levelOf, type StructureId } from "../levels.ts";
 import {
   SLAB_THICKNESS,
+  aboveGround,
   type Feature,
   type FeatureKind,
   type LayerId,
@@ -23,11 +24,11 @@ import {
   type LineId,
 } from "../schema.ts";
 import {
+  STATION_B1_FOOTPRINT,
   buildB3Concourse,
   buildBannanPlatformAccess,
   buildConcourse,
   buildMetroTransfer,
-  stationConcourseFootprint,
 } from "./concourse.ts";
 
 const underground = undergroundJson as unknown as OsmDataset;
@@ -158,11 +159,11 @@ function stationFeatures(): Feature[] {
       level: "B4",
       polygon,
       base: bottom,
-      height: -bottom - 0.5,
+      height: aboveGround(-0.5) - bottom,
     }),
   ];
 
-  // B1 的環廊繞過西停車場、伸出站體建物輪廓之外，樓板範圍隨之擴大
+  // B1 的外牆範圍涵蓋東西停車場，遠大於站體建物輪廓
   for (const level of ["B1", "B2", "B3", "B4"] as const) {
     features.push(
       slab(
@@ -171,7 +172,7 @@ function stationFeatures(): Feature[] {
         "station-box",
         STATION,
         level,
-        level === "B1" ? stationConcourseFootprint() : polygon,
+        level === "B1" ? STATION_B1_FOOTPRINT : polygon,
       ),
     );
   }
@@ -248,7 +249,7 @@ function a1Features(): Feature[] {
       level: "B4",
       polygon,
       base: bottom,
-      height: -bottom - 0.5,
+      height: aboveGround(-0.5) - bottom,
       line: "a",
     }),
     room("a1/concourse/B1", "機場捷運車站大廳（B1）", "station", "metro", A1, "B1", polygon, "a"),
@@ -262,8 +263,11 @@ function a1Features(): Feature[] {
   return features;
 }
 
-/** 臺北車站站區的分層地下構造。 */
-export function buildStationComplex(): Feature[] {
+/**
+ * 臺北車站站區的分層地下構造。捷運月台的梯組依 `platformOf` 給出的月台平面配置：
+ * 場景中的月台已依相鄰軌道重建，梯組須落在重建後的月台上。
+ */
+export function buildStationComplex(platformOf: (id: string) => Local[]): Feature[] {
   const boxes = metroBoxes();
   return [
     ...stationFeatures(),
@@ -271,7 +275,7 @@ export function buildStationComplex(): Feature[] {
     ...a1Features(),
     ...buildConcourse(),
     ...buildB3Concourse(boxes.tamsui),
-    ...buildMetroTransfer(boxes.bannan, boxes.tamsui, outline(TAMSUI_PLATFORM)),
-    ...buildBannanPlatformAccess(outline(BANNAN_PLATFORM)),
+    ...buildMetroTransfer(boxes.bannan, boxes.tamsui, platformOf(TAMSUI_PLATFORM)),
+    ...buildBannanPlatformAccess(platformOf(BANNAN_PLATFORM)),
   ];
 }

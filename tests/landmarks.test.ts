@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Box3 } from "three";
 import { buildBaseline } from "../src/data/scene.ts";
+import { GROUND_EL } from "../src/data/schema.ts";
 import { buildLandmarks, landmarkClaims } from "../src/data/structures/landmarks/index.ts";
 import { buildFeatureMesh } from "../src/render/builders.ts";
 import { pointInPolygon, polygonCentroid } from "../src/geo/measure.ts";
@@ -10,12 +11,13 @@ import type { Local } from "../src/geo/project.ts";
 const features = buildBaseline();
 const parts = buildLandmarks();
 
+/** 該地標最高點的離地高度（公尺）。 */
 const groupTop = (prefix: string): number =>
   Math.max(
     ...parts
       .filter((f) => f.id.startsWith(`landmark/${prefix}/`))
-      .map((f) => (f.base ?? 0) + (f.height ?? 0)),
-  );
+      .map((f) => (f.base ?? GROUND_EL) + (f.height ?? 0)),
+  ) - GROUND_EL;
 
 describe("地標細部量體", () => {
   const SLUGS = [
@@ -66,7 +68,7 @@ describe("地標細部量體", () => {
       expect(feature.layer, feature.id).toBe("landmark");
       expect(feature.kind, feature.id).toBe("landmark");
       expect(feature.level, feature.id).toBe("G");
-      expect(feature.base, feature.id).toBeGreaterThanOrEqual(0);
+      expect(feature.base, feature.id).toBeGreaterThanOrEqual(GROUND_EL);
       expect(feature.height ?? 0, feature.id).toBeGreaterThan(0);
       expect(feature.sourceNote ?? "", feature.id).not.toHaveLength(0);
     }
@@ -97,7 +99,7 @@ describe("地標細部量體", () => {
       expect(mesh, feature.id).not.toBeNull();
       // 頂點為 float32，238 公尺高處的誤差約 0.01 公釐等級
       const box = new Box3().setFromObject(mesh!);
-      expect(box.min.y, feature.id).toBeCloseTo(feature.base!, 3);
+      expect(box.min.y, feature.id).toBeCloseTo(feature.base! - GROUND_EL, 3);
       expect(box.max.y - box.min.y, feature.id).toBeCloseTo(feature.height!, 3);
     }
   });

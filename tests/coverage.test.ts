@@ -21,7 +21,7 @@ import { polylineLength } from "../src/geo/offset.ts";
 import { buildBaseline } from "../src/data/scene.ts";
 import surfaceJson from "../src/data/osm/surface.json";
 import type { OsmDataset } from "../src/data/osm-types.ts";
-import type { Feature } from "../src/data/schema.ts";
+import { GROUND_EL, type Feature } from "../src/data/schema.ts";
 import type { Local } from "../src/geo/project.ts";
 
 const surface = surfaceJson as unknown as OsmDataset;
@@ -229,11 +229,11 @@ describe("場景的涵蓋裁切", () => {
   it("地塊恰有一項，厚度 60 公尺且底面在最深結構之下", () => {
     const terrain = features.filter((f) => f.kind === "terrain");
     expect(terrain).toHaveLength(1);
-    expect(terrain[0].base).toBe(-TERRAIN_DEPTH);
+    expect(terrain[0].base).toBe(GROUND_EL - TERRAIN_DEPTH);
     expect(terrain[0].height).toBe(TERRAIN_DEPTH);
     expect(terrain[0].layer).toBe("terrain");
     expect(terrain[0].geometry.polygon).toEqual(OVERGROUND_RING);
-    const deepest = Math.min(...features.map((f) => f.base ?? 0));
+    const deepest = Math.min(...features.map((f) => f.base ?? GROUND_EL));
     expect(terrain[0].base!).toBeLessThanOrEqual(deepest);
   });
 
@@ -264,7 +264,7 @@ describe("場景的涵蓋裁切", () => {
       .filter((f) => /^(way|relation)\//.test(f.id) && (f.geometry.polygon?.length ?? 0) >= 3)
       .map((f) => {
         const polygon = f.geometry.polygon!;
-        const base = f.base ?? 0;
+        const base = f.base ?? GROUND_EL;
         return {
           id: f.id,
           area: Math.abs(polygonArea(polygon)),
@@ -302,7 +302,7 @@ describe("場景的涵蓋裁切", () => {
         .map((f) => ({
           id: f.id,
           color: featureColor(f.kind, f.layer, f.status, f.line),
-          top: (f.base ?? 0) + (f.height ?? 0),
+          top: (f.base ?? GROUND_EL) + (f.height ?? 0),
         }));
       for (let i = 0; i < stack.length; i++) {
         for (let j = i + 1; j < stack.length; j++) {
@@ -318,7 +318,7 @@ describe("場景的涵蓋裁切", () => {
 
   it("地下結構可以伸出地面範圍之外", () => {
     const outside = features.filter((f) => {
-      if ((f.base ?? 0) >= 0) return false;
+      if ((f.base ?? GROUND_EL) >= GROUND_EL) return false;
       return pointsOf(f).some((p) => !insideRing(p, OVERGROUND_RING));
     });
     expect(outside.length).toBeGreaterThan(0);

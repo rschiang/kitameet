@@ -16,7 +16,7 @@ import { toLocal, type Local } from "../../../geo/project.ts";
 import surfaceJson from "../../osm/surface.json";
 import type { OsmDataset } from "../../osm-types.ts";
 import { dortsBuildingPolygons } from "../../dorts.ts";
-import type { Feature } from "../../schema.ts";
+import { aboveGround, type Feature } from "../../schema.ts";
 
 const surface = surfaceJson as unknown as OsmDataset;
 
@@ -201,6 +201,7 @@ export interface PartInput {
   name: string;
   polygon: Local[];
   polygonTop?: Local[];
+  /** 底面的離地高度（公尺）。 */
   base: number;
   height: number;
 }
@@ -215,7 +216,7 @@ export function part(landmark: string, note: string, input: PartInput): Feature 
     geometry: input.polygonTop
       ? { polygon: input.polygon, polygonTop: input.polygonTop }
       : { polygon: input.polygon },
-    base: input.base,
+    base: aboveGround(input.base),
     height: input.height,
     confidence: "estimated",
     sourceNote: note,

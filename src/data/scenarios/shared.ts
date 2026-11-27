@@ -20,6 +20,8 @@ import {
   taperedOffset,
 } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
+import undergroundJson from "../osm/underground.json";
+import type { OsmDataset } from "../osm-types.ts";
 import { baselineById } from "../scene.ts";
 import { railLevelOf } from "../levels.ts";
 import {
@@ -200,17 +202,22 @@ const A1_TAIL_SPIRAL = 20;
 const A1_CROSSOVER = { from: 0, to: 51 } as const;
 const A1_NOTE =
   "機場捷運台北車站改為直通式：兩條正線穿越月台後東行，於中山北路一段西側止於尾軌。" +
-  "尾軌全段維持 B3 軌道面 −17.0 公尺（坡度 0），自淡水信義線軌道面（−23.5 公尺）上方通過；" +
+  "尾軌全段維持 A1 車站 B3 軌道面（坡度 0）。依捷運局施工高程，該軌道面僅高於淡水信義線月台層樓板面 1.9 公尺，橫越處的垂直淨距不足，尾軌縱斷面尚待檢討；" +
   "喉道曲線半徑 200 公尺、緩和曲線 20 公尺，道岔型式與號誌未檢核。";
 
 const PLATFORM1_ID = "way/584167409";
 
+const underground = undergroundJson as unknown as OsmDataset;
 let cachedAxis: PolygonAxis | undefined;
 
-/** 既有第一月台的主軸；方案幾何一律以此為基準座標系。 */
+/**
+ * 既有第一月台的主軸；方案幾何一律以此為基準座標系。
+ * 取 OSM 原始輪廓：場景中的月台已依相鄰軌道重建（`structures/platforms.ts`），
+ * 基準座標系不隨之移動，方案幾何才不受月台重建影響。
+ */
 export function platform1Axis(): PolygonAxis {
   if (cachedAxis) return cachedAxis;
-  const polygon = baselineById(PLATFORM1_ID)?.geometry.polygon;
+  const polygon = underground.features.find((f) => f.id === PLATFORM1_ID)?.polygon;
   if (!polygon) throw new Error(`找不到既有第一月台 ${PLATFORM1_ID} 的輪廓`);
   cachedAxis = polygonAxis(polygon);
   return cachedAxis;

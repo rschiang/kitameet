@@ -10,7 +10,7 @@ import {
   polygonArea,
   polygonCentroid,
 } from "../geo/measure.ts";
-import { polylineLength } from "../geo/offset.ts";
+import { polylineLength, slicePolyline } from "../geo/offset.ts";
 import undergroundJson from "./osm/underground.json";
 import type { OsmDataset } from "./osm-types.ts";
 import type { Local } from "../geo/project.ts";
@@ -19,7 +19,7 @@ import structuresJson from "./dorts/structures.json";
 import type { DortsBasemap, DortsLineCode, DortsStructures } from "./dorts-types.ts";
 import { METRO_LINES, levelLabelFor, type MetroLineId, type StructureId } from "./levels.ts";
 import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "./overrides.ts";
-import { TRACK_BAND_WIDTH, type Feature } from "./schema.ts";
+import { GROUND_EL, TRACK_BAND_WIDTH, aboveGround, type Feature } from "./schema.ts";
 
 const structures = structuresJson as unknown as DortsStructures;
 const basemap = basemapJson as unknown as DortsBasemap;
@@ -84,7 +84,7 @@ const STATION_WIDTH = 20;
 /** 明挖箱涵的淨高（公尺）。 */
 const BOX_HEIGHT = 9.0;
 /** 車站箱涵的頂版高程（公尺）。 */
-const STATION_TOP = -5.0;
+const STATION_TOP = aboveGround(-5.0);
 /** 潛盾段軸心高出軌道面的距離（公尺）。 */
 const BORE_AXIS_RISE = 1.5;
 /** 箱涵結構底低於軌道面的距離（公尺）。 */
@@ -373,6 +373,69 @@ function nearestTrackDistance(point: Local): number {
 
 const DEFAULT_HEIGHT = DEFAULT_BUILDING_LEVELS * BUILDING_LEVEL_HEIGHT;
 
+/** 公告圖軌道中心線的原始折線（未經疊式站區裁切）；查無此 id 即擲例外。 */
+export function dortsTrackLine(id: string): Local[] {
+  const track = structures.tracks.find((t) => t.id === id);
+  if (!track) throw new Error(`公告圖沒有軌道 ${id}`);
+  return track.line;
+}
+
+/** 潛盾端部削切：每次削去的長度、檢查的端部長度（公尺）與次數上限。 */
+const BORE_TRIM_STEP = 0.5;
+const BORE_TRIM_PROBE = 6;
+const BORE_TRIM_LIMIT = 40;
+
+/** 折線上弧長 `s` 處的座標與單位切向。 */
+function frameAt(pts: Local[], s: number): { point: Local; tangent: Local } {
+  let walked = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [a, b] = [pts[i - 1], pts[i]];
+    const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (seg === 0) continue;
+    const tangent: Local = [(b[0] - a[0]) / seg, (b[1] - a[1]) / seg];
+    if (walked + seg >= s || i === pts.length - 1) {
+      const t = Math.min(seg, Math.max(0, s - walked));
+      return { point: [a[0] + tangent[0] * t, a[1] + tangent[1] * t], tangent };
+    }
+    walked += seg;
+  }
+  return { point: pts[0], tangent: [1, 0] };
+}
+
+/**
+ * 潛盾止於車站端牆：公告圖的潛盾軸線常伸進車站箱涵，圓管端部因而斜穿端牆。
+ * 兩端各自檢查端部 {@link BORE_TRIM_PROBE} 公尺內的軸點與兩側管緣，
+ * 落在同路線車站箱涵內就自該端削去 {@link BORE_TRIM_STEP} 公尺，直到端部完全在箱涵外。
+ */
+function trimBoreAtStations(line: Local[], radius: number, boxes: Local[][]): Local[] {
+  const intrudes = (part: Local[]): boolean => {
+    const length = polylineLength(part);
+    for (let s = 0; s <= length + 1e-9; s += BORE_TRIM_STEP) {
+      const { point, tangent } = frameAt(part, s);
+      const [nx, ny] = [-tangent[1], tangent[0]];
+      const probes: Local[] = [
+        point,
+        [point[0] + nx * radius, point[1] + ny * radius],
+        [point[0] - nx * radius, point[1] - ny * radius],
+      ];
+      if (probes.some((p) => boxes.some((box) => pointInPolygon(p, box)))) return true;
+    }
+    return false;
+  };
+  const total = polylineLength(line);
+  let from = 0;
+  let to = total;
+  for (let n = 0; n < BORE_TRIM_LIMIT && to - from > 1; n++) {
+    if (!intrudes(slicePolyline(line, from, from + BORE_TRIM_PROBE))) break;
+    from += BORE_TRIM_STEP;
+  }
+  for (let n = 0; n < BORE_TRIM_LIMIT && to - from > 1; n++) {
+    if (!intrudes(slicePolyline(line, to - BORE_TRIM_PROBE, to))) break;
+    to -= BORE_TRIM_STEP;
+  }
+  return to - from < 1 ? [] : slicePolyline(line, from, to);
+}
+
 /**
  * 公告圖的量體清單。`attributes` 由場景提供，
  * 以重疊的 OSM 建物補上高度與名稱；沒有對應者取預設樓層數。
@@ -380,6 +443,11 @@ const DEFAULT_HEIGHT = DEFAULT_BUILDING_LEVELS * BUILDING_LEVEL_HEIGHT;
 export function buildDorts(attributes?: Map<number, BuildingAttributes>): Feature[] {
   const features: Feature[] = [];
 
+  const stationBoxes = structures.tunnels.flatMap((t) =>
+    t.kind === "box" && t.width >= STATION_WIDTH
+      ? [{ line: lineOf(t.lineCode, t.polygon).id, polygon: t.polygon }]
+      : [],
+  );
   const bores = dedupePolylines(
     structures.tunnels.flatMap((t) => (t.kind === "bore" ? [t] : [])),
     (t) => t.line,
@@ -387,6 +455,12 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
   );
   for (const tunnel of bores) {
     const line = lineOf(tunnel.lineCode, tunnel.line);
+    const tube = trimBoreAtStations(
+      tunnel.line,
+      tunnel.radius,
+      stationBoxes.flatMap((box) => (box.line === line.id ? [box.polygon] : [])),
+    );
+    if (tube.length < 2) continue;
     const base = line.rail + BORE_AXIS_RISE;
     features.push({
       id: tunnel.id,
@@ -396,12 +470,12 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
       structure: line.structure,
       line: line.id,
       layer: "metro",
-      geometry: { tube: tunnel.line },
+      geometry: { tube },
       base,
       height: tunnel.radius * 2,
       radius: tunnel.radius,
       confidence: "estimated",
-      sourceNote: `${SOURCE}；深度依${line.label}軌道面 ${line.rail} 公尺推估。`,
+      sourceNote: `${SOURCE}；深度依${line.label}軌道面 EL ${line.rail} 公尺推估，端部止於車站箱涵外牆。`,
       status: "existing",
     });
   }
@@ -423,7 +497,7 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
       base,
       height: station ? STATION_TOP - base : BOX_HEIGHT,
       confidence: "estimated",
-      sourceNote: `${SOURCE}；深度依${line.label}軌道面 ${line.rail} 公尺推估。`,
+      sourceNote: `${SOURCE}；深度依${line.label}軌道面 EL ${line.rail} 公尺推估。`,
       status: "existing",
     });
   }
@@ -462,7 +536,7 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
       level: "G",
       layer: "restriction",
       geometry: { polyline: limit.line },
-      base: 0.05,
+      base: aboveGround(0.05),
       height: 0.1,
       width: RESTRICTION_WIDTH,
       confidence: "sourced",
@@ -480,7 +554,7 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
       level: "G",
       layer: attrs?.landmark === true ? "landmark" : "building",
       geometry: { polygon: building.polygon },
-      base: 0,
+      base: GROUND_EL,
       height: attrs?.height ?? DEFAULT_HEIGHT,
       confidence: "estimated",
       sourceNote:

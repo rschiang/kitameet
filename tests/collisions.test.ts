@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildBaseline } from "../src/data/scene.ts";
-import type { Feature, FeatureKind } from "../src/data/schema.ts";
+import { GROUND_EL, type Feature, type FeatureKind } from "../src/data/schema.ts";
 import { resample } from "../src/geo/corridor.ts";
 import { pointInPolygon } from "../src/geo/measure.ts";
 import { corridorPolygon, offsetPolyline } from "../src/geo/offset.ts";
@@ -60,7 +60,7 @@ function fractions(line: Local[]): number[] {
 
 /** 著色量體的取樣點：帶狀量體取中心線與兩側邊線，平面量體取格點。 */
 function samplesOf(f: Feature): Sample[] {
-  const base = f.base ?? 0;
+  const base = f.base ?? GROUND_EL;
   const height = f.height ?? 0;
   const end = f.baseEnd ?? base;
   const line = f.geometry.polyline ?? f.geometry.tube;
@@ -97,7 +97,7 @@ function samplesOf(f: Feature): Sample[] {
 
 /** 中性量體的柱體；傾斜的帶狀量體逐段拆開，否則整條會被當成一個等高的柱體。 */
 function prismsOf(f: Feature): Prism[] {
-  const base = f.base ?? 0;
+  const base = f.base ?? GROUND_EL;
   const height = f.height ?? 0;
   const polygon = f.geometry.polygon;
   if (polygon && polygon.length >= 3) return [{ ring: polygon, lo: base, hi: base + height }];
@@ -177,40 +177,11 @@ function findCollisions(features: Feature[]): Map<string, Hit> {
   return hits;
 }
 
-/** 現況資料既有的相交，依成因分組；新增者一律視為錯誤。 */
-const KNOWN_COLLISIONS: string[] = [
-  // 股道帶壓入月台：股道中心線距月台邊緣不足半個帶寬
-  "dorts/G/track/2 × way/194585056",
-  "dorts/G/track/2 × way/877532223",
-  "dorts/N/track/8 × way/741259904",
-  "dorts/T/track/4 × way/741259905",
-  "dorts/T/track/5 × way/741259905",
-  "way/1558102739 × way/871105041",
-  "way/170432840 × way/871105041",
-  "way/194118017 × way/978708478",
-  "way/194118025 × way/978708478",
-  "way/194118036 × way/978708478",
-  "way/194118018 × way/584167413",
-  "way/615600485 × way/584167413",
-  "way/194585046 × way/877532223",
-  "way/593871124 × way/584167411",
-  "way/615600478 × way/584167411",
-  "way/615600481 × way/584167411",
-  "way/593871149 × way/584167409",
-  "way/615600479 × way/584167409",
-  "way/615600484 × way/584167415",
-  "way/615600486 × way/584167415",
-  "way/619251068 × way/871105042",
-  "way/633685393 × way/978708479",
-
-  // 板南線潛盾隧道端部伸入車站樓板與大廳
-  "dorts/N/bore/7 × metro/bannan/concourse/B2",
-  "dorts/N/bore/7 × metro/bannan/slab/B2",
-  "dorts/N/bore/7 × metro/bannan/slab/B3",
-  "dorts/N/bore/8 × metro/bannan/concourse/B2",
-  "dorts/N/bore/8 × metro/bannan/slab/B2",
-  "dorts/N/bore/8 × metro/bannan/slab/B3",
-];
+/**
+ * 既知相交須附 (a) 施工改動或 (b) 查無證據的說明與出處；
+ * 新增者一律視為資料或幾何有誤。
+ */
+const KNOWN_COLLISIONS: string[] = [];
 
 describe("著色量體的空間相交", () => {
   it(

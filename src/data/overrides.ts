@@ -14,7 +14,7 @@ import {
   railLevelOf,
   type StructureId,
 } from "./levels.ts";
-import type { Confidence, FeatureKind, LayerId, LevelId } from "./schema.ts";
+import { GROUND_EL, aboveGround, type Confidence, type FeatureKind, type LayerId, type LevelId } from "./schema.ts";
 
 export interface FeatureOverride {
   name?: string;
@@ -67,12 +67,9 @@ const METRO_MAP = "捷運台北車站官方車站配置圖";
 const STACKED_SPACING = 7.0;
 /** 疊式段下層的軌道面高程（公尺）。 */
 export const STACKED_LOWER_RAIL = METRO_LINES.g.rail - STACKED_SPACING;
-const STACKED_NOTE =
-  "捷運松山線北門—西門段為上下疊式潛盾隧道；下層軌道面取上層減一組隧道間距 " +
-  `${STACKED_SPACING} 公尺（公告圖潛盾外半徑 2.97 公尺 × 2 加淨距約 1 公尺），為推估值。`;
 
 /** 華山引道兩端的軌道面高程（公尺）：東端露出地面、西端接臺鐵站體 B2 月台層。 */
-const HUASHAN_SURFACE = -1.0;
+const HUASHAN_SURFACE = aboveGround(-1.0);
 const HUASHAN_RAIL = railLevelOf("tra-hsr-station", "B2");
 
 const TWINS_NOTE =
@@ -85,14 +82,14 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   "way/1502280687": {
     name: "台北雙星 C1",
     height: 280,
-    base: 0,
+    base: GROUND_EL,
     confidence: "sourced",
     sourceNote: TWINS_NOTE,
   },
   "way/1502280746": {
     name: "台北雙星 D1",
     height: 360,
-    base: 0,
+    base: GROUND_EL,
     confidence: "sourced",
     sourceNote: TWINS_NOTE,
   },
@@ -221,12 +218,9 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
     sourceNote: "臺北市市場處資料：西門地下街位於中華路下方，屬地下一層。",
   },
   "way/204711209": {
-    name: "臺北車站東地下停車場",
-    layer: "mall",
-    level: "B1",
-    structure: "parking-east",
-    confidence: "estimated",
-    sourceNote: "臺北車站東側地下停車場，層數與深度推估。",
+    exclude: true,
+    sourceNote:
+      "臺北車站東地下停車場：OSM 輪廓只涵蓋停車場中央，改由 structures/concourse.ts 的 station/parking/east 呈現。",
   },
 
   // ── 捷運與機場捷運站體 ────────────────────────────────
@@ -320,15 +314,14 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   // 深度一律由 `levels.ts` 的 METRO_LINES 依 OSM `ref` 給出；以下只列線上無法推得者。
   // 松山新店線北門—西門段為上下疊式潛盾；下層自西門站北端降至下管高程，
   // 西門站區內的深度由 `structures/stacked-station.ts` 的縱斷面決定。
-  "way/194585061": {
-    layer: "metro",
+  ...assign(["way/194585045", "way/194585056"], {
+    name: "捷運北門站月台",
+    layer: "platform",
     level: "B4",
-    structure: "metro-line-g",
-    base: STACKED_LOWER_RAIL,
-    baseEnd: METRO_LINES.g.rail,
+    structure: "metro-station-beimen",
     confidence: "estimated",
-    sourceNote: `${STACKED_NOTE}本段北端於北門站回到與上層同高。`,
-  },
+    sourceNote: "臺北捷運〈北門站車站剖面相關位置圖〉：月台位於 B4。",
+  }),
 
   // ── 華山引道 ──────────────────────────────────────────
   ...assign(["way/542501098", "way/542501099"], {

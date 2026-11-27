@@ -1,6 +1,6 @@
 /**
  * 場景資料模型。所有幾何一律使用局部公尺座標（x 東、y 北），
- * 高程以公尺計、地面為 0、向下為負。
+ * 高程一律為 EL（公尺）：自基隆平均海水面起算、向上為正，站區地面取 {@link GROUND_EL}。
  */
 import type { Local } from "../geo/project.ts";
 import type { StructureId } from "./levels.ts";
@@ -94,7 +94,7 @@ export interface Feature {
   };
   /** 量體高度（公尺）；折線量體則為厚度。 */
   height?: number;
-  /** 量體底面高程（公尺，地面為 0）。未指定時取所屬樓層樓板。 */
+  /** 量體底面高程（公尺，EL）。未指定時取所屬樓層樓板。 */
   base?: number;
   /** 折線量體末端頂點的底面高程；省略時全段與 `base` 同高。僅 `polyline` 有效。 */
   baseEnd?: number;
@@ -117,17 +117,32 @@ export interface LevelInfo {
 }
 
 /**
+ * 站區地面的高程（公尺，EL）。
+ * 交通部鐵路改建工程局《工藝精進：臺北・板橋・南港車站規劃設計與施工》第 32 頁：
+ * 臺北車站月台下方服務通道的底板高程 EL −13.2 公尺「約地面下深 17.7 公尺」。
+ * 模型的地面為單一平面，不表現地形起伏。
+ */
+export const GROUND_EL = 4.5;
+
+/** 離地高度（正值）或地面下深度（負值）換算為 EL。 */
+export const aboveGround = (offset: number): number => GROUND_EL + offset;
+
+/** 高程是否位於地面；裁切內插後的端點高程帶有浮點誤差，不以全等比較。 */
+export const atGround = (elevation: number | undefined): boolean =>
+  elevation !== undefined && Math.abs(elevation - GROUND_EL) < 1e-6;
+
+/**
  * 預設樓層表，僅供未指定構造物的量體使用。
- * 數值依臺北車站地上 6 層地下 4 層、總高 48 公尺的文獻描述與一般鐵路車站層高反推；
- * 有獨立樓層表的構造物一律改走 `levels.ts` 的 `STRUCTURES`。
+ * 數值依臺北車站地上 6 層地下 4 層、總高 48 公尺的文獻描述與一般鐵路車站層高反推，
+ * 以離地高度宣告後換算為 EL；有獨立樓層表的構造物一律改走 `levels.ts` 的 `STRUCTURES`。
  */
 export const LEVELS: Record<LevelId, LevelInfo> = {
-  elevated: { floor: 8.0, height: 9.0, label: "高架層", confidence: "estimated" },
-  G: { floor: 0, height: 7.0, label: "地面層", confidence: "sourced" },
-  B1: { floor: -7.0, height: 6.0, label: "地下一層", confidence: "estimated" },
-  B2: { floor: -14.5, height: 7.5, label: "地下二層", confidence: "estimated" },
-  B3: { floor: -22.0, height: 7.5, label: "地下三層", confidence: "estimated" },
-  B4: { floor: -29.5, height: 7.5, label: "地下四層", confidence: "estimated" },
+  elevated: { floor: aboveGround(8.0), height: 9.0, label: "高架層", confidence: "estimated" },
+  G: { floor: GROUND_EL, height: 7.0, label: "地面層", confidence: "sourced" },
+  B1: { floor: aboveGround(-7.0), height: 6.0, label: "地下一層", confidence: "estimated" },
+  B2: { floor: aboveGround(-14.5), height: 7.5, label: "地下二層", confidence: "estimated" },
+  B3: { floor: aboveGround(-22.0), height: 7.5, label: "地下三層", confidence: "estimated" },
+  B4: { floor: aboveGround(-29.5), height: 7.5, label: "地下四層", confidence: "estimated" },
 };
 
 /** 月台面高出軌道面的高度（公尺）。 */

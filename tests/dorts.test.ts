@@ -9,6 +9,7 @@ import {
 } from "../src/data/dorts.ts";
 import basemapJson from "../src/data/dorts/basemap.json";
 import { METRO_LINES, type MetroLineId } from "../src/data/levels.ts";
+import { aboveGround } from "../src/data/schema.ts";
 import { nearestOnPolyline, pointInPolygon, polygonArea, polygonCentroid } from "../src/geo/measure.ts";
 import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "../src/data/overrides.ts";
 import { polylineLength } from "../src/geo/offset.ts";
@@ -78,7 +79,7 @@ describe("公告圖量體", () => {
     const boxes = features.filter((f) => f.geometry.polygon && f.id.includes("/box/"));
     expect(boxes.length).toBeGreaterThan(0);
     for (const box of boxes) {
-      if (box.kind === "station-box") expect(box.base! + box.height!, box.id).toBeCloseTo(-5.0, 6);
+      if (box.kind === "station-box") expect(box.base! + box.height!, box.id).toBeCloseTo(aboveGround(-5.0), 6);
       else expect(box.height!, box.id).toBeCloseTo(9.0, 6);
     }
   });

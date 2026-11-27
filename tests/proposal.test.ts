@@ -6,6 +6,7 @@ import {
   NEW_PLATFORM_LENGTH,
   PLATFORM_OFFSETS,
   WORKS_CLEARANCE,
+  platform1Axis,
 } from "../src/data/scenarios/shared.ts";
 import { sideOfPolyline } from "../src/geo/clip.ts";
 import { decompose, nearestOnPolyline, polygonAxis } from "../src/geo/measure.ts";
@@ -17,7 +18,6 @@ import { featureColor } from "../src/render/palette.ts";
 const features = featuresFor("proposal-b");
 const byId = new Map(features.map((f) => [f.id, f]));
 
-const PLATFORM1 = "way/584167409";
 const MALL_K = "way/450732441";
 const MALL_Z = "way/328691510";
 const BANNAN_PLATFORM = "way/741259904";
@@ -63,7 +63,7 @@ function minRadius(points: Local[]): number {
 
 /** 沿既有第一月台主軸分解一組點。 */
 function bandOf(points: Local[]): { along: number[]; lateral: number[] } {
-  const axis = polygonAxis(baselineById(PLATFORM1)!.geometry.polygon!);
+  const axis = platform1Axis();
   const parts = points.map((p) => decompose(axis.center, axis.bearing, p));
   return { along: parts.map((v) => v.along), lateral: parts.map((v) => v.lateral) };
 }

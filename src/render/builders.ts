@@ -19,9 +19,9 @@ import {
 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { corridorPolygon, offsetPolyline, polylineLength, slicePolyline } from "../geo/offset.ts";
-import { exaggerate } from "./depth.ts";
+import { sceneY } from "./depth.ts";
 import type { Local } from "../geo/project.ts";
-import type { Feature } from "../data/schema.ts";
+import { GROUND_EL, type Feature } from "../data/schema.ts";
 import { featureColor } from "./palette.ts";
 import { createPaperMaterial } from "./materials.ts";
 
@@ -154,8 +154,8 @@ function slopedBand(
   for (let i = 0; i < n; i++) {
     const t = total === 0 ? 0 : along[i] / total;
     const elevation = baseStart + (baseEnd - baseStart) * t;
-    const lo = exaggerate(elevation);
-    const hi = exaggerate(elevation + thickness);
+    const lo = sceneY(elevation);
+    const hi = sceneY(elevation + thickness);
     positions.push(left[i][0], lo, -left[i][1]);
     positions.push(right[i][0], lo, -right[i][1]);
     positions.push(left[i][0], hi, -left[i][1]);
@@ -208,8 +208,8 @@ function steppedBand(
   for (let i = 0; i < treads; i++) {
     const run = slicePolyline(points, (total * i) / treads, (total * (i + 1)) / treads);
     if (run.length < 2) continue;
-    const top = exaggerate(Math.max(elevation(i), elevation(i + 1)));
-    const bottom = exaggerate(Math.min(elevation(i), elevation(i + 1)) - thickness);
+    const top = sceneY(Math.max(elevation(i), elevation(i + 1)));
+    const bottom = sceneY(Math.min(elevation(i), elevation(i + 1)) - thickness);
     parts.push(extrude(corridorPolygon(run, width), top - bottom, bottom));
   }
   return mergeGeometries(parts, false);
@@ -234,9 +234,9 @@ const FILL_OPACITY: Partial<Record<Feature["kind"], number>> = {
 /** 由 {@link Feature} 建立可直接加入場景的 mesh；幾何不足時回傳 null。 */
 export function buildFeatureMesh(feature: Feature, occluderUnit?: number): Mesh | null {
   // 深度放大作用於上下兩端高程，高度由差值求得，避免分別放大造成錯位
-  const trueBase = feature.base ?? 0;
-  const base = exaggerate(trueBase);
-  const height = exaggerate(trueBase + (feature.height ?? 1)) - base;
+  const trueBase = feature.base ?? GROUND_EL;
+  const base = sceneY(trueBase);
+  const height = sceneY(trueBase + (feature.height ?? 1)) - base;
 
   let geometry: BufferGeometry;
   // 傾斜量體的底面高程兩端不同，位移基準取較低的一端
@@ -260,7 +260,7 @@ export function buildFeatureMesh(feature: Feature, occluderUnit?: number): Mesh 
         trueBase,
         feature.baseEnd,
       );
-      meshBase = Math.min(base, exaggerate(feature.baseEnd));
+      meshBase = Math.min(base, sceneY(feature.baseEnd));
     } else {
       const band = corridorPolygon(feature.geometry.polyline, feature.width ?? 3);
       geometry = extrude(band, height, base);

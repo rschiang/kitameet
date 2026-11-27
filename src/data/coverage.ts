@@ -8,7 +8,7 @@
 import { clipPolygonToRing, splitPolylineByRing } from "../geo/clip.ts";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geo/measure.ts";
 import { toLocal, type Local } from "../geo/project.ts";
-import type { Feature, LayerId } from "./schema.ts";
+import { GROUND_EL, type Feature, type LayerId } from "./schema.ts";
 
 /** 地塊厚度（公尺）：深於最深的 B4 樓板與潛盾段。 */
 export const TERRAIN_DEPTH = 60;
@@ -221,7 +221,7 @@ export function clipToCoverage(feature: Feature): Feature[] {
     const parts = splitPolylineByRing(polyline, ring).inside;
     if (feature.baseEnd === undefined) return pieces(feature, parts, "polyline");
     // 兩端高程依弧長線性內插，切出的各段各自保留自己那一段的坡度
-    const base = feature.base ?? 0;
+    const base = feature.base ?? GROUND_EL;
     const span = feature.baseEnd - base;
     return parts.map((part, n) => ({
       ...feature,

@@ -8,7 +8,7 @@
 import { pointInPolygon } from "../../geo/measure.ts";
 import { insetRing, polylineLength, slicePolyline } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
-import type { Feature } from "../schema.ts";
+import { GROUND_EL, aboveGround, atGround, type Feature } from "../schema.ts";
 
 /** 雨棚沿階梯方向最多覆蓋的長度（公尺）。 */
 const SHED_LENGTH = 10;
@@ -21,7 +21,7 @@ const WALL_THICKNESS = 0.3;
 const WALL_HEIGHT = 1.1;
 /** 方形立柱邊長（公尺）。 */
 const PIER_SIZE = 0.8;
-/** 頂棚底面高程與厚度（公尺）：厚度含空間桁架與簷板。 */
+/** 頂棚底面的離地高度與厚度（公尺）：厚度含空間桁架與簷板。 */
 const ROOF_SOFFIT = 3.6;
 const ROOF_THICKNESS = 0.8;
 /** 頂棚底面較矮牆與正面外伸的長度（公尺）。 */
@@ -41,7 +41,7 @@ function groundExits(features: Feature[]): Feature[] {
   return features.filter(
     (f) =>
       (f.kind === "stairs" || f.kind === "escalator") &&
-      f.baseEnd === 0 &&
+      atGround(f.baseEnd) &&
       (f.geometry.polyline?.length ?? 0) >= 2,
   );
 }
@@ -51,7 +51,7 @@ function enclosingBuildings(features: Feature[]): Local[][] {
   return features.flatMap((f) => {
     const polygon = f.geometry.polygon;
     if (f.kind !== "building" && f.kind !== "landmark") return [];
-    if (!polygon || (f.base ?? 0) > 0.5 || (f.height ?? 0) < ENTRANCE_MIN_HEIGHT) return [];
+    if (!polygon || (f.base ?? GROUND_EL) > aboveGround(0.5) || (f.height ?? 0) < ENTRANCE_MIN_HEIGHT) return [];
     return [polygon];
   });
 }
@@ -102,19 +102,19 @@ export function buildExitSheds(features: Feature[]): { sheds: Feature[]; claims:
       {
         part: "wall-left",
         geometry: { polygon: rect(PIER_SIZE, back - PIER_SIZE, hw, wo) },
-        base: 0,
+        base: GROUND_EL,
         height: WALL_HEIGHT,
       },
       {
         part: "wall-right",
         geometry: { polygon: rect(PIER_SIZE, back - PIER_SIZE, -wo, -hw) },
-        base: 0,
+        base: GROUND_EL,
         height: WALL_HEIGHT,
       },
       {
         part: "wall-back",
         geometry: { polygon: rect(length, back, -wo, wo) },
-        base: 0,
+        base: GROUND_EL,
         height: WALL_HEIGHT,
       },
     ];
@@ -132,7 +132,7 @@ export function buildExitSheds(features: Feature[]): { sheds: Feature[]; claims:
               side * tc + PIER_SIZE / 2,
             ),
           },
-          base: 0,
+          base: GROUND_EL,
           height: ROOF_SOFFIT,
         });
       }
@@ -146,7 +146,7 @@ export function buildExitSheds(features: Feature[]): { sheds: Feature[]; claims:
     parts.push({
       part: "roof",
       geometry: { polygon: roof, polygonTop: insetRing(roof, ROOF_INSET) },
-      base: ROOF_SOFFIT,
+      base: aboveGround(ROOF_SOFFIT),
       height: ROOF_THICKNESS,
     });
     claims.push(roof);

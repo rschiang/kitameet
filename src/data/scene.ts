@@ -35,8 +35,10 @@ import {
 import { deckNodeElevations, deckProfiles, isElevatedTags } from "./structures/elevated.ts";
 import { buildLandmarks, landmarkClaims } from "./structures/landmarks/index.ts";
 import { buildExitSheds } from "./structures/exit-shed.ts";
+import { rebuildPlatforms } from "./structures/platforms.ts";
 import { buildStationComplex } from "./structures/station-complex.ts";
 import {
+  alignHandovers,
   inStackedZone,
   reprofileStackedTracks,
   stackedPlatforms,
@@ -44,12 +46,14 @@ import {
 } from "./structures/stacked-station.ts";
 import { RAMP_GIRDER, VIADUCT_GIRDER, buildViaduct } from "./structures/viaduct.ts";
 import {
+  GROUND_EL,
   LEVELS,
   PARKING_FLOOR_THICKNESS,
   PLATFORM_RISE,
   SLAB_THICKNESS,
   TRACK_BAND_THICKNESS,
   TRACK_BAND_WIDTH,
+  aboveGround,
   type Confidence,
   type Feature,
   type FeatureKind,
@@ -193,16 +197,16 @@ const ROAD_WIDTH: Record<string, number> = {
 const ROAD_WIDTH_DEFAULT = 12;
 
 /** 地面路面的底面高程與厚度（公尺）：薄薄一層鋪面，貼在地塊頂面之上。 */
-const ROAD_BASE = 0.02;
+const ROAD_BASE = aboveGround(0.02);
 const ROAD_THICKNESS = 0.06;
 /** 車行地下道的高程與厚度（公尺）。 */
-const UNDERPASS_BASE = -5.0;
+const UNDERPASS_BASE = aboveGround(-5.0);
 const UNDERPASS_THICKNESS = 0.6;
 /** 匝道落地端的高程（公尺）。 */
-const RAMP_GROUND = 0.1;
+const RAMP_GROUND = aboveGround(0.1);
 /** 人行天橋橋面（淨高 4.6 加梁深 0.8）、車行地下道人行段的高程、寬度與板厚（公尺）。 */
-const FOOT_BRIDGE_BASE = 5.4;
-const FOOT_TUNNEL_BASE = -4.5;
+const FOOT_BRIDGE_BASE = aboveGround(5.4);
+const FOOT_TUNNEL_BASE = aboveGround(-4.5);
 const FOOT_WIDTH = 4;
 const FOOT_THICKNESS = 0.5;
 /** 只取橋隧的人行路線等級；地面人行道網路不建模。 */
@@ -214,19 +218,19 @@ const FOOT_HIGHWAY: Record<string, true> = {
 };
 
 /** 水域：感潮段水面低於兩岸地面約 3.5 公尺，主槽水深約 6 公尺，均為推估。 */
-const WATER_SURFACE = -3.5;
-const CHANNEL_BED = -9.5;
+const WATER_SURFACE = aboveGround(-3.5);
+const CHANNEL_BED = aboveGround(-9.5);
 /** 面積達此值者視為河道，其餘為池塘（平方公尺）。 */
 const CHANNEL_AREA = 50_000;
-const POND_BED = -1.2;
-const POND_SURFACE = -0.2;
-/** 沙洲頂面與厚度（公尺）。 */
+const POND_BED = aboveGround(-1.2);
+const POND_SURFACE = aboveGround(-0.2);
+/** 沙洲頂面相對兩岸地面的高度與沙洲厚度（公尺）。 */
 const SANDBAR_TOP = -2.0;
 const SANDBAR_THICKNESS = 1.5;
 /** 沙洲上無樓層標籤的建物：田間倉庫與小廟，不適用一般樓層數推估。 */
 const SANDBAR_BUILDING_HEIGHT = 2.0;
 const SANDBAR_NOTE =
-  `位於沙洲上，底面自沙洲頂面 ${SANDBAR_TOP} 公尺起算；` +
+  `位於沙洲上，底面自沙洲頂面（低於兩岸地面 ${-SANDBAR_TOP} 公尺）起算；` +
   `無樓層標籤的建物以單層倉庫或小廟推估高度 ${SANDBAR_BUILDING_HEIGHT} 公尺。`;
 /** 公園、綠地與廣場的薄層厚度（公尺）。 */
 const GROUND_FILL_THICKNESS = 0.15;
@@ -485,24 +489,24 @@ function volumeOf(
     }
     case "sand":
       return {
-        base: SANDBAR_TOP - SANDBAR_THICKNESS,
+        base: aboveGround(SANDBAR_TOP - SANDBAR_THICKNESS),
         height: SANDBAR_THICKNESS,
         confidence: "estimated",
         note: "沙洲頂面取低於兩岸地面 2 公尺、厚 1.5 公尺，為推估值。",
       };
     case "green":
     case "plaza":
-      return { base: 0, height: GROUND_FILL_THICKNESS, confidence: "derived" };
+      return { base: GROUND_EL, height: GROUND_FILL_THICKNESS, confidence: "derived" };
     default: {
       const height = buildingHeight(tags);
       const sourced = Number.isFinite(Number(tags.height)) && Number(tags.height) > 0;
       // 雨棚只是一片頂板，不是實心量體：架在柱上，下方為開放空間
       if (tags.building === "roof") {
         const min = Number(tags.min_height);
-        const base = Number.isFinite(min) && min > 0 ? min : Math.max(0, height - ROOF_SLAB);
-        return { base, height: Math.max(ROOF_SLAB, height - base), confidence: "estimated" };
+        const lift = Number.isFinite(min) && min > 0 ? min : Math.max(0, height - ROOF_SLAB);
+        return { base: aboveGround(lift), height: Math.max(ROOF_SLAB, height - lift), confidence: "estimated" };
       }
-      return { base: 0, height, confidence: sourced ? "derived" : "estimated" };
+      return { base: GROUND_EL, height, confidence: sourced ? "derived" : "estimated" };
     }
   }
 }
@@ -753,6 +757,19 @@ let cached: Feature[] | null = null;
  * 其建物輪廓取代比對到的 OSM 建物、道路邊線取代 OSM 道路中心線、
  * 軌道中心線取代 OSM 捷運正線。範圍外與無對應者維持 OSM。
  */
+/**
+ * 判定是否落在疊式站區時取樣的點：折線的內部頂點；只有兩點時取其中點。
+ * 站區縱斷面切出的段落端點恰在影響範圍邊界上，不能據以判定整段在站區內。
+ */
+function zoneProbe(polyline: Local[]): Local[] {
+  if (polyline.length > 2) return polyline.slice(1, -1);
+  if (polyline.length === 2) {
+    const [a, b] = polyline;
+    return [[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]];
+  }
+  return [];
+}
+
 export function buildBaseline(): Feature[] {
   if (cached) return cached;
 
@@ -796,10 +813,10 @@ export function buildBaseline(): Feature[] {
       continue;
     }
     // 公告圖只提供捷運正線的平面；路面一律由 OSM 中心線合併而成。
-    // 疊式車站的站區影響範圍例外：該處的深度由 `stacked-station.ts` 決定，公告圖讓位。
+    // 疊式車站的疊式範圍例外：該處的深度由 `stacked-station.ts` 決定，公告圖讓位。
     if (
       feature.kind === "track-metro" &&
-      !(feature.geometry.polyline ?? []).some(inStackedZone) &&
+      !zoneProbe(feature.geometry.polyline ?? []).some(inStackedZone) &&
       dortsReplacesMetroTrack(feature.geometry.polyline ?? [])
     ) {
       clipped.delete(id);
@@ -831,14 +848,30 @@ export function buildBaseline(): Feature[] {
   };
 
   const dorts = trimDortsTracks(buildDorts(matched.attributes));
-  const features = [...clipped.values()]
-    .filter((feature) => !claimed(feature))
-    .concat(
-      [...mergedRoads, ...viaduct, ...buildStationComplex(), ...stackedPlatforms(), ...dorts]
-        .filter((feature) => !claimed(feature))
-        .concat(buildLandmarks())
-        .flatMap(clipToCoverage),
-    );
+  // OSM 正線的端點漸移到公告圖軌道的端點，交接處不留段差
+  for (const [id, feature] of alignHandovers([...clipped.values()], dorts)) clipped.set(id, feature);
+  // 月台長邊依相鄰軌道重建：須在軌道全數就位（公告圖裁切與交接漸移）之後
+  const tracked = rebuildPlatforms(
+    [...clipped.values()]
+      .filter((feature) => !claimed(feature))
+      .concat(
+        [...mergedRoads, ...viaduct, ...stackedPlatforms(), ...dorts]
+          .filter((feature) => !claimed(feature))
+          .concat(buildLandmarks())
+          .flatMap(clipToCoverage),
+      ),
+  );
+  // 站區分層構造的捷運月台梯組依重建後的月台配置
+  const platformOf = (id: string): Local[] => {
+    const polygon = tracked.find((f) => f.id === id)?.geometry.polygon;
+    if (!polygon) throw new Error(`月台 ${id} 不在場景中`);
+    return polygon;
+  };
+  const features = tracked.concat(
+    buildStationComplex(platformOf)
+      .filter((feature) => !claimed(feature))
+      .flatMap(clipToCoverage),
+  );
 
   // 出地面動線的雨棚：OSM 的雨棚面落在頂棚範圍內者改由雨棚量體呈現，地標不認領
   const { sheds, claims: shedClaims } = buildExitSheds(features);
@@ -857,7 +890,7 @@ export function buildBaseline(): Feature[] {
     level: "G",
     layer: "terrain",
     geometry: { polygon: OVERGROUND_RING },
-    base: -TERRAIN_DEPTH,
+    base: GROUND_EL - TERRAIN_DEPTH,
     height: TERRAIN_DEPTH,
     confidence: "estimated",
     sourceNote: `地面涵蓋範圍的土方量體，厚度 ${TERRAIN_DEPTH} 公尺為呈現用的設定值，非地質資料。`,

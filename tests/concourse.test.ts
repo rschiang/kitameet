@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { featuresFor } from "../src/app/scenario.ts";
-import { STEP_RISE, levelOf, railLevelOf } from "../src/data/levels.ts";
+import { levelOf, railLevelOf } from "../src/data/levels.ts";
 import { baselineById, buildBaseline } from "../src/data/scene.ts";
-import { PLATFORM_RISE, type Feature } from "../src/data/schema.ts";
+import { GROUND_EL, PLATFORM_RISE, type Feature } from "../src/data/schema.ts";
 import {
   advance,
   decompose,
@@ -14,7 +14,7 @@ import {
 import { corridorPolygon } from "../src/geo/offset.ts";
 import type { Local } from "../src/geo/project.ts";
 import { buildFeatureMesh } from "../src/render/builders.ts";
-import { exaggerate } from "../src/render/depth.ts";
+import { sceneY } from "../src/render/depth.ts";
 
 const features = buildBaseline();
 const stationOutline = baselineById("station/box")!.geometry.polygon!;
@@ -32,11 +32,19 @@ const platformStairs = features.filter(
 );
 
 describe("樓層分階", () => {
-  it("站體 B1 至捷運 B1 為 17 階、捷運 B1 至地下街為 23 階", () => {
-    expect(stationFloor - metroFloor).toBeCloseTo(17 * STEP_RISE, 6);
-    expect(metroFloor - mallFloor).toBeCloseTo(23 * STEP_RISE, 6);
-    expect(levelOf("mall-k", "B1").floor).toBe(mallFloor);
-    expect(levelOf("mall-y", "B1").floor).toBe(mallFloor);
+  it("圖面的 B1 高差與實地踏查的階數相符：17 階與 23 階換得同一個級高", () => {
+    const upper = (stationFloor - metroFloor) / 17;
+    const lower = (metroFloor - mallFloor) / 23;
+    // 一般階梯級高 15 至 18 公分；兩段獨立踏查的級高應一致
+    for (const riser of [upper, lower]) {
+      expect(riser).toBeGreaterThan(0.15);
+      expect(riser).toBeLessThan(0.18);
+    }
+    expect(Math.abs(upper - lower)).toBeLessThan(0.002);
+  });
+
+  it("K 區地下街比站前地下街高 0.8 公尺", () => {
+    expect(levelOf("mall-k", "B1").floor - mallFloor).toBeCloseTo(0.8, 6);
   });
 });
 
@@ -83,7 +91,7 @@ describe("階梯與出口", () => {
       const exit = climbs.find((f) => f.name === `出口 M${n}`);
       expect(exit, `M${n}`).toBeDefined();
       expect(exit!.base, `M${n}`).toBe(metroFloor);
-      expect(exit!.baseEnd, `M${n}`).toBeCloseTo(0, 6);
+      expect(exit!.baseEnd, `M${n}`).toBeCloseTo(GROUND_EL, 6);
     }
   });
 
@@ -107,8 +115,8 @@ describe("階梯與出口", () => {
     const stair = platformStairs[0];
     const geometry = buildFeatureMesh(stair)!.geometry;
     geometry.computeBoundingBox();
-    expect(geometry.boundingBox!.min.y).toBeCloseTo(exaggerate(stair.base! - stair.height!), 3);
-    expect(geometry.boundingBox!.max.y).toBeCloseTo(exaggerate(stair.baseEnd!), 3);
+    expect(geometry.boundingBox!.min.y).toBeCloseTo(sceneY(stair.base! - stair.height!), 3);
+    expect(geometry.boundingBox!.max.y).toBeCloseTo(sceneY(stair.baseEnd!), 3);
 
     const position = geometry.getAttribute("position");
     const heights = new Set<string>();
@@ -142,14 +150,14 @@ describe("出入口雨棚", () => {
     expect(roof).toBeDefined();
     const line = stair.geometry.polyline!;
     expect(pointInPolygon(line[line.length - 1], roof!.geometry.polygon!)).toBe(true);
-    expect(roof!.base).toBe(3.6);
+    expect(roof!.base).toBeCloseTo(GROUND_EL + 3.6, 6);
     expect(roof!.geometry.polygonTop).toBeDefined();
   });
 
   it("開在建物內的出入口不設雨棚", () => {
     expect(baselineById("indoor/way/840113720/shed/roof")).toBeUndefined();
     expect(baselineById("indoor/way/1305073200/shed/roof")).toBeUndefined();
-    expect(roofs).toHaveLength(18);
+    expect(roofs).toHaveLength(30);
   });
 
   it("雨棚範圍內的建物面已由雨棚取代", () => {
