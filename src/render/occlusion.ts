@@ -158,7 +158,8 @@ function sampleTarget(feature: Feature, out: number[]): void {
   const height = feature.height ?? 1;
   const { tube, polygon, polyline } = feature.geometry;
   if (tube && tube.length >= 2) {
-    sampleLine(tube, false, () => base, out);
+    const end = feature.baseEnd ?? base;
+    sampleLine(tube, false, (s) => base + (end - base) * s, out);
   } else if (polygon && polygon.length >= 3) {
     sampleLine(polygon, true, () => base + height, out);
     let minX = Infinity;

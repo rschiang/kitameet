@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBaseline, baselineById } from "../src/data/scene.ts";
 import {
-  METRO_LINES,
   STRUCTURES,
   levelOf,
   railLevelOf,
@@ -13,14 +12,69 @@ import {
   deckCentrelines,
   deckProfiles,
 } from "../src/data/structures/elevated.ts";
-import { STACKED_TRACK_IDS } from "../src/data/structures/stacked-station.ts";
-import { nearestOnPolyline, pointInPolygon } from "../src/geo/measure.ts";
+import {
+  MAX_GRADE,
+  METRO_STOPS,
+  MIN_TRACK_SEPARATION,
+  STEEP_GRADE,
+  chainProfiles,
+} from "../src/data/structures/metro-profile.ts";
+import { decompose, nearestOnPolyline, pointInPolygon, polygonAxis } from "../src/geo/measure.ts";
 import { polylineLength } from "../src/geo/offset.ts";
-import { OVERGROUND_RING } from "../src/data/coverage.ts";
-import { GROUND_EL, PARKING_FLOOR_THICKNESS, PLATFORM_RISE, aboveGround } from "../src/data/schema.ts";
+import type { Local } from "../src/geo/project.ts";
+import { OVERGROUND_RING, UNDERGROUND_RING } from "../src/data/coverage.ts";
+import { GROUND_EL, PARKING_FLOOR_THICKNESS, PLATFORM_RISE, aboveGround, type Feature } from "../src/data/schema.ts";
 import { featureColor } from "../src/render/palette.ts";
 
 const features = buildBaseline();
+
+/** 折線上每 `step` 公尺的取樣點、該處的切向與弧長。 */
+function samplesAlong(line: Local[], step: number): { point: Local; tangent: Local; arc: number }[] {
+  const out: { point: Local; tangent: Local; arc: number }[] = [];
+  let walked = 0;
+  let next = 0;
+  for (let i = 1; i < line.length; i++) {
+    const [a, b] = [line[i - 1], line[i]];
+    const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (seg === 0) continue;
+    const tangent: Local = [(b[0] - a[0]) / seg, (b[1] - a[1]) / seg];
+    while (next <= walked + seg) {
+      const t = next - walked;
+      out.push({ point: [a[0] + tangent[0] * t, a[1] + tangent[1] * t], tangent, arc: next });
+      next += step;
+    }
+    walked += seg;
+  }
+  return out;
+}
+
+/** 折線量體在弧長 `s` 處的底面高程。 */
+function elevationAt(feature: Feature, s: number): number {
+  const base = feature.base!;
+  const end = feature.baseEnd ?? base;
+  const length = polylineLength(feature.geometry.polyline!);
+  return length > 0 ? base + ((end - base) * s) / length : base;
+}
+
+/** 點在折線上的投影：距離與弧長。 */
+function projectArc(line: Local[], p: Local): { distance: number; arc: number } {
+  let best = { distance: Infinity, arc: 0 };
+  let walked = 0;
+  for (let i = 1; i < line.length; i++) {
+    const [a, b] = [line[i - 1], line[i]];
+    const [vx, vy] = [b[0] - a[0], b[1] - a[1]];
+    const len = Math.hypot(vx, vy);
+    const t = len === 0 ? 0 : Math.min(1, Math.max(0, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / (len * len)));
+    const distance = Math.hypot(a[0] + vx * t - p[0], a[1] + vy * t - p[1]);
+    if (distance < best.distance) best = { distance, arc: walked + t * len };
+    walked += len;
+  }
+  return best;
+}
+
+const metroTracks = features.filter(
+  (f) => f.kind === "track-metro" && f.line !== undefined && (f.geometry.polyline?.length ?? 0) >= 2,
+);
 
 /** 多邊形最長對角距離，用於驗證月台長度。 */
 function longestSpan(points: [number, number][]): number {
@@ -125,19 +179,33 @@ describe("現況場景", () => {
     }
   });
 
-  it("捷運股道的深度由所屬路線決定，疊式段下層另行覆寫", () => {
-    const lower = ["way/194585053", "way/194585061"];
-    const metro = features.filter((f) => f.kind === "track-metro" && f.line !== undefined);
-    expect(metro.length).toBeGreaterThan(20);
-    for (const track of metro) {
-      // 疊式車站的正線另有縱斷面，見下一則測試
-      if (STACKED_TRACK_IDS.has(track.id.split("#")[0])) continue;
-      const rail = METRO_LINES[track.line as MetroLineId].rail;
-      if (lower.some((id) => track.id.startsWith(id))) {
-        expect(track.base!, track.id).toBeCloseTo(rail - 7.0, 6);
-        continue;
+  it("月台範圍內軌道水平，且與月台等高", () => {
+    const byId = new Map(features.map((f) => [f.id, f]));
+    for (const stop of METRO_STOPS) {
+      const platforms = stop.platforms.map((id) => {
+        const platform = byId.get(id);
+        expect(platform?.geometry.polygon, `${stop.name} ${id}`).toBeDefined();
+        return platform!;
+      });
+      const bases = platforms.map((p) => p.base!);
+      const hit = new Set<number>();
+      const tracks = metroTracks.filter((f) => stop.lines.includes(f.line as MetroLineId));
+      for (const platform of platforms) {
+        const axis = polygonAxis(platform.geometry.polygon!);
+        const [ux, uy] = [Math.cos((axis.bearing * Math.PI) / 180), Math.sin((axis.bearing * Math.PI) / 180)];
+        for (const track of tracks) {
+          for (const { point, tangent, arc } of samplesAlong(track.geometry.polyline!, 1)) {
+            const { along, lateral } = decompose(axis.center, axis.bearing, point);
+            if (Math.abs(along) > axis.length / 2 || Math.abs(lateral) > axis.width / 2 + 4) continue;
+            if (Math.abs(tangent[0] * ux + tangent[1] * uy) < Math.cos((15 * Math.PI) / 180)) continue;
+            const z = elevationAt(track, arc);
+            const match = bases.findIndex((b) => Math.abs(b - z) <= 1e-6);
+            expect(match, `${stop.name} ${track.id} (${point.map((v) => v.toFixed(1))}) EL ${z}`).toBeGreaterThanOrEqual(0);
+            hit.add(bases[match]);
+          }
+        }
       }
-      expect(track.base!, track.id).toBeCloseTo(rail, 6);
+      for (const base of bases) expect(hit.has(base), `${stop.name} 月台 EL ${base} 沒有軌道`).toBe(true);
     }
   });
 
@@ -165,15 +233,72 @@ describe("現況場景", () => {
     }
   });
 
-  it("疊式站區外的正線以不陡於 3.5% 的坡度接回本線軌道面", () => {
-    const slopes = features.filter(
-      (f) => STACKED_TRACK_IDS.has(f.id.replace(/#\d+$/, "")) && f.baseEnd !== undefined,
-    );
+  it("捷運正線的縱坡不超過 3%；西門—北門間松山新店線上行為 3.5%", () => {
+    const slopes = metroTracks.filter((f) => f.baseEnd !== undefined);
     expect(slopes.length).toBeGreaterThan(0);
     for (const f of slopes) {
-      // 縱斷面以 3.5% 設計；公告圖交接的平面漸移會使彎道上的段落略為縮短，容許 0.5%
-      const grade = Math.abs(f.baseEnd! - f.base!) / polylineLength(f.geometry.polyline!);
-      expect(grade, f.id).toBeLessThanOrEqual(0.035 * 1.005);
+      const line = f.geometry.polyline!;
+      const length = polylineLength(line);
+      const grade = Math.abs(f.baseEnd! - f.base!) / length;
+      const middle = samplesAlong(line, length / 2)[1]?.point ?? line[0];
+      const steep = f.line === "g" && middle[0] < -600 && middle[1] > -480 && middle[1] < 90;
+      // 公告圖交接的平面漸移會使彎道上的段落略為縮短，容許 2%
+      expect(grade, f.id).toBeLessThanOrEqual((steep ? STEEP_GRADE : MAX_GRADE) * 1.02);
+    }
+  });
+
+  it("不同路線的捷運正線平面交會處，上下高差不小於潛盾外徑", () => {
+    const boxOf = (line: Local[]) => {
+      const xs = line.map((p) => p[0]);
+      const ys = line.map((p) => p[1]);
+      return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    };
+    const items = metroTracks.map((f) => ({ f, line: f.geometry.polyline!, box: boxOf(f.geometry.polyline!) }));
+    let crossings = 0;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const [a, b] = [items[i], items[j]];
+        if (a.f.line === b.f.line) continue;
+        if (a.box[0] > b.box[2] || b.box[0] > a.box[2] || a.box[1] > b.box[3] || b.box[1] > a.box[3]) continue;
+        let arcA = 0;
+        for (let p = 1; p < a.line.length; p++) {
+          const [p0, p1] = [a.line[p - 1], a.line[p]];
+          const lenA = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+          let arcB = 0;
+          for (let q = 1; q < b.line.length; q++) {
+            const [q0, q1] = [b.line[q - 1], b.line[q]];
+            const lenB = Math.hypot(q1[0] - q0[0], q1[1] - q0[1]);
+            const [rx, ry, sx, sy] = [p1[0] - p0[0], p1[1] - p0[1], q1[0] - q0[0], q1[1] - q0[1]];
+            const denom = rx * sy - ry * sx;
+            if (denom !== 0) {
+              const t = ((q0[0] - p0[0]) * sy - (q0[1] - p0[1]) * sx) / denom;
+              const u = ((q0[0] - p0[0]) * ry - (q0[1] - p0[1]) * rx) / denom;
+              if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+                crossings++;
+                const gap = Math.abs(elevationAt(a.f, arcA + t * lenA) - elevationAt(b.f, arcB + u * lenB));
+                expect(gap, `${a.f.id} × ${b.f.id}`).toBeGreaterThanOrEqual(MIN_TRACK_SEPARATION - 1e-6);
+              }
+            }
+            arcB += lenB;
+          }
+          arcA += lenA;
+        }
+      }
+    }
+    expect(crossings).toBeGreaterThan(10);
+  });
+
+  it("同一路線上下疊式的兩軌，上下間距不小於潛盾外徑", () => {
+    const chains = chainProfiles();
+    for (const line of new Set(chains.map((c) => c.chain.line))) {
+      const [a, b] = chains.filter((c) => c.chain.line === line);
+      for (const { point, arc } of samplesAlong(a.points, 2)) {
+        if (!pointInPolygon(point, UNDERGROUND_RING)) continue;
+        const other = projectArc(b.points, point);
+        if (other.distance > 3) continue;
+        const gap = Math.abs(a.elevationAt(arc) - b.elevationAt(other.arc));
+        expect(gap, `${line} (${point.map((v) => v.toFixed(1))})`).toBeGreaterThanOrEqual(MIN_TRACK_SEPARATION - 1e-6);
+      }
     }
   });
 
@@ -287,7 +412,7 @@ describe("現況場景", () => {
       expect(platform?.base, id).toBeCloseTo(rail, 6);
       expect(platform?.height, id).toBeCloseTo(PLATFORM_RISE, 6);
     }
-    expect(baselineById("way/1228832765")?.base).toBeCloseTo(METRO_LINES.g.rail, 6);
+    expect(baselineById("way/1228832765")?.base).toBeCloseTo(aboveGround(-14.5), 6);
   });
 
   it("華山車站舊站房與臺北轉運站列為一般建物，不是車站量體", () => {

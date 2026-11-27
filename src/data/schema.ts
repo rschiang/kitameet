@@ -96,7 +96,7 @@ export interface Feature {
   height?: number;
   /** 量體底面高程（公尺，EL）。未指定時取所屬樓層樓板。 */
   base?: number;
-  /** 折線量體末端頂點的底面高程；省略時全段與 `base` 同高。僅 `polyline` 有效。 */
+  /** 折線與圓形隧道量體末端的底面高程（隧道為軸心）；省略時全段與 `base` 同高。 */
   baseEnd?: number;
   /** 折線量體的寬度（公尺）；`tube` 量體則為半徑。 */
   width?: number;

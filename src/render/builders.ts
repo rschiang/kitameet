@@ -119,11 +119,18 @@ function loft(
 }
 
 /**
- * 圓形隧道：以軸心折線掃出管狀量體。
- * 深度放大只作用於軸心高程，半徑維持真實值，否則隧道會被壓成扁管。
+ * 圓形隧道：以軸心折線掃出管狀量體。軸心高程自 `axisStart` 依弧長線性內插到 `axisEnd`。
+ * 深度放大逐點作用於軸心高程，半徑維持真實值，否則隧道會被壓成扁管。
  */
-function tube(points: [number, number][], axis: number, radius: number): BufferGeometry {
-  const curve = new CatmullRomCurve3(points.map(([x, y]) => new Vector3(x, axis, -y)));
+function tube(points: Local[], axisStart: number, axisEnd: number, radius: number): BufferGeometry {
+  const total = polylineLength(points);
+  let along = 0;
+  const axis = points.map(([x, y], i) => {
+    if (i > 0) along += Math.hypot(x - points[i - 1][0], y - points[i - 1][1]);
+    const t = total > 0 ? along / total : 0;
+    return new Vector3(x, sceneY(axisStart + (axisEnd - axisStart) * t), -y);
+  });
+  const curve = new CatmullRomCurve3(axis);
   const segments = Math.max(8, points.length - 1);
   const geometry = new TubeGeometry(curve, segments, radius, 12, false);
   geometry.computeVertexNormals();
@@ -242,7 +249,9 @@ export function buildFeatureMesh(feature: Feature, occluderUnit?: number): Mesh 
   // 傾斜量體的底面高程兩端不同，位移基準取較低的一端
   let meshBase = base;
   if (feature.geometry.tube && feature.geometry.tube.length >= 2) {
-    geometry = tube(feature.geometry.tube, base, feature.radius ?? 3);
+    const axisEnd = feature.baseEnd ?? trueBase;
+    geometry = tube(feature.geometry.tube, trueBase, axisEnd, feature.radius ?? 3);
+    meshBase = Math.min(base, sceneY(axisEnd));
   } else if (feature.geometry.polygon && feature.geometry.polygon.length >= 3) {
     const polygon = feature.geometry.polygon;
     const top = feature.geometry.polygonTop;

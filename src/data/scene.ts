@@ -14,6 +14,7 @@ import {
 } from "./overrides.ts";
 import {
   buildDorts,
+  dortsBores,
   dortsReplacesMetroTrack,
   matchDortsBuildings,
   medianDistanceToLines,
@@ -40,10 +41,12 @@ import { buildStationComplex } from "./structures/station-complex.ts";
 import {
   alignHandovers,
   inStackedZone,
-  reprofileStackedTracks,
+  profileLineTracks,
+  reprofileChains,
   stackedPlatforms,
   trimDortsTracks,
-} from "./structures/stacked-station.ts";
+} from "./structures/metro-profile.ts";
+import { boreTubes, fitBoxesToTracks } from "./structures/tunnels.ts";
 import { RAMP_GIRDER, VIADUCT_GIRDER, buildViaduct } from "./structures/viaduct.ts";
 import {
   GROUND_EL,
@@ -781,8 +784,8 @@ export function buildBaseline(): Feature[] {
     if (feature) byId.set(osm.id, feature);
   }
 
-  // 疊式車站的正線切段須在裁切之前：站區與過渡段的判定需要完整幾何
-  reprofileStackedTracks(byId);
+  // 正線鏈依縱斷面切段須在裁切之前：站區與疊式範圍的判定需要完整幾何
+  reprofileChains(byId);
 
   // 涵蓋範圍的裁切須早於公告圖比對：比對依形心判定，裁切會使形心移位，
   // 兩者順序顛倒會讓跨越範圍界線的建物在比對後才變形，與公告圖的房屋面重疊。
@@ -813,7 +816,7 @@ export function buildBaseline(): Feature[] {
       continue;
     }
     // 公告圖只提供捷運正線的平面；路面一律由 OSM 中心線合併而成。
-    // 疊式車站的疊式範圍例外：該處的深度由 `stacked-station.ts` 決定，公告圖讓位。
+    // 疊式範圍例外：公告圖在此只畫一條軌道，上下兩軌由 `metro-profile.ts` 切段的 OSM 正線呈現。
     if (
       feature.kind === "track-metro" &&
       !zoneProbe(feature.geometry.polyline ?? []).some(inStackedZone) &&
@@ -850,16 +853,24 @@ export function buildBaseline(): Feature[] {
   const dorts = trimDortsTracks(buildDorts(matched.attributes));
   // OSM 正線的端點漸移到公告圖軌道的端點，交接處不留段差
   for (const [id, feature] of alignHandovers([...clipped.values()], dorts)) clipped.set(id, feature);
+  // 鏈以外的捷運軌道（OSM 渡線、側線與公告圖軌道）依同路線的鏈取得高程
+  const profiledOsm = profileLineTracks([...clipped.values()]);
+  clipped.clear();
+  for (const feature of profiledOsm) clipped.set(feature.id, feature);
+  const dortsProfiled = profileLineTracks(dorts);
+  // 潛盾圓管與箱涵的高程依所在的正線：須在全部軌道定出高程之後
+  const tracks = [...clipped.values(), ...dortsProfiled].filter((f) => f.kind === "track-metro");
+  const tubes = boreTubes(tracks, dortsBores()).flatMap(clipToCoverage);
+  const fitted = fitBoxesToTracks(dortsProfiled, tracks);
   // 月台長邊依相鄰軌道重建：須在軌道全數就位（公告圖裁切與交接漸移）之後
   const tracked = rebuildPlatforms(
-    [...clipped.values()]
-      .filter((feature) => !claimed(feature))
-      .concat(
-        [...mergedRoads, ...viaduct, ...stackedPlatforms(), ...dorts]
-          .filter((feature) => !claimed(feature))
-          .concat(buildLandmarks())
-          .flatMap(clipToCoverage),
-      ),
+    [...clipped.values()].filter((feature) => !claimed(feature)).concat(
+      [...mergedRoads, ...viaduct, ...stackedPlatforms(), ...fitted]
+        .filter((feature) => !claimed(feature))
+        .concat(buildLandmarks())
+        .flatMap(clipToCoverage),
+      tubes,
+    ),
   );
   // 站區分層構造的捷運月台梯組依重建後的月台配置
   const platformOf = (id: string): Local[] => {

@@ -41,7 +41,10 @@ const LINE_CODES: DortsLineCode[] = ["N", "P", "T", "H", "G"];
  */
 const INDEX_MARGIN = 50;
 
-/** 本範圍應有的圖幅；數量或清單不符即中止，避免靜默產生不完整的場景。 */
+/**
+ * 本範圍納入的固定圖幅；缺少任一幅即中止，避免靜默產生不完整的場景。
+ * 索引另有的新圖幅不會自動納入，只列出警告，須人工確認後再加入此清單。
+ */
 const EXPECTED_SHEETS = [
   "SA01RWH001A", "SA01RWH002A", "SA01RWH003A",
   "SA01RWN005A", "SA01RWN006A", "SA01RWN007B", "SA01RWN008B", "SA01RWN009A", "SA01RWN010A",
@@ -151,16 +154,13 @@ async function fetchIndex(): Promise<SheetIndex[]> {
     });
   }
 
-  const sheets = [...byName.values()].sort((a, b) => (a.name < b.name ? -1 : 1));
-  const got = sheets.map((s) => s.name);
+  const all = [...byName.values()].sort((a, b) => (a.name < b.name ? -1 : 1));
+  const got = all.map((s) => s.name);
   const missing = EXPECTED_SHEETS.filter((n) => !got.includes(n));
+  if (missing.length > 0) throw new Error(`圖幅索引缺少 ${missing.join("、")}`);
   const extra = got.filter((n) => !EXPECTED_SHEETS.includes(n));
-  if (missing.length > 0 || extra.length > 0) {
-    throw new Error(
-      `圖幅清單與預期不符：缺少 ${missing.join("、") || "無"}；多出 ${extra.join("、") || "無"}`,
-    );
-  }
-  return sheets;
+  if (extra.length > 0) console.warn(`圖幅索引另有未納入的圖幅：${extra.join("、")}`);
+  return all.filter((s) => EXPECTED_SHEETS.includes(s.name));
 }
 
 async function cachedPdf(name: string): Promise<Buffer> {

@@ -234,11 +234,21 @@ export function clipToCoverage(feature: Feature): Feature[] {
   if (tube && tube.length >= 2) {
     if (outsideBounds(tube, ring)) return [];
     const parts = splitPolylineByRing(tube, ring).inside;
-    return parts.map((part, n) => ({
-      ...feature,
-      id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
-      geometry: { ...feature.geometry, tube: part },
-    }));
+    const base = feature.base ?? GROUND_EL;
+    const span = feature.baseEnd === undefined ? 0 : feature.baseEnd - base;
+    return parts.map((part, n) => {
+      const piece: Feature = {
+        ...feature,
+        id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
+        geometry: { ...feature.geometry, tube: part },
+      };
+      // 軸心高程與折線相同，依弧長線性內插
+      if (feature.baseEnd !== undefined) {
+        piece.base = base + span * fractionAlong(tube, part[0]);
+        piece.baseEnd = base + span * fractionAlong(tube, part[part.length - 1]);
+      }
+      return piece;
+    });
   }
   return [feature];
 }

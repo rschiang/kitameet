@@ -264,11 +264,12 @@ export function buildStructures(sheets: SheetGeometry[]): BuiltStructures {
   /** 箱形段的取樣中心，供重複箱涵判定。 */
   const boxCentres = new Map<number, Local[]>();
   for (const [lineCode, segments] of segmentsByLine(sheets, "track")) {
-    // 軌道為點劃線，間隔較大
+    // 軌道為點劃線，間隔較大；渡線附近並行兩軌相距僅數公尺，跨越間隙時不得側向橫跳
     const lines = chainSegments(dedupeSegments(segments), {
       gap: 12,
       angleToleranceDeg: 15,
       minLength: 20,
+      maxLateral: 1.0,
     });
     for (const line of lines) {
       tracks.push({ lineCode, line });

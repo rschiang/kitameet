@@ -17,8 +17,6 @@ const A1_TRACKS: Record<string, string> = { 北: "way/1558102739", 南: "way/155
 const TAIL_END = 309;
 /** A1 車站 B3 軌道面高程（公尺，EL）。 */
 const RAIL = -16.775;
-/** 淡水信義線正線：尾軌自其上方通過。 */
-const TAMSUI_TRACKS = ["dorts/T/track/3", "dorts/T/track/5"];
 
 /** 折線的最小曲率半徑（公尺）；直線段略過。 */
 function minRadius(points: Local[]): number {
@@ -100,15 +98,18 @@ describe.each(["proposal-b", "proposal-c"] as const)("%s 的機場捷運尾軌",
   });
 
   it("尾軌維持 A1 車站 B3 軌道面，平面上橫越淡水信義線正線", () => {
+    // 淡水信義線的公告圖軌道：重新擷取或縱斷面切段都會改變編號，故依路線篩選
+    const tamsui = features.filter(
+      (f) => f.kind === "track-metro" && f.line === "r" && f.id.startsWith("dorts/"),
+    );
     for (const side of ["北", "南"]) {
       const tail = byId.get(`${scenario}/a1/tail/${side}`)!;
       const line = tail.geometry.polyline as Local[];
-      for (const id of TAMSUI_TRACKS) {
-        const existing = baselineById(id)!;
+      const crossed = tamsui.filter((existing) => {
         const sides = (existing.geometry.polyline as Local[]).map((p) => sideOfPolyline(line, p));
-        expect(Math.max(...sides), `${side} × ${id} 未橫越`).toBeGreaterThan(0);
-        expect(Math.min(...sides), `${side} × ${id} 未橫越`).toBeLessThan(0);
-      }
+        return Math.max(...sides) > 0 && Math.min(...sides) < 0;
+      });
+      expect(crossed.length, `${side} 橫越的淡水信義線正線`).toBeGreaterThanOrEqual(2);
       expect(tail.base, side).toBeCloseTo(RAIL, 6);
     }
   });

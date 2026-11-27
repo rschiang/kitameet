@@ -80,22 +80,22 @@ const LINE_BY_CODE: Record<DortsLineCode, MetroLineId> = {
 };
 
 /** 寬度達此值者視為車站箱涵，其餘為明挖箱涵（公尺）。 */
-const STATION_WIDTH = 20;
+export const STATION_WIDTH = 20;
 /** 明挖箱涵的淨高（公尺）。 */
-const BOX_HEIGHT = 9.0;
+export const BOX_HEIGHT = 9.0;
 /** 車站箱涵的頂版高程（公尺）。 */
-const STATION_TOP = aboveGround(-5.0);
+export const STATION_TOP = aboveGround(-5.0);
 /** 潛盾段軸心高出軌道面的距離（公尺）。 */
-const BORE_AXIS_RISE = 1.5;
+export const BORE_AXIS_RISE = 1.5;
 /** 箱涵結構底低於軌道面的距離（公尺）。 */
-const BOX_BASE_DROP = 1.5;
+export const BOX_BASE_DROP = 1.5;
 /** 限建線的帶寬（公尺）。 */
 const RESTRICTION_WIDTH = 1.0;
 
 /** 附屬小面繼承 OSM 樓高的門檻：面積須達同一棟最大面的此比例。 */
 const MAIN_FACE_RATIO = 0.4;
 
-const SOURCE = "臺北市捷運工程局兩側禁限建範圍公告圖";
+export const SOURCE = "臺北市捷運工程局兩側禁限建範圍公告圖";
 
 /**
  * 量體的所屬路線：以幾何為準，無命中才回退圖幅代號。
@@ -168,7 +168,7 @@ const DUPLICATE_COVERAGE = 0.9;
  * 跨路線的重複會以兩種顏色、兩種深度畫在同一位置，必須去除；
  * 重疊率不足的同線相鄰圖幅片段則保留，其顏色與深度相同，疊合不可見。
  */
-function dedupePolylines<T>(
+export function dedupePolylines<T>(
   items: T[],
   pointsOf: (item: T) => Local[],
   idOf: (item: T) => string,
@@ -206,6 +206,31 @@ export function dortsStationBoxes(): Local[][] {
   return structures.tunnels.flatMap((t) =>
     t.kind === "box" && t.width >= STATION_WIDTH ? [t.polygon] : [],
   );
+}
+
+/**
+ * 包含 `point` 的車站箱涵平面；沒有即擲例外。數個箱涵都包含時取面積最小者：
+ * 淡水線臺北車站—雙連的明挖箱涵寬度也達車站箱涵的門檻，會把站體箱涵整個包住。
+ */
+export function dortsStationBoxAt(point: Local): Local[] {
+  const boxes = dortsStationBoxes().filter((polygon) => pointInPolygon(point, polygon));
+  if (boxes.length === 0) throw new Error(`公告圖沒有涵蓋 ${point} 的車站箱涵`);
+  return boxes.reduce((a, b) => (Math.abs(polygonArea(b)) < Math.abs(polygonArea(a)) ? b : a));
+}
+
+let trackEnds: { line: MetroLineId; point: Local }[] | null = null;
+
+/** 公告圖軌道中心線的兩端與所屬路線；正線鏈在此切段，才不會有一段同時由 OSM 與公告圖呈現。 */
+export function dortsTrackEnds(): { line: MetroLineId; point: Local }[] {
+  trackEnds ??= dedupePolylines(
+    structures.tracks,
+    (t) => t.line,
+    (t) => t.id,
+  ).flatMap((track) => {
+    const line = lineOf(track.lineCode, track.line).id;
+    return [track.line[0], track.line[track.line.length - 1]].map((point) => ({ line, point }));
+  });
+  return trackEnds;
 }
 
 /** 以格網索引點集合，供最近鄰與包含判定。 */
@@ -373,13 +398,6 @@ function nearestTrackDistance(point: Local): number {
 
 const DEFAULT_HEIGHT = DEFAULT_BUILDING_LEVELS * BUILDING_LEVEL_HEIGHT;
 
-/** 公告圖軌道中心線的原始折線（未經疊式站區裁切）；查無此 id 即擲例外。 */
-export function dortsTrackLine(id: string): Local[] {
-  const track = structures.tracks.find((t) => t.id === id);
-  if (!track) throw new Error(`公告圖沒有軌道 ${id}`);
-  return track.line;
-}
-
 /** 潛盾端部削切：每次削去的長度、檢查的端部長度（公尺）與次數上限。 */
 const BORE_TRIM_STEP = 0.5;
 const BORE_TRIM_PROBE = 6;
@@ -436,13 +454,24 @@ function trimBoreAtStations(line: Local[], radius: number, boxes: Local[][]): Lo
   return to - from < 1 ? [] : slicePolyline(line, from, to);
 }
 
-/**
- * 公告圖的量體清單。`attributes` 由場景提供，
- * 以重疊的 OSM 建物補上高度與名稱；沒有對應者取預設樓層數。
- */
-export function buildDorts(attributes?: Map<number, BuildingAttributes>): Feature[] {
-  const features: Feature[] = [];
+/** 公告圖的潛盾範圍：去重、判定路線並削去伸進車站箱涵的端部後的軸線。 */
+export interface DortsBore {
+  id: string;
+  line: MetroLineId;
+  label: string;
+  structure: StructureId;
+  axis: Local[];
+  radius: number;
+}
 
+let boreCache: DortsBore[] | null = null;
+
+/**
+ * 公告圖的潛盾範圍。高程不在此決定：圓管由 `structures/tunnels.ts` 沿所在的正線產生，
+ * 本清單只提供平面範圍與管徑。
+ */
+export function dortsBores(): DortsBore[] {
+  if (boreCache) return boreCache;
   const stationBoxes = structures.tunnels.flatMap((t) =>
     t.kind === "box" && t.width >= STATION_WIDTH
       ? [{ line: lineOf(t.lineCode, t.polygon).id, polygon: t.polygon }]
@@ -453,32 +482,27 @@ export function buildDorts(attributes?: Map<number, BuildingAttributes>): Featur
     (t) => t.line,
     (t) => t.id,
   );
-  for (const tunnel of bores) {
+  boreCache = bores.flatMap((tunnel) => {
     const line = lineOf(tunnel.lineCode, tunnel.line);
-    const tube = trimBoreAtStations(
+    const axis = trimBoreAtStations(
       tunnel.line,
       tunnel.radius,
       stationBoxes.flatMap((box) => (box.line === line.id ? [box.polygon] : [])),
     );
-    if (tube.length < 2) continue;
-    const base = line.rail + BORE_AXIS_RISE;
-    features.push({
-      id: tunnel.id,
-      kind: "tunnel",
-      name: `捷運${line.label}潛盾隧道`,
-      level: levelLabelFor(base),
-      structure: line.structure,
-      line: line.id,
-      layer: "metro",
-      geometry: { tube },
-      base,
-      height: tunnel.radius * 2,
-      radius: tunnel.radius,
-      confidence: "estimated",
-      sourceNote: `${SOURCE}；深度依${line.label}軌道面 EL ${line.rail} 公尺推估，端部止於車站箱涵外牆。`,
-      status: "existing",
-    });
-  }
+    if (axis.length < 2) return [];
+    return [{ id: tunnel.id, line: line.id, label: line.label, structure: line.structure, axis, radius: tunnel.radius }];
+  });
+  return boreCache;
+}
+
+/**
+ * 公告圖的量體清單。`attributes` 由場景提供，
+ * 以重疊的 OSM 建物補上高度與名稱；沒有對應者取預設樓層數。
+ * 潛盾圓管見 {@link dortsBores}；箱涵的高程在此先依路線軌道面給出，
+ * 場景再以 `fitBoxesToTracks` 依箱涵內的正線改寫。
+ */
+export function buildDorts(attributes?: Map<number, BuildingAttributes>): Feature[] {
+  const features: Feature[] = [];
 
   for (const tunnel of structures.tunnels) {
     if (tunnel.kind !== "box") continue;

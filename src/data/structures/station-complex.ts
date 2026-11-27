@@ -7,8 +7,9 @@
  * 平面一律由 OSM 輪廓推算，不新增座標常數；
  * 深度一律取 `levels.ts` 中該構造物自己的樓層表。
  */
-import { pointInPolygon, polygonCentroid } from "../../geo/measure.ts";
-import { dortsStationBoxes } from "../dorts.ts";
+import { clipPolygonToRing } from "../../geo/clip.ts";
+import { advance, polygonArea, polygonAxis, polygonCentroid } from "../../geo/measure.ts";
+import { dortsStationBoxAt } from "../dorts.ts";
 import type { Local } from "../../geo/project.ts";
 import undergroundJson from "../osm/underground.json";
 import surfaceJson from "../osm/surface.json";
@@ -202,31 +203,59 @@ function metroBoxes(): MetroBoxes {
 
 /** 含指定 OSM 月台形心的公告圖車站箱涵；找不到即失敗，不以推算矩形代替。 */
 function boxContaining(platformId: string): Local[] {
-  const centre = polygonCentroid(outline(platformId));
-  const box = dortsStationBoxes().find((polygon) => pointInPolygon(centre, polygon));
-  if (!box) throw new Error(`找不到含 OSM 月台 ${platformId} 的公告圖車站箱涵`);
-  return box;
+  return dortsStationBoxAt(polygonCentroid(outline(platformId)));
 }
 
+/**
+ * 箱涵中位於月台兩端之間的部分；`openEast` 時東端不限。月台取 OSM 原始輪廓，
+ * 與 `metro-profile.ts` 界定站區水平段的範圍一致：軌道在此範圍外才離開月台層。
+ */
+function stationPlan(box: Local[], platformId: string, openEast: boolean): Local[] {
+  const axis = polygonAxis(outline(platformId));
+  // 主軸方位朝東，月台西端以東即主軸正向；以夠寬的矩形表示
+  const reach = 5000;
+  const length = openEast ? reach : axis.length;
+  const [left, right] = [axis.bearing + 90, axis.bearing - 90];
+  const strip: Local[] = [
+    advance(axis.west, right, reach),
+    advance(advance(axis.west, right, reach), axis.bearing, length),
+    advance(advance(axis.west, left, reach), axis.bearing, length),
+    advance(axis.west, left, reach),
+  ];
+  if (polygonArea(strip) < 0) strip.reverse();
+  const parts = clipPolygonToRing(box, strip);
+  if (parts.length !== 1) throw new Error(`${platformId} 的站體平面裁切後應為一塊，實為 ${parts.length} 塊`);
+  return parts[0];
+}
+
+/**
+ * 捷運站體的分層量體。板南線 B2、B3 只到月台西端：西端以外是站前地下街下方的疊式段
+ * 轉為左右並列處，下層軌道在此爬升到月台層。淡水信義線 B3、B4 只在月台兩端之間：
+ * 月台所在的公告圖箱涵是淡水線臺北車站—雙連的明挖箱涵，正線出站後在其中爬升到 B2。
+ */
 function metroFeatures(boxes: MetroBoxes): Feature[] {
   const features: Feature[] = [];
+  const bannan = stationPlan(boxes.bannan, BANNAN_PLATFORM, true);
+  const tamsui = stationPlan(boxes.tamsui, TAMSUI_PLATFORM, false);
 
-  for (const level of ["B1", "B2", "B3"] as const) {
+  features.push(slab("metro/bannan/slab/B1", "捷運板南線站體 B1 樓板", "metro", METRO, "B1", boxes.bannan, "bl"));
+  for (const level of ["B2", "B3"] as const) {
     features.push(
-      slab(`metro/bannan/slab/${level}`, `捷運板南線站體 ${level} 樓板`, "metro", METRO, level, boxes.bannan, "bl"),
+      slab(`metro/bannan/slab/${level}`, `捷運板南線站體 ${level} 樓板`, "metro", METRO, level, bannan, "bl"),
     );
   }
   features.push(
-    room("metro/bannan/concourse/B2", "捷運板南線大廳層（B2）", "station", "metro", METRO, "B2", boxes.bannan, "bl"),
+    room("metro/bannan/concourse/B2", "捷運板南線大廳層（B2）", "station", "metro", METRO, "B2", bannan, "bl"),
   );
 
-  for (const level of ["B1", "B3", "B4"] as const) {
+  features.push(slab("metro/tamsui/slab/B1", "捷運淡水信義線站體 B1 樓板", "metro", METRO_R, "B1", boxes.tamsui, "r"));
+  for (const level of ["B3", "B4"] as const) {
     features.push(
-      slab(`metro/tamsui/slab/${level}`, `捷運淡水信義線站體 ${level} 樓板`, "metro", METRO_R, level, boxes.tamsui, "r"),
+      slab(`metro/tamsui/slab/${level}`, `捷運淡水信義線站體 ${level} 樓板`, "metro", METRO_R, level, tamsui, "r"),
     );
   }
   features.push(
-    room("metro/tamsui/concourse/B3", "捷運淡水信義線大廳層（B3）", "station", "metro", METRO_R, "B3", boxes.tamsui, "r"),
+    room("metro/tamsui/concourse/B3", "捷運淡水信義線大廳層（B3）", "station", "metro", METRO_R, "B3", tamsui, "r"),
   );
 
   return features;

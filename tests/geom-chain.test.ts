@@ -44,6 +44,24 @@ describe("線段串接", () => {
     ).toHaveLength(1);
   });
 
+  it("maxLateral 擋下跨越間隙時側向橫跳到並行的另一條線", () => {
+    // 沿 y=0 的點劃線（每劃 4 公尺、間隙 2 公尺），旁邊 10 公尺外另有一劃
+    const segments: [Local, Local][] = [];
+    for (let x = 0; x + 4 <= 30; x += 6) segments.push([[x, 0], [x + 4, 0]]);
+    segments.push([[32, 10], [36, 10]]);
+    const options = { gap: 12, angleToleranceDeg: 15, minLength: 1 };
+
+    const limited = chainSegments(segments, { ...options, maxLateral: 1 });
+    for (const line of limited) {
+      for (let i = 1; i < line.length; i++) {
+        expect(Math.abs(line[i][1] - line[i - 1][1])).toBeLessThanOrEqual(1);
+      }
+    }
+
+    const joined = chainSegments(segments, options);
+    expect(joined.some((line) => line.some(([, y]) => y === 0) && line.some(([, y]) => y === 10))).toBe(true);
+  });
+
   it("無序端點對去重", () => {
     const segments: [Local, Local][] = [
       [A, B],

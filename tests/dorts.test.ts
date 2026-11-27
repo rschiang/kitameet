@@ -3,13 +3,13 @@ import { splitRuns, type Measured } from "../scripts/dorts/structures.ts";
 import { buildBaseline } from "../src/data/scene.ts";
 import {
   buildDorts,
+  dortsBores,
   dortsBuildingPolygons,
   DEMOLISHED_FACES,
   DEMOLISHED_TOLERANCE,
 } from "../src/data/dorts.ts";
 import basemapJson from "../src/data/dorts/basemap.json";
-import { METRO_LINES, type MetroLineId } from "../src/data/levels.ts";
-import { aboveGround } from "../src/data/schema.ts";
+import { aboveGround, type Feature } from "../src/data/schema.ts";
 import { nearestOnPolyline, pointInPolygon, polygonArea, polygonCentroid } from "../src/geo/measure.ts";
 import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "../src/data/overrides.ts";
 import { polylineLength } from "../src/geo/offset.ts";
@@ -49,29 +49,25 @@ describe("潛盾與明挖的分段", () => {
 describe("公告圖量體", () => {
   const features = buildDorts();
 
-  it("潛盾隧道的半徑與軸心高程合於所屬路線", () => {
-    const bores = features.filter(
-      (f) => f.id.startsWith("dorts/N/bore/") || f.id.startsWith("dorts/P/bore/"),
-    );
+  it("潛盾範圍的半徑合於公告圖的兩種畫法，且判定出所屬路線", () => {
+    const bores = dortsBores();
     expect(bores.length).toBeGreaterThan(0);
     for (const bore of bores) {
-      expect(bore.geometry.tube!.length, bore.id).toBeGreaterThan(1);
+      expect(bore.axis.length, bore.id).toBeGreaterThan(1);
       // 公告圖的單孔淨寬隨圖幅年代分成 5.2 與 5.8 公尺兩種畫法
-      expect(bore.radius!, bore.id).toBeGreaterThan(2.5);
-      expect(bore.radius!, bore.id).toBeLessThan(3.5);
-      // 圖幅代號不等於路線：N、P 圖幅也畫了鄰線的隧道，深度須跟著幾何判定的路線
+      expect(bore.radius, bore.id).toBeGreaterThan(2.5);
+      expect(bore.radius, bore.id).toBeLessThan(3.5);
+      // 圖幅代號不等於路線：N、P 圖幅也畫了鄰線的隧道
       expect(bore.line, bore.id).toBeDefined();
-      expect(bore.base!, bore.id).toBeCloseTo(
-        METRO_LINES[bore.line as MetroLineId].rail + 1.5,
-        6,
-      );
     }
-    // 長度 100 公尺以上的主要區間，淨寬量測最穩定
-    const long = bores.filter((f) => polylineLength(f.geometry.tube!) >= 100);
+    // 長度 100 公尺以上的主要區間，淨寬量測最穩定；T 圖幅的松山線潛盾另有較大的畫法
+    const long = bores.filter(
+      (b) => (b.id.startsWith("dorts/N/bore/") || b.id.startsWith("dorts/P/bore/")) && polylineLength(b.axis) >= 100,
+    );
     expect(long.length).toBeGreaterThan(3);
     for (const bore of long) {
-      expect(bore.radius!, bore.id).toBeGreaterThan(2.55);
-      expect(bore.radius!, bore.id).toBeLessThan(3.0);
+      expect(bore.radius, bore.id).toBeGreaterThan(2.55);
+      expect(bore.radius, bore.id).toBeLessThan(3.0);
     }
   });
 
@@ -84,16 +80,44 @@ describe("公告圖量體", () => {
     }
   });
 
-  it("量體的路線以整條路線比對，不被橫跨全線的長 way 搶走", () => {
-    // 中華路下的箱涵屬小南門線：松山新店線在 OSM 被切成多條短 way，
+  it("箱涵的路線以整條路線比對，底板依箱涵內同路線正線最低的軌道面", () => {
+    const scene = buildBaseline();
+    const boxAt = (point: Local): Feature => {
+      const box = scene.find((f) => /^dorts\/[A-Z]+\/box\//.test(f.id) && pointInPolygon(point, f.geometry.polygon!));
+      expect(box, `${point}`).toBeDefined();
+      return box!;
+    };
+    // 中華路下的箱涵屬松山新店線：該線在 OSM 被切成多條短 way，
     // 逐條取中位數會讓貫穿全線的板南線 way/198199171 勝出
-    const box = features.find((f) => f.id === "dorts/N/box/1");
-    expect(box?.line).toBe("g");
-    expect(box!.base!).toBeCloseTo(METRO_LINES.g.rail - 1.5, 6);
-    expect(features.find((f) => f.id === "dorts/N/box/7")?.line).toBe("o");
+    const zhonghua = boxAt([-870, -600]);
+    expect(zhonghua.line).toBe("g");
+    const xinsheng = boxAt([1580, -640]);
+    expect(xinsheng.line).toBe("o");
+    for (const box of [zhonghua, xinsheng]) {
+      let min = Infinity;
+      for (const track of scene) {
+        if (track.kind !== "track-metro" || track.line !== box.line || !track.geometry.polyline) continue;
+        const line = track.geometry.polyline;
+        const length = polylineLength(line);
+        let walked = 0;
+        for (let i = 1; i < line.length; i++) {
+          const [a, b] = [line[i - 1], line[i]];
+          const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          for (let t = 0; t <= seg; t += 0.5) {
+            const p: Local = [a[0] + ((b[0] - a[0]) * t) / seg, a[1] + ((b[1] - a[1]) * t) / seg];
+            if (!pointInPolygon(p, box.geometry.polygon!)) continue;
+            const end = track.baseEnd ?? track.base!;
+            min = Math.min(min, track.base! + ((end - track.base!) * (walked + t)) / length);
+          }
+          walked += seg;
+        }
+      }
+      // 取樣間距 0.5 公尺：坡段上的最低點與箱涵擬合時的取樣位置不同，差距在 3% × 0.5 公尺內
+      expect(Math.abs(box.base! - (min - 1.5)), box.id).toBeLessThan(0.02);
+    }
   });
 
-  it("潛盾隧道與軌道中心線沒有重複畫法", () => {
+  it("潛盾範圍與軌道中心線沒有重複畫法", () => {
     const duplicated = (items: Local[][]) =>
       items.some((a) =>
         items.some((b) => {
@@ -102,7 +126,7 @@ describe("公告圖量體", () => {
           return near / a.length >= 0.9;
         }),
       );
-    const bores = features.flatMap((f) => (f.geometry.tube ? [f.geometry.tube] : []));
+    const bores = dortsBores().map((b) => b.axis);
     const tracks = features.flatMap((f) =>
       f.kind === "track-metro" && f.geometry.polyline ? [f.geometry.polyline] : [],
     );

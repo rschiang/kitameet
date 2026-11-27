@@ -7,7 +7,6 @@
  * 僅需修改本檔與 `levels.ts` 的 `STRUCTURES`，渲染端不受影響。
  */
 import {
-  METRO_LINES,
   STACKED_STATION_NOTE,
   STRUCTURES,
   levelOf,
@@ -59,14 +58,6 @@ function assign(ids: string[], override: FeatureOverride): Record<string, Featur
 
 const DORTS = "臺北市捷運工程局《捷運工程大區域開挖施工實務》";
 const METRO_MAP = "捷運台北車站官方車站配置圖";
-
-/**
- * 上下疊式潛盾的兩管間距（公尺）：公告圖潛盾外半徑 2.97 公尺 × 2 加淨距約 1 公尺。
- * 取得松山線 CG02 標的設計斷面後改此一處即可。
- */
-const STACKED_SPACING = 7.0;
-/** 疊式段下層的軌道面高程（公尺）。 */
-export const STACKED_LOWER_RAIL = METRO_LINES.g.rail - STACKED_SPACING;
 
 /** 華山引道兩端的軌道面高程（公尺）：東端露出地面、西端接臺鐵站體 B2 月台層。 */
 const HUASHAN_SURFACE = aboveGround(-1.0);
@@ -249,7 +240,7 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   },
 
   // ── 疊式月台車站 ──────────────────────────────────────
-  // 西門站與中正紀念堂站為地下三層的跨月台轉乘站，正線深度見 `structures/stacked-station.ts`。
+  // 西門站與中正紀念堂站為地下三層的跨月台轉乘站，正線深度見 `structures/metro-profile.ts`。
   "relation/16748280": {
     exclude: true,
     sourceNote:
@@ -311,9 +302,7 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   },
 
   // ── 捷運正線 ──────────────────────────────────────────
-  // 深度一律由 `levels.ts` 的 METRO_LINES 依 OSM `ref` 給出；以下只列線上無法推得者。
-  // 松山新店線北門—西門段為上下疊式潛盾；下層自西門站北端降至下管高程，
-  // 西門站區內的深度由 `structures/stacked-station.ts` 的縱斷面決定。
+  // 正線深度由 `structures/metro-profile.ts` 依各站月台層決定；以下只列月台層與 OSM 不符者。
   ...assign(["way/194585045", "way/194585056"], {
     name: "捷運北門站月台",
     layer: "platform",
@@ -406,10 +395,16 @@ export const OVERRIDES: Record<string, FeatureOverride> = {
   "way/1228832765": {
     name: "捷運小南門站月台",
     layer: "platform",
-    level: "B3",
-    structure: "metro-line-g",
+    level: "B2",
     confidence: "estimated",
-    sourceNote: "OSM 無 level 標籤，擷取階段判為地面；深度取松山新店線軌道面所在層。",
+    sourceNote: "臺北捷運〈小南門站車站剖面相關位置圖〉G11-SP(25.10)：大廳層下方即月台層，島式月台；OSM 無 level 標籤。",
+  },
+  "way/877532223": {
+    name: "捷運中山站松山新店線月台",
+    layer: "platform",
+    level: "B4",
+    confidence: "estimated",
+    sourceNote: "臺北捷運〈中山站車站剖面相關位置圖〉G14-SP(26.05)：松山新店線月台位於 B4，B3 為轉乘通道層；OSM 標為地下三層。",
   },
 };
 

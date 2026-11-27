@@ -30,12 +30,14 @@ function cellKey(x: number, y: number, cell: number): string {
  * 貪婪串接打散的線段為折線。
  * `gap` 為可接受的端點間距（公尺），`angleToleranceDeg` 為與目前末段的無向方向差上限，
  * 總長小於 `minLength` 的結果一律捨棄。
+ * `maxLateral` 為跨越間隙時偏離目前行進方向的側向距離上限（公尺），預設不限；
+ * 軌道中心線須設限，否則渡線附近會橫跳到並行的另一軌。
  */
 export function chainSegments(
   segments: [Local, Local][],
-  options: { gap: number; angleToleranceDeg: number; minLength: number },
+  options: { gap: number; angleToleranceDeg: number; minLength: number; maxLateral?: number },
 ): Local[][] {
-  const { gap, angleToleranceDeg, minLength } = options;
+  const { gap, angleToleranceDeg, minLength, maxLateral = Infinity } = options;
   const segs = segments.filter(
     ([a, b]) => Math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-9,
   );
@@ -80,6 +82,9 @@ export function chainSegments(
             // 跨越間隙時不得往回走，否則會沿原路折返
             const heading = Math.hypot(dx, dy) || 1;
             if ((near[0] - tail[0]) * dx + (near[1] - tail[1]) * dy < -0.1 * dist * heading) continue;
+            // 跨越間隙時不得側向橫跳到並行的另一條線
+            const lateral = Math.abs((near[0] - tail[0]) * dy - (near[1] - tail[1]) * dx) / heading;
+            if (lateral > maxLateral) continue;
             const far = segs[ref.seg][ref.end === 0 ? 1 : 0];
             const diff = angleDiffDeg(dx, dy, far[0] - near[0], far[1] - near[1]);
             if (diff > angleToleranceDeg) continue;

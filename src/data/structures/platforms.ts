@@ -10,6 +10,7 @@ import { advance, decompose, polygonArea, polygonAxis } from "../../geo/measure.
 import type { Local } from "../../geo/project.ts";
 import type { MetroLineId } from "../levels.ts";
 import type { Feature } from "../schema.ts";
+import { clipToCoverage } from "../coverage.ts";
 
 const TRA_EDGE = 1.575; // 《臺鐵資料》季刊 2020：軌道中心至月台邊緣 1,575 公厘
 const HSR_EDGE = 3.38 / 2 + 0.05; // 700T 車寬之半加 0.05 公尺
@@ -39,7 +40,9 @@ const LENGTH_NOTE = `長度取 6 節列車長 ${METRO_PLATFORM_LENGTH} 公尺。
 
 /**
  * 重建的月台與其相鄰軌道的來源：
- * `rail` 為臺鐵與高鐵股道、`airport` 為 OSM 的機場捷運正線、`metro` 為該路線的公告圖軌道中心線。
+ * `rail` 為臺鐵與高鐵股道、`airport` 為 OSM 的機場捷運正線、`metro` 為該路線的捷運軌道
+ * （公告圖軌道中心線，以及縱斷面保留的 OSM 正線）。
+ * 捷運月台與軌道同高，OSM 月台與軌道的平面差距會使兩者相交，故停靠站的月台一律重建。
  */
 export type PlatformRebuild =
   | { id: string; system: "rail" | "airport" }
@@ -57,6 +60,14 @@ export const PLATFORM_REBUILDS: PlatformRebuild[] = [
   { id: "way/741259904", system: "metro", line: "bl" },
   { id: "way/741259905", system: "metro", line: "r" },
   { id: "way/877532223", system: "metro", line: "g" },
+  { id: "way/877532236", system: "metro", line: "bl" },
+  { id: "way/772602546", system: "metro", line: "bl" },
+  { id: "way/772602545", system: "metro", line: "o" },
+  { id: "way/1054526760", system: "metro", line: "r" },
+  { id: "way/194618328", system: "metro", line: "r" },
+  { id: "way/1228832765", system: "metro", line: "g" },
+  { id: "way/194585056", system: "metro", line: "g" },
+  { id: "way/861206851", system: "metro", line: "g" },
 ];
 
 /** 月台的相鄰軌道候選，各附月台邊緣距軌道中心的距離（公尺）。 */
@@ -77,9 +88,7 @@ export function platformTracks(
           ? [{ feature, edge: AIRPORT_EDGE }]
           : [];
       case "metro":
-        return feature.kind === "track-metro" && feature.line === spec.line && feature.id.startsWith("dorts/")
-          ? [{ feature, edge: METRO_EDGE }]
-          : [];
+        return feature.kind === "track-metro" && feature.line === spec.line ? [{ feature, edge: METRO_EDGE }] : [];
     }
   });
 }
@@ -181,13 +190,18 @@ function rebuild(platform: Feature, spec: PlatformRebuild, features: Feature[]):
   };
 }
 
-/** 以 {@link PLATFORM_REBUILDS} 重建月台多邊形；表列月台不在 `features` 即擲例外。 */
+/**
+ * 以 {@link PLATFORM_REBUILDS} 重建月台多邊形；表列月台不在 `features` 即擲例外。
+ * 捷運月台取固定長度，位於涵蓋範圍邊緣者（雙連）重建後會伸出界外，故重建後再裁切一次。
+ */
 export function rebuildPlatforms(features: Feature[]): Feature[] {
   const rebuilt = new Map<string, Feature>();
   for (const spec of PLATFORM_REBUILDS) {
     const platform = features.find((f) => f.id === spec.id);
     if (!platform?.geometry.polygon) throw new Error(`月台 ${spec.id} 不在場景中`);
-    rebuilt.set(spec.id, rebuild(platform, spec, features));
+    const pieces = clipToCoverage(rebuild(platform, spec, features));
+    if (pieces.length !== 1) throw new Error(`月台 ${spec.id} 重建後裁切成 ${pieces.length} 塊`);
+    rebuilt.set(spec.id, pieces[0]);
   }
   return features.map((f) => rebuilt.get(f.id) ?? f);
 }
