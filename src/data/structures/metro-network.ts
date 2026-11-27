@@ -442,7 +442,7 @@ function orient(points: Local[], ends: MetroChain["ends"]): Local[] {
 }
 
 /** 在縱斷面轉折點補上頂點，回傳頂點與各點高程。 */
-function profiled(points: Local[], controls: [number, number][]): { points: Local[]; elevations: number[] } {
+export function profiled(points: Local[], controls: [number, number][]): { points: Local[]; elevations: number[] } {
   const elevationOf = profileOf(controls);
   let cumulative = arcLengths(points);
   const out = [...points];

@@ -540,7 +540,7 @@ describe("現況場景", () => {
     const platforms = features.filter((f) => f.kind === "platform");
     expect(platforms.map((f) => f.id)).toContain("way/741259905");
     for (const f of platforms) {
-      expect(featureColor(f.kind, f.layer, f.status, f.line), f.id).toBe("#cfc8bb");
+      expect(featureColor(f.kind, f.layer, f.line), f.id).toBe("#cfc8bb");
     }
   });
 });

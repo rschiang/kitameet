@@ -1,6 +1,6 @@
 /**
  * 方案切換：現況回傳基準量體，方案 B、C 另外標記拆除、新建與歸還臺鐵的量體。
- * 著色只看 {@link Feature.status} 是否為拆除與 {@link Feature.line}，渲染端不需認得方案。
+ * 拆除的量體於呈現前即濾除（{@link displayedFeatures}）；著色只看 {@link Feature.line}，渲染端不需認得方案。
  */
 import { buildBaseline } from "../data/scene.ts";
 import type { Feature } from "../data/schema.ts";
@@ -187,4 +187,9 @@ export function featuresFor(scenario: ScenarioId): Feature[] {
   });
 
   return [...adjusted, ...proposal.added];
+}
+
+/** 畫面呈現的量體：方案模式不呈現拆除的量體。 */
+export function displayedFeatures(scenario: ScenarioId): Feature[] {
+  return featuresFor(scenario).filter((f) => f.status !== "removed");
 }

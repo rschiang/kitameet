@@ -3,7 +3,7 @@ import { DATA_PROVENANCE } from "./data/scene.ts";
 import { Viewer } from "./render/scene.ts";
 import { isVisible } from "./app/layers.ts";
 import type { LayerGroupId } from "./app/layerGroups.ts";
-import { featuresFor } from "./app/scenario.ts";
+import { displayedFeatures } from "./app/scenario.ts";
 import {
   createBrandCard,
   createInfoContent,
@@ -32,7 +32,7 @@ function syncVisibility(): void {
 }
 
 function rebuildScene(): void {
-  viewer.setFeatures(featuresFor(state.scenario));
+  viewer.setFeatures(displayedFeatures(state.scenario));
   syncVisibility();
 }
 

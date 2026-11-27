@@ -360,15 +360,9 @@ export function buildFeatureMesh(feature: Feature, occluderUnit?: number): Mesh 
   const room = feature.kind === "station" && !shell;
   const terrain = feature.kind === "terrain";
   const fill = FILL_OPACITY[feature.kind];
-  const opacity =
-    status === "removed" ? 0.25 : shell ? 0.4 : slab ? 0.15 : room ? 0.3 : (fill ?? 1);
+  const opacity = shell ? 0.4 : slab ? 0.15 : room ? 0.3 : (fill ?? 1);
   const material = createPaperMaterial({
-    color: featureColor(
-      feature.kind,
-      feature.layer,
-      status === "existing" ? undefined : status,
-      feature.line,
-    ),
+    color: featureColor(feature.kind, feature.layer, feature.line),
     opacity,
     side: shell ? BackSide : DoubleSide,
     // 樓板、外殼與地塊一律退讓給貼在它上面的量體

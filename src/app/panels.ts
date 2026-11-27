@@ -2,7 +2,7 @@
  * 介面元件：品牌卡、分段切換，以及工具列各彈出面板的內容。
  * 全部以原生 DOM 建立，不引入 UI 框架。
  */
-import { KIND_COLORS, LAYER_COLORS, LINE_COLORS, REMOVED_COLOR } from "../render/palette.ts";
+import { KIND_COLORS, LAYER_COLORS, LINE_COLORS } from "../render/palette.ts";
 import { LAYER_GROUPS, LAYER_GROUP_IDS, type LayerGroupId } from "./layerGroups.ts";
 import { defaultState, type AppState, type ScenarioId } from "./state.ts";
 import type { ViewMode } from "./viewMode.ts";
@@ -177,12 +177,6 @@ const LEGEND_SECTIONS: { title: string; rows: { color: string; label: string }[]
       { color: KIND_COLORS.escalator!, label: "電扶梯" },
       { color: KIND_COLORS.elevator!, label: "電梯" },
       { color: KIND_COLORS["exit-shed"]!, label: "出入口雨棚" },
-    ],
-  },
-  {
-    title: "方案狀態",
-    rows: [
-      { color: REMOVED_COLOR, label: "方案拆除" },
     ],
   },
 ];

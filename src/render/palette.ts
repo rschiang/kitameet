@@ -1,4 +1,4 @@
-import type { FeatureKind, FeatureStatus, LayerId, LineId } from "../data/schema.ts";
+import type { FeatureKind, LayerId, LineId } from "../data/schema.ts";
 
 /** 紙模型色調：米白底、淡卡紙色量體，不加描邊。 */
 export const BACKGROUND = "#f4f0e7";
@@ -78,9 +78,6 @@ export const KIND_COLORS: Partial<Record<FeatureKind, string>> = {
   "exit-shed": "#c9c1b3",
 };
 
-/** 方案拆除的量體一律褪為灰褐；新建與歸還臺鐵的量體沿用一般著色。 */
-export const REMOVED_COLOR = "#b9a79f";
-
 /** 路線色混入中性色的比例：股道中度、隧道極淡；站體、樓板、大廳與月台不著路線色。 */
 export const LINE_TINT: Partial<Record<FeatureKind, number>> = {
   "track-tra": 0.6,
@@ -89,14 +86,8 @@ export const LINE_TINT: Partial<Record<FeatureKind, number>> = {
   tunnel: 0.2,
 };
 
-/** 著色優先序：方案拆除 → 類型中性色（股道、隧道再混入路線色）→ 圖層。 */
-export function featureColor(
-  kind: FeatureKind,
-  layer: LayerId,
-  status?: FeatureStatus,
-  line?: LineId,
-): string {
-  if (status === "removed") return REMOVED_COLOR;
+/** 著色優先序：類型中性色（股道、隧道再混入路線色）→ 圖層。 */
+export function featureColor(kind: FeatureKind, layer: LayerId, line?: LineId): string {
   const neutral = KIND_COLORS[kind] ?? LAYER_COLORS[layer];
   const tint = LINE_TINT[kind];
   return line && tint !== undefined ? mixHex(neutral, LINE_COLORS[line], tint) : neutral;

@@ -341,7 +341,7 @@ describe("場景的涵蓋裁切", () => {
         })
         .map((f) => ({
           id: f.id,
-          color: featureColor(f.kind, f.layer, f.status, f.line),
+          color: featureColor(f.kind, f.layer, f.line),
           top: (f.base ?? GROUND_EL) + (f.height ?? 0),
         }));
       for (let i = 0; i < stack.length; i++) {

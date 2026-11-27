@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { featuresFor } from "../src/app/scenario.ts";
+import { displayedFeatures, featuresFor } from "../src/app/scenario.ts";
 import { baselineById } from "../src/data/scene.ts";
 import { REBUILD_ZONE, SPLIT_ALONG, proposalB } from "../src/data/scenarios/proposal-b.ts";
 import {
@@ -326,13 +326,21 @@ describe("方案 B 幾何", () => {
     expect(statusQuo.some((f) => f.id.startsWith("proposal-b/"))).toBe(false);
     expect(statusQuo.every((f) => f.status !== "added")).toBe(true);
   });
+
+  it("方案模式不呈現拆除的量體，現況模式全數呈現", () => {
+    for (const scenario of ["proposal-b", "proposal-c"] as const) {
+      expect(featuresFor(scenario).some((f) => f.status === "removed"), scenario).toBe(true);
+      expect(displayedFeatures(scenario).some((f) => f.status === "removed"), scenario).toBe(false);
+    }
+    expect(displayedFeatures("status-quo").length).toBe(featuresFor("status-quo").length);
+  });
 });
 
 describe("方案著色", () => {
   it("方案股道沿用路線色，新建與歸還月台維持中性", () => {
     for (const scenario of ["proposal-b", "proposal-c"] as const) {
       const all = featuresFor(scenario);
-      const c = (f: (typeof all)[number]): string => featureColor(f.kind, f.layer, f.status, f.line);
+      const c = (f: (typeof all)[number]): string => featureColor(f.kind, f.layer, f.line);
       const baselineOf = (kind: "track-hsr" | "track-tra"): string => {
         const f = all.find((item) => item.kind === kind && (item.status ?? "existing") === "existing");
         expect(f, `${scenario} ${kind}`).toBeDefined();

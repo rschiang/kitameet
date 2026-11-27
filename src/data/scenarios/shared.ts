@@ -9,7 +9,15 @@
  * 月台寬度與曲線半徑則依本專案的裁示調整（見 docs/proposals.md）。
  */
 import { tangentConnector } from "../../geo/alignment.ts";
-import { advance, decompose, polygonAxis, type PolygonAxis } from "../../geo/measure.ts";
+import { resample } from "../../geo/corridor.ts";
+import {
+  advance,
+  decompose,
+  nearestOnPolyline,
+  pointInPolygon,
+  polygonAxis,
+  type PolygonAxis,
+} from "../../geo/measure.ts";
 import {
   corridorPolygon,
   offsetPolyline,
@@ -22,11 +30,16 @@ import {
 import type { Local } from "../../geo/project.ts";
 import undergroundJson from "../osm/underground.json";
 import type { OsmDataset } from "../osm-types.ts";
-import { baselineById } from "../scene.ts";
-import { railLevelOf } from "../levels.ts";
+import { BOX_BASE_DROP, BOX_HEIGHT } from "../dorts.ts";
+import { elevationAt, vertexElevations } from "../elevation.ts";
+import { buildBaseline, baselineById } from "../scene.ts";
+import { levelLabelFor, railLevelOf, STRUCTURES } from "../levels.ts";
+import { profiled } from "../structures/metro-network.ts";
+import { arcLengths, MIN_TRACK_SEPARATION, nearestArc, pointAtArc } from "../structures/metro-profile.ts";
 import {
   PLATFORM_RISE,
   PLATFORM_WIDTH,
+  TRACK_BAND_THICKNESS,
   TRACK_BAND_WIDTH,
   TRACK_OFFSET,
   type Feature,
@@ -109,6 +122,11 @@ export interface ScenarioConfig {
   rebuiltWest: string[];
   /** 寫入改建段 sourceNote 的說明。 */
   hsrNote: string;
+  /**
+   * 機場捷運尾軌的縱斷面：`underpass` 自淡水信義線構造物的結構底下方通過，坡度上限 `maxGrade`，
+   * 止於中山北路一段西側；`stub` 維持股道端點的軌道面（坡度 0），止於所遇第一個捷運構造物前。
+   */
+  a1Tail: { kind: "underpass"; maxGrade: number } | { kind: "stub" };
 }
 
 // ── 固定參數 ────────────────────────────────────────────
@@ -189,21 +207,44 @@ const SOURCE_NOTE =
   "幾何依研究小組《臺北車站方案 B′ 軌道配置構想》疊圖量得；該疊圖的股道為圖上幾何曲線，未對照高鐵設計規範。";
 
 // ── 機場捷運 A1 直通化 ──────────────────────────────────
-/** 機場捷運 A1 的兩條正線（路網正線），其東端即尾軌起點。 */
-const A1_TRACKS = { 北: "metro/a/north", 南: "metro/a/south" } as const;
-/** 尾軌直線段的側向位置（沿第一月台主軸的側向，公尺）。 */
-const A1_TAIL_LATERAL = { 北: 106.7, 南: 101.0 } as const;
-/** 尾軌東端（沿主軸，公尺）：中山北路一段西側車道（`way/336634148`，沿主軸 309⋯313）。 */
+/** 兩組喉道：各組的正線與外側側線匯入同一條尾軌，尾軌直線段的側向位置（沿第一月台主軸，公尺）。 */
+const A1_THROAT = [
+  { side: "北", lateral: 106.7, main: "metro/a/north", siding: "way/619251069" },
+  { side: "南", lateral: 101.0, main: "metro/a/south", siding: "way/619251068" },
+] as const;
+/** 尾軌直線段起點（沿主軸，公尺）：四條股道的連接曲線止於此。 */
+const A1_TAIL_TIE = -50;
+/** 下穿時的尾軌東端（沿主軸，公尺）：中山北路一段西側車道（`way/336634148`，沿主軸 309⋯313）。 */
 const A1_TAIL_END = 309;
-/** 尾軌喉道的曲線半徑與緩和曲線長度（公尺）：捷運低速段，不沿用 0.5R 的高鐵慣例。 */
+/**
+ * 機場捷運的線形坡度：設計最大坡度 3%，地形限制段的特例 4.92%。
+ * 朱旭〈回顧『機場捷運』〉（土木水利 44 卷 2 期，2017）。
+ */
+export const A1_MAX_GRADE = 0.03;
+export const A1_TERRAIN_GRADE = 0.0492;
+/** 四條股道共用的喉道半徑：標稱上限與下限（公尺）。 */
 const A1_TAIL_RADIUS = 200;
+const A1_TAIL_MIN_RADIUS = 195;
+/** 喉道緩和曲線長度（公尺）：捷運低速段，不沿用 0.5R 的高鐵慣例。 */
 const A1_TAIL_SPIRAL = 20;
-/** 兩條尾軌之間的渡線（沿主軸，公尺）：北尾軌 0 → 南尾軌 51，橫移比約 1:8.9。 */
+/** 側線延伸與尾軌重合的判定距離（公尺），即側線延伸的終點（道岔處）。 */
+const A1_MERGE_TOLERANCE = 0.05;
+/**
+ * 兩條尾軌之間的渡線（沿主軸，公尺）：機場捷運靠右行駛，東行列車在南尾軌，
+ * 渡線依東行方向由右往左：南尾軌 0 → 北尾軌 51，橫移比約 1:8.9。
+ */
 const A1_CROSSOVER = { from: 0, to: 51 } as const;
-const A1_NOTE =
-  "機場捷運台北車站改為直通式：兩條正線穿越月台後東行，於中山北路一段西側止於尾軌。" +
-  "尾軌全段維持 A1 車站 B3 軌道面（坡度 0）。依捷運局施工高程，該軌道面僅高於淡水信義線月台層樓板面 1.9 公尺，橫越處的垂直淨距不足，尾軌縱斷面尚待檢討；" +
-  "喉道曲線半徑 200 公尺、緩和曲線 20 公尺，道岔型式與號誌未檢核。";
+/** 尾軌縱斷面取樣間距（公尺），用於找出所跨越的捷運構造物與正線。 */
+const A1_PROFILE_STEP = 0.5;
+
+function a1Note(radius: number): string {
+  return (
+    "機場捷運台北車站改為直通式，兩座島式月台的四條股道皆可東行：" +
+    "北側正線與北側外側側線匯入北尾軌、南側正線與南側外側側線匯入南尾軌，" +
+    `四條股道共用喉道半徑 ${radius} 公尺、緩和曲線 ${A1_TAIL_SPIRAL} 公尺，尾軌直線段自沿主軸 −${-A1_TAIL_TIE} 起；` +
+    "起點位置、方位與軌道面取自現況路網的股道端點；道岔型式與號誌未檢核。"
+  );
+}
 
 const PLATFORM1_ID = "way/584167409";
 
@@ -325,9 +366,47 @@ function platformFeature(id: Scenario["id"], name: string, centre: Local[]): Fea
 }
 
 /**
- * 東側四股道的相切連接器，四股道共用同一半徑：自 `config.eastRadius` 起每 1 公尺往下試到
- * {@link MIN_RADIUS}，取第一個四股道皆有解的半徑。各股道若各取各的最大半徑，自同一接軌點出發的
- * 兩條曲線形狀不同，會在喉道內彼此交叉；同半徑時同一月台的兩股道自接軌點起共線，
+ * 共用半徑的相切連接器：自 `maxRadius` 起每 1 公尺往下試到 `minRadius`，取第一個每一端皆有解的半徑。
+ * 各端由 `end`（行進方位 `endBearing`）接到 `tie`（行進方位 `tieBearing`）；同半徑時共用同一 `tie` 的
+ * 各端自 `tie` 起共線，到位移較小者反向處才分岔。回傳的折線由 `end` 到 `tie`；無解回傳 null。
+ * {@link tangentConnector} 容許曲線末端越過端點至多 0.5 公尺再以直線折返端點；
+ * 此處視越過為無解，連接器必自端點起朝行進方向前進。
+ */
+function commonRadiusConnectors(
+  ends: { key: string; end: Local; endBearing: number; tie: Local; tieBearing: number }[],
+  maxRadius: number,
+  minRadius: number,
+  spiral?: number,
+): { radius: number; lines: Map<string, Local[]> } | null {
+  for (let radius = maxRadius; radius >= minRadius; radius -= 1) {
+    const lines = new Map<string, Local[]>();
+    for (const end of ends) {
+      // 自接軌點往回算到端點的切線，點序與兩端方位皆須反轉
+      const joined = tangentConnector(
+        end.tie,
+        end.tieBearing + 180,
+        end.end,
+        end.endBearing + 180,
+        radius,
+        radius,
+        spiral,
+      );
+      if (!joined) break;
+      const line = joined.points.slice().reverse();
+      const [x, y] = [line[1][0] - line[0][0], line[1][1] - line[0][1]];
+      const rad = (end.endBearing * Math.PI) / 180;
+      if (x * Math.cos(rad) + y * Math.sin(rad) < 0) break;
+      lines.set(end.key, line);
+    }
+    if (lines.size === ends.length) return { radius, lines };
+  }
+  return null;
+}
+
+/**
+ * 東側四股道的相切連接器，四股道共用同一半徑（{@link commonRadiusConnectors}，`config.eastRadius` 到
+ * {@link MIN_RADIUS}）。各股道若各取各的最大半徑，自同一接軌點出發的兩條曲線形狀不同，
+ * 會在喉道內彼此交叉；同半徑時同一月台的兩股道自接軌點起共線，
  * 到位移較小的一股反向處才分岔，由北而南的順序全程不變。
  */
 function eastConnection(
@@ -341,30 +420,14 @@ function eastConnection(
     const id = config.west.tieInIds[name].east;
     return {
       key,
-      east,
-      bearing: (Math.atan2(east[1] - west[1], east[0] - west[0]) * 180) / Math.PI,
+      end: east,
+      endBearing: (Math.atan2(east[1] - west[1], east[0] - west[0]) * 180) / Math.PI,
       tie: tieIn(id, zone.eastX),
       tieBearing: tieInBearing(id, zone.eastX),
     };
   });
-
-  for (let radius = config.eastRadius; radius >= MIN_RADIUS; radius -= 1) {
-    const lines = new Map<string, Local[]>();
-    for (const end of ends) {
-      // 自接軌點往西算到月台東端的切線，點序與兩端方位皆須反轉
-      const joined = tangentConnector(
-        end.tie,
-        end.tieBearing + 180,
-        end.east,
-        end.bearing + 180,
-        radius,
-        radius,
-      );
-      if (!joined) break;
-      lines.set(end.key, joined.points.slice().reverse());
-    }
-    if (lines.size === ends.length) return { radius, lines };
-  }
+  const solved = commonRadiusConnectors(ends, config.eastRadius, MIN_RADIUS);
+  if (solved) return solved;
   throw new Error(
     `${config.label} 東側四股道無法以不低於 ${MIN_RADIUS} 公尺的同一半徑相切接回既有線形`,
   );
@@ -421,76 +484,257 @@ function trunkFeature(config: ScenarioConfig, name: string, line: Local[]): Feat
   };
 }
 
-/**
- * 機場捷運 A1 改為直通式車站：兩條正線穿越月台後東行，以尾軌止於中山北路一段西側。
- * 尾軌全段維持 B3 軌道面高程（坡度 0），自淡水信義線軌道面上方通過。
- */
-function airportTailFeatures(config: ScenarioConfig): Feature[] {
+/** 機場捷運 A1 股道的東端：位置、東行方位與軌道面高程，皆取自現況路網。 */
+function a1TrackEnd(id: string): { end: Local; bearing: number; elevation: number } {
+  const feature = baselineById(id);
+  const existing = feature?.geometry.polyline;
+  if (!feature || !existing) throw new Error(`找不到機場捷運 A1 股道 ${id}`);
   const axis = platform1Axis();
-  const features: Feature[] = [];
+  const band = existing.map((p) => decompose(axis.center, axis.bearing, p).along);
+  const last = band.indexOf(Math.max(...band));
+  const end = existing[last];
+  // 相鄰頂點必在東端以西，`prev → end` 即為東行方向
+  const prev = existing[last === 0 ? 1 : last - 1];
+  return {
+    end,
+    bearing: (Math.atan2(end[1] - prev[1], end[0] - prev[0]) * 180) / Math.PI,
+    elevation: vertexElevations(feature)[last],
+  };
+}
 
-  for (const side of ["北", "南"] as const) {
-    const id = A1_TRACKS[side];
-    const existing = baselineById(id)?.geometry.polyline;
-    if (!existing) throw new Error(`找不到機場捷運 A1 正線 ${id}`);
-    const band = existing.map((p) => decompose(axis.center, axis.bearing, p).along);
-    const last = band.indexOf(Math.max(...band));
-    const end = existing[last];
-    // 相鄰頂點必在東端以西，`prev → end` 即為東行方向
-    const prev = existing[last === 0 ? 1 : last - 1];
-    const bearing = (Math.atan2(end[1] - prev[1], end[0] - prev[0]) * 180) / Math.PI;
+/** 兩折線的外包矩形是否重疊。 */
+function boundsOverlap(a: Local[], b: Local[]): boolean {
+  const box = (line: Local[]) => {
+    const xs = line.map((p) => p[0]);
+    const ys = line.map((p) => p[1]);
+    return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  };
+  const [ax0, ax1, ay0, ay1] = box(a);
+  const [bx0, bx1, by0, by1] = box(b);
+  return ax0 <= bx1 && bx0 <= ax1 && ay0 <= by1 && by0 <= ay1;
+}
 
-    const joined = tangentConnector(
-      end,
-      bearing,
-      axisPoint(A1_TAIL_END, A1_TAIL_LATERAL[side]),
-      axis.bearing,
-      A1_TAIL_RADIUS,
-      A1_TAIL_RADIUS,
-      A1_TAIL_SPIRAL,
-    );
-    if (!joined) {
-      throw new Error(`機場捷運尾軌（${side}）無法以 ${A1_TAIL_RADIUS} 公尺的半徑自 A1 正線相切接出`);
+/**
+ * 尾軌縱斷面：沿平面線形找出所跨越的捷運構造物與正線（機場捷運除外）。
+ * 尾軌以明挖箱涵構築（箱頂 = 軌道面 − {@link BOX_BASE_DROP} + {@link BOX_HEIGHT}）。
+ *
+ * - `underpass`：須自構造物的結構底（{@link STRUCTURES} 的 `bottom`，含站體基礎）下方、
+ *   且低於正線軌道面 {@link MIN_TRACK_SEPARATION} 通過；自股道端點直線下降到第一個受限處的所需高程，
+ *   其後維持水平。坡度超過 `maxGrade` 即擲出錯誤。
+ * - `stub`：全段維持股道端點的軌道面，止於第一個所跨越構造物前 {@link WORKS_CLEARANCE}（端牆與淨空）。
+ */
+function tailProfile(
+  side: string,
+  plan: Local[],
+  start: number,
+  mode: ScenarioConfig["a1Tail"],
+): { points: Local[]; elevations: number[]; target: number; grade: number; ids: string[] } {
+  const samples = resample(plan, A1_PROFILE_STEP);
+  const sampleArcs = arcLengths(samples);
+  const total = sampleArcs[sampleArcs.length - 1];
+  /** 每個所跨越的量體：進入處、接近到 {@link WORKS_CLEARANCE} 內之處（弧長），與下穿所需的軌道面。 */
+  const constraints: { id: string; arc: number; near: number; rail: number }[] = [];
+  /** 第一個落在量體內的取樣點，與第一個距量體邊界不足 {@link WORKS_CLEARANCE} 的取樣點。 */
+  const crossing = (outline: Local[], inside: (p: Local) => boolean) => {
+    if (!boundsOverlap(samples, outline)) return null;
+    let near = -1;
+    for (let i = 0; i < samples.length; i++) {
+      if (near < 0 && nearestOnPolyline(samples[i], outline).distance < WORKS_CLEARANCE) near = i;
+      if (inside(samples[i])) return { at: i, near: near < 0 ? i : near };
     }
+    return null;
+  };
 
-    features.push({
-      id: `${config.id}/a1/tail/${side}`,
-      kind: "track-metro",
-      line: "a",
-      name: `機場捷運尾軌（${side}）`,
-      level: "B3",
-      structure: "airport-mrt-a1",
-      layer: "metro",
-      geometry: { polyline: joined.points },
-      base: railLevelOf("airport-mrt-a1", "B3"),
-      height: 0.3,
-      width: TRACK_BAND_WIDTH,
-      confidence: "estimated",
-      sourceNote: A1_NOTE,
-      status: "added",
+  for (const feature of buildBaseline()) {
+    if (feature.line === undefined || feature.line === "a") continue;
+    const polygon = feature.geometry.polygon;
+    // 捷運構造物的平面範圍：公告圖箱涵、站體樓板與大廳；深度取所屬構造物的結構底
+    if (feature.layer === "metro" && feature.structure !== undefined && polygon) {
+      const hit = crossing([...polygon, polygon[0]], (p) => pointInPolygon(p, polygon));
+      if (!hit) continue;
+      const bottom = STRUCTURES[feature.structure].bottom;
+      constraints.push({
+        id: feature.id,
+        arc: sampleArcs[hit.at],
+        near: sampleArcs[hit.near],
+        rail: bottom - (BOX_HEIGHT - BOX_BASE_DROP),
+      });
+      continue;
+    }
+    const line = feature.geometry.polyline;
+    if (feature.kind !== "track-metro" || feature.trackRole !== "main" || !line) continue;
+    const hit = crossing(line, (p) => nearestOnPolyline(p, line).distance <= A1_PROFILE_STEP);
+    if (!hit) continue;
+    const crossed = elevationAt(feature)(nearestArc(line, arcLengths(line), samples[hit.at]).arc);
+    constraints.push({
+      id: feature.id,
+      arc: sampleArcs[hit.at],
+      near: sampleArcs[hit.near],
+      rail: crossed - MIN_TRACK_SEPARATION,
     });
   }
 
-  features.push({
-    id: `${config.id}/a1/link/X1`,
+  // 止於構造物前時任何所跨越者皆受限；下穿時只有需低於股道端點者受限
+  const binding = mode.kind === "stub" ? constraints : constraints.filter((c) => c.rail < start);
+  if (binding.length === 0) {
+    return { ...profiled(plan, [[0, start], [total, start]]), target: start, grade: 0, ids: [] };
+  }
+
+  if (mode.kind === "stub") {
+    // 止於第一個距構造物不足淨距的取樣點之前
+    const first = Math.min(...binding.map((c) => c.near));
+    const ids = binding.filter((c) => c.near === first).map((c) => c.id);
+    const endArc = first - A1_PROFILE_STEP;
+    if (endArc <= 0) throw new Error(`機場捷運尾軌（${side}）自股道端點即接近 ${ids.join("、")}，無處設置尾軌`);
+    const arcs = arcLengths(plan);
+    const points = [...plan.filter((_, i) => arcs[i] < endArc), pointAtArc(plan, arcs, endArc)];
+    return { points, elevations: points.map(() => start), target: start, grade: 0, ids };
+  }
+
+  const target = Math.min(...binding.map((c) => c.rail));
+  const crossArc = Math.min(...binding.map((c) => c.arc));
+  const grade = (start - target) / crossArc;
+  const ids = binding.map((c) => c.id);
+  if (grade > mode.maxGrade + 1e-9) {
+    throw new Error(
+      `機場捷運尾軌（${side}）須以 ${(grade * 100).toFixed(2)}% 下穿 ${ids.join("、")}，超過 ${(mode.maxGrade * 100).toFixed(2)}%`,
+    );
+  }
+  const descended = profiled(plan, [
+    [0, start],
+    [crossArc, target],
+    [total, target],
+  ]);
+  return { ...descended, target, grade, ids };
+}
+
+/**
+ * 機場捷運 A1 改為直通式車站：兩座島式月台的四條股道皆可東行，
+ * 各側正線與外側側線以共用半徑的喉道匯入同一條尾軌。
+ * 起點位置、方位與軌道面取自現況路網的股道端點；尾軌的縱斷面與東端依 `config.a1Tail`
+ * 推得（{@link tailProfile}）：下穿淡水信義線後止於中山北路一段西側，或維持坡度 0 止於其車站箱涵前。
+ */
+function airportTailFeatures(config: ScenarioConfig): Feature[] {
+  const axis = platform1Axis();
+  const ends = new Map(
+    A1_THROAT.flatMap((group) => [group.main, group.siding]).map((id) => [id, a1TrackEnd(id)]),
+  );
+  const throat = commonRadiusConnectors(
+    A1_THROAT.flatMap((group) =>
+      [group.main, group.siding].map((id) => {
+        const { end, bearing } = ends.get(id)!;
+        return {
+          key: id,
+          end,
+          endBearing: bearing,
+          tie: axisPoint(A1_TAIL_TIE, group.lateral),
+          tieBearing: axis.bearing,
+        };
+      }),
+    ),
+    A1_TAIL_RADIUS,
+    A1_TAIL_MIN_RADIUS,
+    A1_TAIL_SPIRAL,
+  );
+  if (!throat) {
+    throw new Error(`機場捷運 A1 四條股道無法以不低於 ${A1_TAIL_MIN_RADIUS} 公尺的同一半徑接到尾軌`);
+  }
+  const note = a1Note(throat.radius);
+  const common = {
     kind: "track-metro",
     line: "a",
-    name: "機場捷運尾軌渡線",
-    level: "B3",
     structure: "airport-mrt-a1",
     layer: "metro",
-    geometry: {
-      polyline: [
-        axisPoint(A1_CROSSOVER.from, A1_TAIL_LATERAL.北),
-        axisPoint(A1_CROSSOVER.to, A1_TAIL_LATERAL.南),
-      ],
-    },
-    base: railLevelOf("airport-mrt-a1", "B3"),
-    height: 0.3,
+    height: TRACK_BAND_THICKNESS,
     width: TRACK_BAND_WIDTH,
     confidence: "estimated",
-    sourceNote: A1_NOTE,
     status: "added",
+  } as const;
+
+  const features: Feature[] = [];
+  const tails = new Map<string, Feature>();
+  for (const group of A1_THROAT) {
+    const plan = [...throat.lines.get(group.main)!, axisPoint(A1_TAIL_END, group.lateral)];
+    const profile = tailProfile(group.side, plan, ends.get(group.main)!.elevation, config.a1Tail);
+    const tailId = `${config.id}/a1/tail/${group.side}`;
+    const endAlong = decompose(axis.center, axis.bearing, profile.points[profile.points.length - 1]).along;
+    const mode = config.a1Tail;
+    const profileNote =
+      profile.ids.length === 0
+        ? "縱斷面維持股道端點的軌道面，坡度 0。"
+        : mode.kind === "stub"
+          ? `縱斷面維持股道端點的軌道面（坡度 0），止於 ${profile.ids.join("、")} 前 ${WORKS_CLEARANCE} 公尺（沿主軸 ${endAlong.toFixed(1)}）。`
+          : `縱斷面自股道端點以 ${(profile.grade * 100).toFixed(2)}% 下降至 EL ${profile.target.toFixed(3)}，` +
+            `以箱涵自 ${profile.ids.join("、")} 的結構底下方通過，其後維持水平至中山北路一段西側。` +
+            (profile.grade > A1_MAX_GRADE
+              ? `坡度超過機場捷運設計最大坡度 ${A1_MAX_GRADE * 100}%，援用上限 ${(mode.maxGrade * 100).toFixed(2)}% 的特例。`
+              : "");
+    const tail: Feature = {
+      ...common,
+      id: tailId,
+      name: `機場捷運尾軌（${group.side}）`,
+      level: levelLabelFor(Math.min(...profile.elevations)),
+      geometry: { polyline: profile.points },
+      elevations: profile.elevations,
+      base: profile.elevations[0],
+      sourceNote: `${note} ${profileNote}`,
+      trackRole: "main",
+      joins: [group.main, null],
+    };
+    tails.set(group.side, tail);
+    features.push(tail);
+
+    // 側線延伸：沿共用半徑的連接曲線到與尾軌重合處（道岔）為止
+    const tailPoints = profile.points;
+    const full = throat.lines.get(group.siding)!;
+    const merge = full.findIndex((p) => nearestOnPolyline(p, tailPoints).distance <= A1_MERGE_TOLERANCE);
+    if (merge < 0) throw new Error(`機場捷運側線 ${group.siding} 的延伸未匯入尾軌（${group.side}）`);
+    const branch = full.slice(0, merge + 1);
+    const from = ends.get(group.siding)!.elevation;
+    const to = elevationAt(tail)(nearestArc(tailPoints, arcLengths(tailPoints), branch[merge]).arc);
+    const branchArcs = arcLengths(branch);
+    const length = branchArcs[branchArcs.length - 1];
+    const elevations = branchArcs.map((s) => from + ((to - from) * s) / length);
+    const branchLimit = mode.kind === "underpass" ? mode.maxGrade : 0;
+    if (Math.abs(to - from) / length > branchLimit + 1e-9) {
+      throw new Error(`機場捷運側線延伸（${group.side}）坡度超過 ${(branchLimit * 100).toFixed(2)}%`);
+    }
+    features.push({
+      ...common,
+      id: `${config.id}/a1/branch/${group.side}`,
+      name: `機場捷運側線東延（${group.side}）`,
+      level: levelLabelFor(Math.min(...elevations)),
+      geometry: { polyline: branch },
+      elevations,
+      base: elevations[0],
+      sourceNote: note,
+      trackRole: "siding",
+      joins: [group.siding, tailId],
+    });
+  }
+
+  const north = tails.get("北")!;
+  const south = tails.get("南")!;
+  const crossover: Local[] = [
+    axisPoint(A1_CROSSOVER.from, A1_THROAT[1].lateral),
+    axisPoint(A1_CROSSOVER.to, A1_THROAT[0].lateral),
+  ];
+  const footElevation = (tail: Feature, p: Local): number => {
+    const line = tail.geometry.polyline!;
+    return elevationAt(tail)(nearestArc(line, arcLengths(line), p).arc);
+  };
+  const linkElevations = [footElevation(south, crossover[0]), footElevation(north, crossover[1])];
+  features.push({
+    ...common,
+    id: `${config.id}/a1/link/X1`,
+    name: "機場捷運尾軌渡線",
+    level: levelLabelFor(Math.min(...linkElevations)),
+    geometry: { polyline: crossover },
+    elevations: linkElevations,
+    base: linkElevations[0],
+    sourceNote: note,
+    trackRole: "crossover",
+    joins: [south.id, north.id],
   });
 
   return features;

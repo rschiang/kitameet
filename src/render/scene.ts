@@ -359,7 +359,7 @@ export class Viewer {
       mesh.castShadow = t < 0.5 && (data.layer === "building" || data.layer === "landmark");
       const material = mesh.material as MeshStandardMaterial;
       const baseOpacity = (material.userData.baseOpacity as number) ?? 1;
-      const aerialOpacity = Math.min(baseOpacity, data.status === "removed" ? 0.3 : 0.72);
+      const aerialOpacity = Math.min(baseOpacity, 0.72);
       const opacity = (baseOpacity + (aerialOpacity - baseOpacity) * t) * fade;
       material.opacity = opacity;
       const ghost = this.ghosts.get(mesh);

@@ -113,11 +113,11 @@ export interface OcclusionOptions {
 }
 
 /**
- * 淡化單元的識別字串；不屬於遮蔽圖層、已拆除或非多邊形量體時回傳 null。
+ * 淡化單元的識別字串；不屬於遮蔽圖層或非多邊形量體時回傳 null。
  * 地標取 `landmark/<slug>`，各部量體一併淡化；裁切產生的 `#n` 後綴一律略去。
  */
 export function occluderKey(feature: Feature): string | null {
-  if (!OCCLUDER_LAYERS.includes(feature.layer) || feature.status === "removed") return null;
+  if (!OCCLUDER_LAYERS.includes(feature.layer)) return null;
   const polygon = feature.geometry.polygon;
   if (feature.geometry.tube || !polygon || polygon.length < 3) return null;
   const landmark = /^landmark\/[^/]+/.exec(feature.id);
