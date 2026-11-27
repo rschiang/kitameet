@@ -54,6 +54,7 @@ export const DEMOLISHED_FACES: { at: Local; note: string }[] = [
   { at: [-305.47, -64.02], note: "忠孝西路一段車道（dorts/building/955）" },
   { at: [-293.27, -75.14], note: "忠孝西路一段車道（dorts/building/965）" },
   { at: [-275.23, -69.71], note: "臺北行旅廣場南緣人行道與車道（dorts/building/957）" },
+  { at: [-596.96, -60.01], note: "博愛路人行道，臺北郵局西北角前的小型構造物，現地無建物（dorts/building/406）" },
 ];
 
 /** 形心比對容差（公尺）：清單各點與其餘房屋面形心最近相距 6.9 公尺，1.5 公尺足以唯一命中。 */
