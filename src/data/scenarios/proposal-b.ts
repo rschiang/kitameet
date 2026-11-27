@@ -13,7 +13,7 @@ import { MIN_RADIUS, buildScenario } from "./shared.ts";
 export const EAST_RADIUS = 200;
 /**
  * 西側相切連接器的標稱半徑上限（公尺）；自此往下試到 {@link MIN_RADIUS}，
- * 取第一個能與既有喉道曲線相切銜接的解（實際為 93–103）。
+ * 取第一個能與既有喉道曲線相切銜接的解（兩條幹線實際為甲 102、乙 95）。
  * 正本 B′ 西側量得 81.5–94.5 公尺。
  */
 export const WEST_RADIUS = 122;
@@ -26,6 +26,8 @@ export const WEST_TANGENT = 10;
  * 東界延伸至北平東路下方：新建股道須在此之前完全離開臺鐵第一、二月台所夾的四股道。
  */
 export const REBUILD_ZONE = { westX: -606, eastX: 540 } as const;
+/** 分岔點（沿既有第一月台主軸，公尺）：三井倉庫（`way/589683660`，沿主軸 −494⋯−471）西緣。 */
+export const SPLIT_ALONG = -494;
 
 export const proposalB = buildScenario({
   id: "proposal-b",
@@ -39,6 +41,7 @@ export const proposalB = buildScenario({
       乙: { west: "way/323105864", east: "way/593866771" },
     },
     tangent: WEST_TANGENT,
+    splitAlong: SPLIT_ALONG,
     build(tie, tieBearing, start, startBearing, name, side) {
       const joined = tangentConnector(tie, tieBearing, start, startBearing, WEST_RADIUS, MIN_RADIUS);
       if (!joined) {
@@ -48,7 +51,7 @@ export const proposalB = buildScenario({
       }
       return joined.points;
     },
-    note: `西側與既有喉道曲線相切銜接，各股道實際半徑 甲-北 103、甲-南 98、乙-北 98、乙-南 93 公尺，全線最小半徑不低於 ${MIN_RADIUS} 公尺。`,
+    note: `西側兩條幹線與既有喉道曲線相切銜接（甲 102、乙 95 公尺），於沿主軸 ${SPLIT_ALONG} 公尺分岔為四條股道，漸移段 134 與 138 公尺，四條股道的最小曲率半徑 93–107 公尺。`,
   },
   rebuiltWest: ["way/13991375", "way/323105864"],
   hsrNote: "方案 B 改建區間（北門至北平東路）內之既有高鐵隧道。",

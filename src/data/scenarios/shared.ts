@@ -15,12 +15,20 @@ import {
   offsetPolyline,
   polylineBearingAtX,
   polylineCrossingAtX,
+  polylineLength,
   splitPolylineAtX,
+  taperedOffset,
 } from "../../geo/offset.ts";
 import type { Local } from "../../geo/project.ts";
 import { baselineById } from "../scene.ts";
 import { railLevelOf } from "../levels.ts";
-import { PLATFORM_RISE, PLATFORM_WIDTH, TRACK_OFFSET, type Feature } from "../schema.ts";
+import {
+  PLATFORM_RISE,
+  PLATFORM_WIDTH,
+  TRACK_BAND_WIDTH,
+  TRACK_OFFSET,
+  type Feature,
+} from "../schema.ts";
 
 export interface Scenario {
   id: "proposal-b" | "proposal-c";
@@ -65,6 +73,8 @@ export interface WestApproach {
   tieInIds: Record<string, { west: string; east: string }>;
   /** 月台西端往西的切線段長度（公尺）。 */
   tangent: number;
+  /** 分岔點（沿既有第一月台主軸，公尺）；省略時四條股道各自接軌（方案 C）。 */
+  splitAlong?: number;
   /**
    * 西段線形，回傳由接軌點到切線起點的折線（由西往東）。
    * `tieBearing` 與 `startBearing` 皆為往東行進的方位（度）。
@@ -75,7 +85,7 @@ export interface WestApproach {
     start: Local,
     startBearing: number,
     name: string,
-    side: "北" | "南",
+    side: "北" | "南" | "幹",
   ): Local[];
   /** 寫入股道 sourceNote 的西段說明。 */
   note: string;
@@ -176,6 +186,23 @@ const TRA_THROAT_NOTE =
 const SOURCE_NOTE =
   "幾何依研究小組《臺北車站方案 B′ 軌道配置構想》疊圖量得；該疊圖的股道為圖上幾何曲線，未對照高鐵設計規範。";
 
+// ── 機場捷運 A1 直通化 ──────────────────────────────────
+/** 機場捷運 A1 的兩條正線股道（OSM），其東端即尾軌起點。 */
+const A1_TRACKS = { 北: "way/1558102739", 南: "way/1558102738" } as const;
+/** 尾軌直線段的側向位置（沿第一月台主軸的側向，公尺）。 */
+const A1_TAIL_LATERAL = { 北: 106.7, 南: 101.0 } as const;
+/** 尾軌東端（沿主軸，公尺）：中山北路一段西側車道（`way/336634148`，沿主軸 309⋯313）。 */
+const A1_TAIL_END = 309;
+/** 尾軌喉道的曲線半徑與緩和曲線長度（公尺）：捷運低速段，不沿用 0.5R 的高鐵慣例。 */
+const A1_TAIL_RADIUS = 200;
+const A1_TAIL_SPIRAL = 20;
+/** 兩條尾軌之間的渡線（沿主軸，公尺）：北尾軌 0 → 南尾軌 51，橫移比約 1:8.9。 */
+const A1_CROSSOVER = { from: 0, to: 51 } as const;
+const A1_NOTE =
+  "機場捷運台北車站改為直通式：兩條正線穿越月台後東行，於中山北路一段西側止於尾軌。" +
+  "尾軌全段維持 B3 軌道面 −17.0 公尺（坡度 0），自淡水信義線軌道面（−23.5 公尺）上方通過；" +
+  "喉道曲線半徑 200 公尺、緩和曲線 20 公尺，道岔型式與號誌未檢核。";
+
 const PLATFORM1_ID = "way/584167409";
 
 let cachedAxis: PolygonAxis | undefined;
@@ -202,6 +229,11 @@ function toAxisFrame(points: Local[]): Local[] {
 function fromAxisFrame(point: Local): Local {
   const axis = platform1Axis();
   return advance(advance(axis.center, axis.bearing, point[0]), axis.bearing + 90, point[1]);
+}
+
+/** 自沿主軸位置與側向偏移取局部座標。 */
+export function axisPoint(along: number, lateral: number): Local {
+  return fromAxisFrame([along, lateral]);
 }
 
 /** 既有股道沿第一月台主軸 `along` 公尺處的位置。 */
@@ -336,26 +368,11 @@ function trackFeature(
   name: string,
   side: "北" | "南",
   trackLine: Local[],
+  west: Local[],
   east: { radius: number; line: Local[] },
 ): Feature {
-  const west = trackLine[0];
-  const end = trackLine[trackLine.length - 1];
-  const bearing = (Math.atan2(end[1] - west[1], end[0] - west[0]) * 180) / Math.PI;
-  const tie = config.west.tieInIds[name];
   const zone = config.rebuildZone;
-
-  const line: Local[] = [
-    ...config.west.build(
-      tieIn(tie.west, zone.westX),
-      tieInBearing(tie.west, zone.westX),
-      advance(west, bearing + 180, config.west.tangent),
-      bearing,
-      name,
-      side,
-    ),
-    ...trackLine.slice(1, -1),
-    ...east.line,
-  ];
+  const line: Local[] = [...west, ...trackLine.slice(1, -1), ...east.line];
 
   return {
     id: `${config.id}/track/${name}-${side}`,
@@ -377,6 +394,101 @@ function trackFeature(
   };
 }
 
+/** 西側雙線幹線：自既有喉道接軌點到分岔點，一條幹線供一座月台的兩條股道共用。 */
+function trunkFeature(config: ScenarioConfig, name: string, line: Local[]): Feature {
+  return {
+    id: `${config.id}/trunk/${name}`,
+    kind: "track-hsr",
+    line: "hsr",
+    name: `高鐵新建幹線（往月台 ${name}）`,
+    level: "B2",
+    structure: "tra-hsr-station",
+    layer: "track",
+    geometry: { polyline: line },
+    base: railLevelOf("tra-hsr-station", "B2"),
+    height: 0.3,
+    width: 3,
+    confidence: "estimated",
+    sourceNote: `${SOURCE_NOTE} 西側維持既有雙線形態，於沿主軸 ${config.west.splitAlong} 公尺（三井倉庫西側）分岔為四條股道；${config.west.note}`,
+    status: "added",
+  };
+}
+
+/**
+ * 機場捷運 A1 改為直通式車站：兩條正線穿越月台後東行，以尾軌止於中山北路一段西側。
+ * 尾軌全段維持 B3 軌道面高程（坡度 0），自淡水信義線軌道面上方通過。
+ */
+function airportTailFeatures(config: ScenarioConfig): Feature[] {
+  const axis = platform1Axis();
+  const features: Feature[] = [];
+
+  for (const side of ["北", "南"] as const) {
+    const id = A1_TRACKS[side];
+    const existing = baselineById(id)?.geometry.polyline;
+    if (!existing) throw new Error(`找不到機場捷運 A1 正線 ${id}`);
+    const band = existing.map((p) => decompose(axis.center, axis.bearing, p).along);
+    const last = band.indexOf(Math.max(...band));
+    const end = existing[last];
+    // 相鄰頂點必在東端以西，`prev → end` 即為東行方向
+    const prev = existing[last === 0 ? 1 : last - 1];
+    const bearing = (Math.atan2(end[1] - prev[1], end[0] - prev[0]) * 180) / Math.PI;
+
+    const joined = tangentConnector(
+      end,
+      bearing,
+      axisPoint(A1_TAIL_END, A1_TAIL_LATERAL[side]),
+      axis.bearing,
+      A1_TAIL_RADIUS,
+      A1_TAIL_RADIUS,
+      A1_TAIL_SPIRAL,
+    );
+    if (!joined) {
+      throw new Error(`機場捷運尾軌（${side}）無法以 ${A1_TAIL_RADIUS} 公尺的半徑自 A1 正線相切接出`);
+    }
+
+    features.push({
+      id: `${config.id}/a1/tail/${side}`,
+      kind: "track-metro",
+      line: "a",
+      name: `機場捷運尾軌（${side}）`,
+      level: "B3",
+      structure: "airport-mrt-a1",
+      layer: "metro",
+      geometry: { polyline: joined.points },
+      base: railLevelOf("airport-mrt-a1", "B3"),
+      height: 0.3,
+      width: TRACK_BAND_WIDTH,
+      confidence: "estimated",
+      sourceNote: A1_NOTE,
+      status: "added",
+    });
+  }
+
+  features.push({
+    id: `${config.id}/a1/link/X1`,
+    kind: "track-metro",
+    line: "a",
+    name: "機場捷運尾軌渡線",
+    level: "B3",
+    structure: "airport-mrt-a1",
+    layer: "metro",
+    geometry: {
+      polyline: [
+        axisPoint(A1_CROSSOVER.from, A1_TAIL_LATERAL.北),
+        axisPoint(A1_CROSSOVER.to, A1_TAIL_LATERAL.南),
+      ],
+    },
+    base: railLevelOf("airport-mrt-a1", "B3"),
+    height: 0.3,
+    width: TRACK_BAND_WIDTH,
+    confidence: "estimated",
+    sourceNote: A1_NOTE,
+    status: "added",
+  });
+
+  return features;
+}
+
 function buildAdded(config: ScenarioConfig): Feature[] {
   const platforms = Object.entries(PLATFORM_OFFSETS).map(([name, offset]) => ({
     name,
@@ -395,12 +507,59 @@ function buildAdded(config: ScenarioConfig): Feature[] {
   const features: Feature[] = [];
   for (const { name, centre } of platforms) {
     features.push(platformFeature(config.id, name, centre));
-    for (const track of tracks) {
-      if (track.name !== name) continue;
+
+    const tie = config.west.tieInIds[name];
+    const zone = config.rebuildZone;
+    const bearing =
+      (Math.atan2(centre[1][1] - centre[0][1], centre[1][0] - centre[0][0]) * 180) / Math.PI;
+    const own = tracks.filter((track) => track.name === name);
+    const west = new Map<string, Local[]>();
+
+    if (config.west.splitAlong === undefined) {
+      for (const track of own) {
+        west.set(
+          track.key,
+          config.west.build(
+            tieIn(tie.west, zone.westX),
+            tieInBearing(tie.west, zone.westX),
+            advance(track.line[0], bearing + 180, config.west.tangent),
+            bearing,
+            name,
+            track.side,
+          ),
+        );
+      }
+    } else {
+      // 西側維持既有雙線形態：幹線接月台中心線的切線起點，分岔點之後才漸移為兩條股道
+      const spine = config.west.build(
+        tieIn(tie.west, zone.westX),
+        tieInBearing(tie.west, zone.westX),
+        advance(centre[0], bearing + 180, config.west.tangent),
+        bearing,
+        name,
+        "幹",
+      );
+      const { before: trunk, after: fan } = splitAtAlong(spine, config.west.splitAlong);
+      features.push(trunkFeature(config, name, trunk));
+      const taper = polylineLength(fan);
+      for (const track of own) {
+        west.set(
+          track.key,
+          taperedOffset(fan, 0, taper, track.side === "北" ? TRACK_OFFSET : -TRACK_OFFSET),
+        );
+      }
+    }
+
+    for (const track of own) {
       const line = east.lines.get(track.key);
       if (!line) throw new Error(`找不到新建股道 ${track.key} 的東側連接線`);
+      const westPart = west.get(track.key);
+      if (!westPart) throw new Error(`找不到新建股道 ${track.key} 的西段線形`);
       features.push(
-        trackFeature(config, name, track.side, track.line, { radius: east.radius, line }),
+        trackFeature(config, name, track.side, track.line, westPart, {
+          radius: east.radius,
+          line,
+        }),
       );
     }
   }
@@ -428,6 +587,8 @@ function buildAdded(config: ScenarioConfig): Feature[] {
       status: "added",
     });
   }
+
+  features.push(...airportTailFeatures(config));
   return features;
 }
 

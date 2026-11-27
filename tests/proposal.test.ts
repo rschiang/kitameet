@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { featuresFor } from "../src/app/scenario.ts";
 import { baselineById } from "../src/data/scene.ts";
-import { REBUILD_ZONE, proposalB } from "../src/data/scenarios/proposal-b.ts";
+import { REBUILD_ZONE, SPLIT_ALONG, proposalB } from "../src/data/scenarios/proposal-b.ts";
 import {
   NEW_PLATFORM_LENGTH,
   PLATFORM_OFFSETS,
@@ -79,6 +79,7 @@ function eastSection(line: Local[]): Local[] {
 
 const names = Object.keys(PLATFORM_OFFSETS);
 const trackIds = names.flatMap((name) => ["北", "南"].map((side) => `proposal-b/track/${name}-${side}`));
+const trunkIds = names.map((name) => `proposal-b/trunk/${name}`);
 
 describe("方案 B 幾何", () => {
   it("兩座新月台為 410 公尺、寬 12 公尺的島式月台", () => {
@@ -122,12 +123,25 @@ describe("方案 B 幾何", () => {
     }
   });
 
-  it("新建股道西至北門、東至北平東路", () => {
+  it("西側雙線幹線西至北門、東至分岔點", () => {
+    for (const id of trunkIds) {
+      const trunk = byId.get(id);
+      expect(trunk, id).toBeDefined();
+      const line = trunk!.geometry.polyline!;
+      expect(Math.abs(line[0][0] - REBUILD_ZONE.westX), `${id} 西端`).toBeLessThan(1.0);
+      expect(
+        Math.abs(bandOf([line[line.length - 1]]).along[0] - SPLIT_ALONG),
+        `${id} 東端`,
+      ).toBeLessThan(1.0);
+    }
+  });
+
+  it("新建股道西起分岔點、東至北平東路", () => {
     for (const id of trackIds) {
       const track = byId.get(id);
       expect(track, id).toBeDefined();
       const line = track!.geometry.polyline!;
-      expect(Math.abs(line[0][0] - REBUILD_ZONE.westX), `${id} 西端`).toBeLessThan(1.0);
+      expect(Math.abs(bandOf([line[0]]).along[0] - SPLIT_ALONG), `${id} 西端`).toBeLessThan(1.0);
       expect(
         Math.abs(line[line.length - 1][0] - REBUILD_ZONE.eastX),
         `${id} 東端`,
@@ -135,15 +149,28 @@ describe("方案 B 幾何", () => {
     }
   });
 
+  it("幹線於分岔點與四條股道切線連續", () => {
+    for (const name of names) {
+      const trunk = byId.get(`proposal-b/trunk/${name}`)!.geometry.polyline!;
+      const [a, b] = [trunk[trunk.length - 2], trunk[trunk.length - 1]];
+      const end = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+      for (const side of ["北", "南"]) {
+        const line = byId.get(`proposal-b/track/${name}-${side}`)!.geometry.polyline!;
+        const start = (Math.atan2(line[1][1] - line[0][1], line[1][0] - line[0][0]) * 180) / Math.PI;
+        expect(Math.abs(start - end), `${name}-${side} 分岔點折角`).toBeLessThan(1);
+      }
+    }
+  });
+
   it("新建股道與捷運板南線月台淨距不小於 40 公尺", () => {
     const bannan = baselineById(BANNAN_PLATFORM)!.geometry.polygon!;
-    for (const id of trackIds) {
+    for (const id of [...trunkIds, ...trackIds]) {
       expect(minDistance(byId.get(id)!.geometry.polyline!, bannan), id).toBeGreaterThan(40);
     }
   });
 
   it("新建股道全線最小曲率半徑不低於 90 公尺", () => {
-    for (const id of trackIds) {
+    for (const id of [...trunkIds, ...trackIds]) {
       expect(minRadius(byId.get(id)!.geometry.polyline!), id).toBeGreaterThan(90);
     }
   });
@@ -184,16 +211,14 @@ describe("方案 B 幾何", () => {
     }
   });
 
-  it("新建股道西側接軌點與既有線形切線連續", () => {
+  it("西側雙線幹線的接軌點與既有線形切線連續", () => {
     for (const name of names) {
       const existing = baselineById(WEST_TIE_IN_IDS[name])!.geometry.polyline!;
       const bearing = polylineBearingAtX(existing, REBUILD_ZONE.westX);
       expect(bearing, name).not.toBeNull();
-      for (const side of ["北", "南"]) {
-        const line = byId.get(`proposal-b/track/${name}-${side}`)!.geometry.polyline!;
-        const start = (Math.atan2(line[1][1] - line[0][1], line[1][0] - line[0][0]) * 180) / Math.PI;
-        expect(Math.abs(start - bearing!), `${name}-${side} 接軌點折角`).toBeLessThan(1);
-      }
+      const line = byId.get(`proposal-b/trunk/${name}`)!.geometry.polyline!;
+      const start = (Math.atan2(line[1][1] - line[0][1], line[1][0] - line[0][0]) * 180) / Math.PI;
+      expect(Math.abs(start - bearing!), `${name} 接軌點折角`).toBeLessThan(1);
     }
   });
 
@@ -201,7 +226,7 @@ describe("方案 B 幾何", () => {
     const gate = ["landmark/north-gate/base/west", "landmark/north-gate/base/east"].map(
       (id) => baselineById(id)!.geometry.polygon!,
     );
-    for (const id of trackIds) {
+    for (const id of [...trunkIds, ...trackIds]) {
       const line = byId.get(id)!.geometry.polyline!;
       for (const ring of gate) {
         expect(minDistance(line, ring), id).toBeGreaterThan(40);
@@ -245,14 +270,14 @@ describe("方案 B 幾何", () => {
       return area(piece!.geometry.polygon!);
     });
     expect(pieces.slice().sort((a, b) => a - b).map((v) => Math.round(v * 10) / 10)).toEqual([
-      21.6, 46.0, 168.5,
+      21.6, 43.4, 169.3,
     ]);
 
     const kept = byId.get(MALL_Z);
     expect(kept?.status).not.toBe("removed");
     expect(byId.get(`${MALL_Z}/kept/2`), "地下街主體被切斷").toBeUndefined();
     const keptArea = area(kept!.geometry.polygon!);
-    expect(keptArea).toBeCloseTo(9887.9, 0);
+    expect(keptArea).toBeCloseTo(9889.8, 0);
     const current = area(baselineById(MALL_Z)!.geometry.polygon!);
     expect(Math.abs(keptArea + pieces.reduce((a, b) => a + b, 0) - current)).toBeLessThan(1);
   });

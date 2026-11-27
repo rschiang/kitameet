@@ -37,6 +37,31 @@ export function offsetPolyline(pts: Local[], distance: number): Local[] {
   return out;
 }
 
+/**
+ * 折線的漸移平移：自弧長 `from` 起、在 `length` 公尺內由 0 平滑漸移到 `distance`，
+ * 其後維持 `distance`。內插式為 3u²−2u³，兩端斜率為零，與前後線形切線連續。
+ * `distance` 的正負與 {@link offsetPolyline} 相同：正值往行進方向左側。
+ */
+export function taperedOffset(pts: Local[], from: number, length: number, distance: number): Local[] {
+  if (pts.length < 2) return pts.map(([x, y]) => [x, y] as Local);
+
+  const arc: number[] = [0];
+  for (let i = 1; i < pts.length; i++) {
+    arc.push(arc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  }
+
+  return pts.map((p, i) => {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const u = length <= 0 ? 1 : Math.min(1, Math.max(0, (arc[i] - from) / length));
+    const e = distance * u * u * (3 - 2 * u);
+    return [p[0] - (dy / len) * e, p[1] + (dx / len) * e] as Local;
+  });
+}
+
 /** 折線總長（公尺）。 */
 export function polylineLength(pts: Local[]): number {
   let sum = 0;

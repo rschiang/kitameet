@@ -91,8 +91,8 @@ describe.each(["proposal-b", "proposal-c"] as const)("%s 的臺鐵喉道", (scen
   });
 
   it("臺鐵股道與新建高鐵股道不平面交叉", () => {
-    const hsr = features.filter((f) => f.id.startsWith(`${scenario}/track/`));
-    expect(hsr).toHaveLength(4);
+    const hsr = features.filter((f) => f.kind === "track-hsr" && f.status === "added");
+    expect(hsr).toHaveLength(scenario === "proposal-b" ? 6 : 4);
     for (const track of tracks) {
       for (const f of hsr) {
         expect(

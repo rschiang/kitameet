@@ -129,6 +129,8 @@ export function alignmentEnd(a: Alignment): { point: Local; bearing: number } {
  *
  * 第一段曲線一律朝目標點所在的一側轉，反向曲線整組的淨轉角因而可正可負
  * （目標切線與接軌點切線的轉向相反時即是如此）。
+ *
+ * 緩和曲線長度預設為 0.5R；`spiral` 另行指定時，四段緩和曲線一律取該長度（捷運低速段使用）。
  */
 export function tangentConnector(
   tie: Local,
@@ -137,6 +139,7 @@ export function tangentConnector(
   targetBearing: number,
   radius: number,
   minRadius: number,
+  spiral?: number,
 ): { points: Local[]; radius: number } | null {
   const turn = normalizeAngle(targetBearing - tieBearing);
   // 第一段曲線的轉向：接軌點切線與「接軌點→目標點」的外積符號，即目標點所在的一側
@@ -151,7 +154,7 @@ export function tangentConnector(
   const ny = tx;
 
   const build = (r: number, a1: number): AlignmentElement[] => {
-    const length = transitionLength(r);
+    const length = spiral ?? transitionLength(r);
     // 兩段圓曲線的淨轉角差即為所需轉向量；緩和曲線一正一反自動抵銷
     const a2 = a1 - first * turn;
     return [
