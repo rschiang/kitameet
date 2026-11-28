@@ -504,16 +504,47 @@ function a1TrackEnd(id: string): { end: Local; bearing: number; elevation: numbe
   };
 }
 
+/** 外接矩形 [minX, maxX, minY, maxY]。 */
+type Box = [number, number, number, number];
+
+function boxOf(line: Local[]): Box {
+  const xs = line.map((p) => p[0]);
+  const ys = line.map((p) => p[1]);
+  return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+}
+
 /** 兩折線的外包矩形是否重疊。 */
 function boundsOverlap(a: Local[], b: Local[]): boolean {
-  const box = (line: Local[]) => {
-    const xs = line.map((p) => p[0]);
-    const ys = line.map((p) => p[1]);
-    return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  };
-  const [ax0, ax1, ay0, ay1] = box(a);
-  const [bx0, bx1, by0, by1] = box(b);
+  const [ax0, ax1, ay0, ay1] = boxOf(a);
+  const [bx0, bx1, by0, by1] = boxOf(b);
   return ax0 <= bx1 && bx0 <= ax1 && ay0 <= by1 && by0 <= ay1;
+}
+
+/**
+ * 折線中外接矩形與 `box` 相交的連續線段，各自成一條折線。
+ * 其餘線段到 `box` 內任一點的距離都大於 `box` 外放的量。
+ */
+function runsWithin(line: Local[], box: Box): Local[][] {
+  const [x0, x1, y0, y1] = box;
+  const runs: Local[][] = [];
+  let run: Local[] = [];
+  for (let i = 0; i + 1 < line.length; i++) {
+    const [a, b] = [line[i], line[i + 1]];
+    const hit =
+      Math.min(a[0], b[0]) <= x1 &&
+      x0 <= Math.max(a[0], b[0]) &&
+      Math.min(a[1], b[1]) <= y1 &&
+      y0 <= Math.max(a[1], b[1]);
+    if (hit) {
+      if (run.length === 0) run.push(a);
+      run.push(b);
+    } else if (run.length > 0) {
+      runs.push(run);
+      run = [];
+    }
+  }
+  if (run.length > 0) runs.push(run);
+  return runs;
 }
 
 /**
@@ -544,19 +575,28 @@ function tailProfile(
   const samples = resample(plan, A1_PROFILE_STEP);
   const sampleArcs = arcLengths(samples);
   const total = sampleArcs[sampleArcs.length - 1];
+  /** 取樣範圍四邊外放 {@link WORKS_CLEARANCE}：範圍外的線段到每個取樣點都超過此距離。 */
+  const [sx0, sx1, sy0, sy1] = boxOf(samples);
+  const reach: Box = [sx0 - WORKS_CLEARANCE, sx1 + WORKS_CLEARANCE, sy0 - WORKS_CLEARANCE, sy1 + WORKS_CLEARANCE];
   /**
    * 取樣點與量體的關係：第一個落在量體內者（`at`），與第一個、最後一個落在量體內或距其邊界不足
    * {@link WORKS_CLEARANCE} 者（`near`、`far`）；未落入量體則為 null。
+   * `inside` 另收取樣點到輪廓的距離。
+   *
+   * 只比對與 `reach` 相交的線段：被排除的線段到每個取樣點都超過 {@link WORKS_CLEARANCE}，
+   * 因此 `< WORKS_CLEARANCE` 與 `<= A1_PROFILE_STEP` 的判定結果與逐段比對相同。
    */
-  const crossing = (outline: Local[], inside: (p: Local) => boolean) => {
+  const crossing = (outline: Local[], inside: (p: Local, distance: number) => boolean) => {
     if (!boundsOverlap(samples, outline)) return null;
+    const runs = runsWithin(outline, reach);
     let at = -1;
     let near = -1;
     let far = -1;
     for (let i = 0; i < samples.length; i++) {
-      const within = inside(samples[i]);
+      const distance = Math.min(...runs.map((run) => nearestOnPolyline(samples[i], run).distance));
+      const within = inside(samples[i], distance);
       if (within && at < 0) at = i;
-      if (within || nearestOnPolyline(samples[i], outline).distance < WORKS_CLEARANCE) {
+      if (within || distance < WORKS_CLEARANCE) {
         if (near < 0) near = i;
         far = i;
       }
@@ -579,7 +619,7 @@ function tailProfile(
     }
     const line = feature.geometry.polyline;
     if (feature.kind !== "track-metro" || feature.trackRole !== "main" || !line) continue;
-    const hit = crossing(line, (p) => nearestOnPolyline(p, line).distance <= A1_PROFILE_STEP);
+    const hit = crossing(line, (_, distance) => distance <= A1_PROFILE_STEP);
     if (!hit) continue;
     const crossed = elevationAt(feature)(nearestArc(line, arcLengths(line), samples[hit.at]).arc);
     tracks.push({

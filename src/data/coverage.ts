@@ -172,11 +172,18 @@ function pieces(feature: Feature, parts: Local[][], key: "polygon" | "polyline" 
   }));
 }
 
+/** 裁切產生的頂點落在原折線上的容許誤差（公尺）。 */
+const ON_LINE = 1e-6;
+
 /**
- * 點落在折線上的累積弧長比例。裁切產生的端點必定落在原折線上，
- * 取最近線段的投影即為精確值；引道不自我交疊，不會配錯線段。
+ * 各點落在折線上的累積弧長比例。裁切產生的頂點必定落在原折線上，
+ * 取所在線段的投影即為精確值；引道不自我交疊，不會配錯線段。
+ *
+ * `splitPolylineByRing` 切出的每一段依原折線方向排列，頂點為原頂點的複本或線段上的交點，
+ * 因此自前一點所在線段向後找第一條距離不超過 {@link ON_LINE} 者即為所在線段，整體為線性時間；
+ * 向後找不到時退回全段最近線段。
  */
-function fractionAlong(line: Local[], point: Local): number {
+function fractionsAlong(line: Local[], points: Local[]): number[] {
   const cumulative: number[] = [0];
   for (let i = 1; i < line.length; i++) {
     cumulative.push(
@@ -184,22 +191,40 @@ function fractionAlong(line: Local[], point: Local): number {
     );
   }
   const total = cumulative[cumulative.length - 1];
-  if (total <= 0) return 0;
-  let best = 0;
-  let nearest = Infinity;
-  for (let i = 0; i + 1 < line.length; i++) {
+  if (total <= 0) return points.map(() => 0);
+  /** 點投影到第 i 條線段：距離與累積弧長。 */
+  const project = (i: number, point: Local) => {
     const [ax, ay] = line[i];
     const dx = line[i + 1][0] - ax;
     const dy = line[i + 1][1] - ay;
     const len2 = dx * dx + dy * dy;
     const t = len2 > 0 ? Math.max(0, Math.min(1, ((point[0] - ax) * dx + (point[1] - ay) * dy) / len2)) : 0;
-    const d = Math.hypot(ax + t * dx - point[0], ay + t * dy - point[1]);
-    if (d < nearest) {
-      nearest = d;
-      best = (cumulative[i] + t * Math.sqrt(len2)) / total;
+    return {
+      distance: Math.hypot(ax + t * dx - point[0], ay + t * dy - point[1]),
+      arc: cumulative[i] + t * Math.sqrt(len2),
+    };
+  };
+  let cursor = 0;
+  return points.map((point) => {
+    for (let i = cursor; i + 1 < line.length; i++) {
+      const { distance, arc } = project(i, point);
+      if (distance <= ON_LINE) {
+        cursor = i;
+        return arc / total;
+      }
     }
-  }
-  return best;
+    let best = 0;
+    let nearest = Infinity;
+    for (let i = 0; i + 1 < line.length; i++) {
+      const { distance, arc } = project(i, point);
+      if (distance < nearest) {
+        nearest = distance;
+        best = arc / total;
+        cursor = i;
+      }
+    }
+    return best;
+  });
 }
 
 /**
@@ -228,7 +253,8 @@ export function clipToCoverage(feature: Feature): Feature[] {
     const at = elevationAt(feature);
     const length = polylineLength(line);
     return parts.map((part, n) => {
-      const elevations = part.map((p) => at(fractionAlong(line, p) * length));
+      const fractions = fractionsAlong(line, part);
+      const elevations = fractions.map((f) => at(f * length));
       return {
         ...feature,
         id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
@@ -242,11 +268,14 @@ export function clipToCoverage(feature: Feature): Feature[] {
   // 兩端高程依弧長線性內插，切出的各段各自保留自己那一段的坡度；圓管的軸心高程同理
   const base = feature.base ?? GROUND_EL;
   const span = feature.baseEnd - base;
-  return parts.map((part, n) => ({
-    ...feature,
-    id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
-    geometry: { ...feature.geometry, [key]: part },
-    base: base + span * fractionAlong(line, part[0]),
-    baseEnd: base + span * fractionAlong(line, part[part.length - 1]),
-  }));
+  return parts.map((part, n) => {
+    const [from, to] = fractionsAlong(line, [part[0], part[part.length - 1]]);
+    return {
+      ...feature,
+      id: parts.length === 1 ? feature.id : `${feature.id}#${n}`,
+      geometry: { ...feature.geometry, [key]: part },
+      base: base + span * from,
+      baseEnd: base + span * to,
+    };
+  });
 }

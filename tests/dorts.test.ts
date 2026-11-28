@@ -10,11 +10,12 @@ import {
 } from "../src/data/dorts.ts";
 import basemapJson from "../src/data/dorts/basemap.json";
 import { aboveGround, type Feature } from "../src/data/schema.ts";
-import { nearestOnPolyline, pointInPolygon, polygonArea, polygonCentroid } from "../src/geo/measure.ts";
+import { pointInPolygon, polygonArea, polygonCentroid } from "../src/geo/measure.ts";
 import { BUILDING_LEVEL_HEIGHT, DEFAULT_BUILDING_LEVELS } from "../src/data/overrides.ts";
 import { elevationAt, vertexElevations } from "../src/data/elevation.ts";
 import { polylineLength } from "../src/geo/offset.ts";
 import type { Local } from "../src/geo/project.ts";
+import { nearestWithin, segmentGrid, type SegmentGrid } from "./support/segment-grid.ts";
 
 const DEFAULT_HEIGHT = DEFAULT_BUILDING_LEVELS * BUILDING_LEVEL_HEIGHT;
 
@@ -118,14 +119,16 @@ describe("公告圖量體", () => {
   });
 
   it("潛盾範圍與軌道沒有重複畫法", () => {
-    const duplicated = (items: Local[][]) =>
-      items.some((a) =>
+    const duplicated = (items: Local[][]) => {
+      const grids = new Map(items.map((line) => [line, segmentGrid(line)]));
+      return items.some((a) =>
         items.some((b) => {
           if (a === b) return false;
-          const near = a.filter((p) => nearestOnPolyline(p, b).distance <= 1.5).length;
+          const near = a.filter((p) => nearestWithin(grids.get(b)!, p, 1.5).distance <= 1.5).length;
           return near / a.length >= 0.9;
         }),
       );
+    };
     const bores = dortsBores().map((b) => b.axis);
     expect(bores.length).toBeGreaterThan(20);
     expect(duplicated(bores)).toBe(false);
@@ -133,31 +136,19 @@ describe("公告圖量體", () => {
     // 軌道以三維比對：疊式段上下兩軌平面重合，高程相差一層
     const tracks = buildBaseline().filter((f) => f.kind === "track-metro" && f.geometry.polyline);
     expect(tracks.length).toBeGreaterThan(20);
+    const grids = new Map<Feature, SegmentGrid>(tracks.map((t) => [t, segmentGrid(t.geometry.polyline!)]));
     for (const a of tracks) {
       const line = a.geometry.polyline!;
       const za = vertexElevations(a);
       for (const b of tracks) {
         if (a === b) continue;
-        const other = b.geometry.polyline!;
-        const cumulative = [0];
-        for (let i = 1; i < other.length; i++) {
-          cumulative.push(cumulative[i - 1] + Math.hypot(other[i][0] - other[i - 1][0], other[i][1] - other[i - 1][1]));
-        }
+        const grid = grids.get(b)!;
         const zb = elevationAt(b);
         // 超過一成的頂點不重合即可確定不重複，提早結束
         const allowed = Math.floor(line.length * 0.1);
         let misses = 0;
         for (let i = 0; i < line.length && misses <= allowed; i++) {
-          const p = line[i];
-          let best = { distance: Infinity, arc: 0 };
-          for (let k = 1; k < other.length; k++) {
-            const [q0, q1] = [other[k - 1], other[k]];
-            const [vx, vy] = [q1[0] - q0[0], q1[1] - q0[1]];
-            const len2 = vx * vx + vy * vy;
-            const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, ((p[0] - q0[0]) * vx + (p[1] - q0[1]) * vy) / len2));
-            const distance = Math.hypot(q0[0] + vx * t - p[0], q0[1] + vy * t - p[1]);
-            if (distance < best.distance) best = { distance, arc: cumulative[k - 1] + t * Math.sqrt(len2) };
-          }
+          const best = nearestWithin(grid, line[i], 1.5);
           if (best.distance > 1.5 || Math.abs(zb(best.arc) - za[i]) > 1.0) misses++;
         }
         expect(misses > allowed, `${a.id} 與 ${b.id} 重複`).toBe(true);

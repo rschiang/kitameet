@@ -175,16 +175,29 @@ export function dedupePolylines<T>(
   pointsOf: (item: T) => Local[],
   idOf: (item: T) => string,
 ): T[] {
-  const lengths = items.map((item) => polylineLength(pointsOf(item)));
+  const points = items.map(pointsOf);
+  const bounds = points.map(boundsOf);
+  const lengths = points.map(polylineLength);
   const dropped = new Set<number>();
   for (let i = 0; i < items.length; i++) {
     if (dropped.has(i)) continue;
     for (let j = 0; j < items.length; j++) {
       if (i === j || dropped.has(j)) continue;
-      const a = pointsOf(items[i]);
-      const covered = a.filter(
-        (p) => nearestOnPolyline(p, pointsOf(items[j])).distance <= DUPLICATE_DISTANCE,
-      ).length;
+      const a = points[i];
+      const [[ax0, ay0], [ax1, ay1]] = bounds[i];
+      const [[bx0, by0], [bx1, by1]] = bounds[j];
+      // 外接矩形相距超過 DUPLICATE_DISTANCE 時沒有任何頂點落在範圍內，重疊率為 0
+      if (
+        a.length > 0 &&
+        (ax0 - bx1 > DUPLICATE_DISTANCE ||
+          bx0 - ax1 > DUPLICATE_DISTANCE ||
+          ay0 - by1 > DUPLICATE_DISTANCE ||
+          by0 - ay1 > DUPLICATE_DISTANCE)
+      ) {
+        continue;
+      }
+      const b = points[j];
+      const covered = a.filter((p) => nearestOnPolyline(p, b).distance <= DUPLICATE_DISTANCE).length;
       if (covered / a.length < DUPLICATE_COVERAGE) continue;
       const keepOther =
         lengths[j] > lengths[i] ||

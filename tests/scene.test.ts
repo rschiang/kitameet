@@ -25,6 +25,7 @@ import type { Local } from "../src/geo/project.ts";
 import { OVERGROUND_RING, UNDERGROUND_RING } from "../src/data/coverage.ts";
 import { GROUND_EL, PARKING_FLOOR_THICKNESS, PLATFORM_RISE, aboveGround } from "../src/data/schema.ts";
 import { featureColor } from "../src/render/palette.ts";
+import { GRID_CELL, segmentGrid } from "./support/segment-grid.ts";
 
 const features = buildBaseline();
 
@@ -62,28 +63,6 @@ function projectArc(line: Local[], p: Local): { distance: number; arc: number } 
     walked += len;
   }
   return best;
-}
-
-/** 折線的累計弧長與線段格網索引，供交會偵測篩候選。 */
-const CROSS_CELL = 25;
-function segmentGrid(line: Local[]): { arc: number[]; cells: Map<string, number[]> } {
-  const arc = [0];
-  const cells = new Map<string, number[]>();
-  for (let s = 0; s + 1 < line.length; s++) {
-    const [a, b] = [line[s], line[s + 1]];
-    arc.push(arc[s] + Math.hypot(b[0] - a[0], b[1] - a[1]));
-    const [gx0, gx1] = [Math.floor(Math.min(a[0], b[0]) / CROSS_CELL), Math.floor(Math.max(a[0], b[0]) / CROSS_CELL)];
-    const [gy0, gy1] = [Math.floor(Math.min(a[1], b[1]) / CROSS_CELL), Math.floor(Math.max(a[1], b[1]) / CROSS_CELL)];
-    for (let gx = gx0; gx <= gx1; gx++) {
-      for (let gy = gy0; gy <= gy1; gy++) {
-        const key = `${gx},${gy}`;
-        const bucket = cells.get(key);
-        if (bucket) bucket.push(s);
-        else cells.set(key, [s]);
-      }
-    }
-  }
-  return { arc, cells };
 }
 
 const metroTracks = features.filter(
@@ -326,10 +305,10 @@ describe("現況場景", () => {
           const [p0x, p0y, p1x, p1y] = [a.line[p][0], a.line[p][1], a.line[p + 1][0], a.line[p + 1][1]];
           const [rx, ry] = [p1x - p0x, p1y - p0y];
           const lenA = a.grid.arc[p + 1] - a.grid.arc[p];
-          const gx0 = Math.floor(Math.min(p0x, p1x) / CROSS_CELL);
-          const gx1 = Math.floor(Math.max(p0x, p1x) / CROSS_CELL);
-          const gy0 = Math.floor(Math.min(p0y, p1y) / CROSS_CELL);
-          const gy1 = Math.floor(Math.max(p0y, p1y) / CROSS_CELL);
+          const gx0 = Math.floor(Math.min(p0x, p1x) / GRID_CELL);
+          const gx1 = Math.floor(Math.max(p0x, p1x) / GRID_CELL);
+          const gy0 = Math.floor(Math.min(p0y, p1y) / GRID_CELL);
+          const gy1 = Math.floor(Math.max(p0y, p1y) / GRID_CELL);
           for (let gx = gx0; gx <= gx1; gx++) {
             for (let gy = gy0; gy <= gy1; gy++) {
               const candidates = b.grid.cells.get(`${gx},${gy}`);

@@ -11,12 +11,15 @@ import { pointInPolygon } from "../src/geo/measure.ts";
 import { offsetPolyline, polylineLength } from "../src/geo/offset.ts";
 import type { Local } from "../src/geo/project.ts";
 import type { Feature } from "../src/data/schema.ts";
+import { nearestWithin, segmentGrid } from "./support/segment-grid.ts";
 
 const features = buildBaseline();
 const tubes = features.filter((f) => (f.geometry.tube?.length ?? 0) >= 2);
 /** 沿單一正線的圓管；雙圓潛盾沿兩條正線的中線，另行檢查。 */
 const trackTubes = tubes.filter((f) => f.twinSpacing === undefined);
 const tracks = features.filter((f) => f.kind === "track-metro" && (f.geometry.polyline?.length ?? 0) >= 2);
+/** 各正線的線段格網與高程函式，供逐點比對。 */
+const trackInfo = new Map(tracks.map((t) => [t, { grid: segmentGrid(t.geometry.polyline!), at: elevationAt(t) }]));
 
 /** 折線上每 `step` 公尺的取樣點與弧長（含終點）。 */
 function samplesAlong(line: Local[], step: number): { point: Local; arc: number }[] {
@@ -37,22 +40,6 @@ function samplesAlong(line: Local[], step: number): { point: Local; arc: number 
   return out;
 }
 
-/** 點在折線上的投影：距離與弧長。 */
-function projectArc(line: Local[], p: Local): { distance: number; arc: number } {
-  let best = { distance: Infinity, arc: 0 };
-  let walked = 0;
-  for (let i = 1; i < line.length; i++) {
-    const [a, b] = [line[i - 1], line[i]];
-    const [vx, vy] = [b[0] - a[0], b[1] - a[1]];
-    const len = Math.hypot(vx, vy);
-    const t = len === 0 ? 0 : Math.min(1, Math.max(0, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / (len * len)));
-    const distance = Math.hypot(a[0] + vx * t - p[0], a[1] + vy * t - p[1]);
-    if (distance < best.distance) best = { distance, arc: walked + t * len };
-    walked += len;
-  }
-  return best;
-}
-
 /** 圓管的來源軌道（去除切段編號）。 */
 const sourceTrack = (tube: Feature): string => tube.id.slice(tube.id.indexOf("@") + 1).split("#")[0];
 
@@ -71,9 +58,9 @@ describe("潛盾圓管", () => {
       for (const { point, arc } of samplesAlong(axis, 1)) {
         const z = tubeAt(arc);
         const matched = candidates.some((track) => {
-          const line = track.geometry.polyline!;
-          const hit = projectArc(line, point);
-          return hit.distance <= 0.01 && Math.abs(elevationAt(track)(hit.arc) + BORE_AXIS_RISE - z) <= 0.01;
+          const { grid, at } = trackInfo.get(track)!;
+          const hit = nearestWithin(grid, point, 0.01);
+          return hit.distance <= 0.01 && Math.abs(at(hit.arc) + BORE_AXIS_RISE - z) <= 0.01;
         });
         expect(matched, `${tube.id} (${point.map((v) => v.toFixed(1))}) EL ${z.toFixed(3)}`).toBe(true);
       }
@@ -129,11 +116,11 @@ describe("潛盾圓管", () => {
   });
 
   it("公告圖的潛盾範圍在涵蓋範圍內皆有圓管", () => {
-    const axes = tubes.map((t) => t.geometry.tube!);
+    const grids = tubes.map((t) => segmentGrid(t.geometry.tube!));
     for (const bore of dortsBores()) {
       const inside = samplesAlong(bore.axis, 1).filter(({ point }) => pointInPolygon(point, UNDERGROUND_RING));
       if (inside.length < 2) continue;
-      const covered = inside.filter(({ point }) => axes.some((axis) => projectArc(axis, point).distance <= 3.5));
+      const covered = inside.filter(({ point }) => grids.some((grid) => nearestWithin(grid, point, 3.5).distance <= 3.5));
       expect(covered.length / inside.length, bore.id).toBeGreaterThanOrEqual(0.9);
     }
   });
